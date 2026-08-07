@@ -6508,6 +6508,1755 @@ Use this checklist to verify mastery:
 
 **Next Up → Day 5: Dart Advanced — Async, Collections & Functional Programming**
 
+# 📘 Day 5: Dart Advanced — Async, Collections & Functional Programming
+> **Goal:** Master asynchronous programming, functional collections, and modern Dart 3 features.
+> *This guide covers Future, Stream, error handling, records, patterns, and real-world JSON parsing.*
+
+---
+
+## Table of Contents
+1. [Why Async Matters in Flutter](#1-why-async-matters-in-flutter)
+2. [Synchronous vs Asynchronous Programming](#2-synchronous-vs-asynchronous-programming)
+3. [Future Deep Dive](#3-future-deep-dive)
+4. [async & await](#4-async--await)
+5. [Future Methods & Chaining](#5-future-methods--chaining)
+6. [Stream Deep Dive](#6-stream-deep-dive)
+7. [Stream Methods & Transformations](#7-stream-methods--transformations)
+8. [Error Handling in Dart](#8-error-handling-in-dart)
+9. [Functional Programming with Collections](#9-functional-programming-with-collections)
+10. [Records (Dart 3)](#10-records-dart-3)
+11. [Patterns & Pattern Matching (Dart 3)](#11-patterns--pattern-matching-dart-3)
+12. [Hands-On Project 1: Async JSON Data Fetcher](#12-hands-on-project-1-async-json-data-fetcher)
+13. [Hands-On Project 2: Real-Time Stream Dashboard](#13-hands-on-project-2-real-time-stream-dashboard)
+14. [Common Mistakes & How to Avoid Them](#14-common-mistakes--how-to-avoid-them)
+15. [Day 5 Checklist](#15-day-5-checklist)
+
+---
+
+## 1. Why Async Matters in Flutter
+
+### The Problem
+Mobile apps are **single-threaded** by default. If you do heavy work (network requests, file I/O) on the main thread, your UI **freezes**.
+
+```
+❌ SYNCHRONOUS (UI Freezes)
+┌─────────────────────────────────────────────┐
+│  Main Thread                                │
+│  ├── Build UI                               │
+│  ├── Fetch data from API (5 seconds)        │
+│  │   ← UI FROZEN! User can't interact!      │
+│  ├── Parse JSON                             │
+│  ├── Update UI                              │
+│  └── ...                                    │
+└─────────────────────────────────────────────┘
+
+✅ ASYNCHRONOUS (UI Smooth)
+┌─────────────────────────────────────────────┐
+│  Main Thread          │  Background Task    │
+│  ├── Build UI         │                     │
+│  ├── Start API call ──┼──→ Fetch data       │
+│  ├── Build UI (60fps) │   (5 seconds)       │
+│  ├── Build UI (60fps) │   Parse JSON        │
+│  ←── Receive result ──┼── Return data       │
+│  ├── Update UI        │                     │
+│  └── ...              │                     │
+└─────────────────────────────────────────────┘
+```
+
+### Where Async is Used in Flutter
+| Scenario | Flutter Example |
+|----------|----------------|
+| **API Calls** | `http.get()`, `dio.get()` |
+| **Database** | `sqflite` queries, `hive` reads |
+| **File I/O** | `readAsString()`, `writeAsString()` |
+| **SharedPreferences** | `prefs.getString()`, `prefs.setString()` |
+| **Animations** | `AnimationController`, `Future.delayed()` |
+| **Navigation** | `Navigator.push()`, `showDialog()` |
+| **Image Loading** | `CachedNetworkImage`, `Image.network()` |
+
+> 💡 **Rule:** Any operation that takes > 16ms (1 frame at 60fps) should be async.
+
+---
+
+## 2. Synchronous vs Asynchronous Programming
+
+### Synchronous Code
+```dart
+void main() {
+  print('Step 1: Start');
+
+  // This blocks everything until done
+  String data = fetchDataSync();  // Takes 3 seconds
+  print('Step 2: Got data: $data');
+
+  print('Step 3: Done');
+}
+
+String fetchDataSync() {
+  // Simulating slow operation
+  sleep(Duration(seconds: 3));  // Blocks the thread!
+  return 'User Data';
+}
+
+// Output (takes 3 seconds, UI frozen):
+// Step 1: Start
+// [3 seconds of frozen UI]
+// Step 2: Got data: User Data
+// Step 3: Done
+```
+
+### Asynchronous Code
+```dart
+Future<void> main() async {
+  print('Step 1: Start');
+
+  // This does NOT block — other code can run
+  String data = await fetchDataAsync();  // Takes 3 seconds
+  print('Step 2: Got data: $data');
+
+  print('Step 3: Done');
+}
+
+Future<String> fetchDataAsync() async {
+  await Future.delayed(Duration(seconds: 3));  // Non-blocking wait
+  return 'User Data';
+}
+
+// Output:
+// Step 1: Start
+// [UI continues running smoothly for 3 seconds]
+// Step 2: Got data: User Data
+// Step 3: Done
+```
+
+---
+
+## 3. Future Deep Dive
+
+### 3.1 What is a Future?
+
+A `Future` is a **promise** that a value will be available at some point in the future. It's either:
+- **Pending** — waiting to complete
+- **Completed with value** — success
+- **Completed with error** — failure
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Future Lifecycle                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   Future<String> ──→ Pending ──→ Completed(String) ✅       │
+│                      │                                        │
+│                      └─→ Completed(Error) ❌                │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 3.2 Creating Futures
+
+```dart
+void main() {
+  // Future that completes immediately with a value
+  Future<String> immediate = Future.value('Hello');
+
+  // Future that completes with an error
+  Future<String> errorFuture = Future.error('Something went wrong');
+
+  // Future that completes after a delay
+  Future<String> delayed = Future.delayed(
+    Duration(seconds: 2),
+    () => 'Delayed result',
+  );
+
+  // Future from an async operation
+  Future<String> fromAsync = fetchUserData();
+}
+
+Future<String> fetchUserData() async {
+  await Future.delayed(Duration(seconds: 1));
+  return 'User: Kimi';
+}
+```
+
+### 3.3 Future States
+
+```dart
+void main() {
+  var future = Future.delayed(Duration(seconds: 2), () => 'Done');
+
+  // At this point, future is PENDING
+  print(future);  // Instance of 'Future<String>'
+
+  // After 2 seconds, it completes with 'Done'
+  future.then((value) {
+    print('Completed with: $value');  // Done
+  });
+}
+```
+
+### 3.4 Future with Microtasks
+
+```dart
+void main() {
+  print('1. Start');
+
+  // Microtask runs before the next event loop iteration
+  Future.microtask(() => print('2. Microtask'));
+
+  // Regular Future goes to event queue
+  Future(() => print('3. Regular Future'));
+
+  print('4. End');
+
+  // Output:
+  // 1. Start
+  // 4. End
+  // 2. Microtask
+  // 3. Regular Future
+}
+```
+
+> 🎯 **Event Loop Priority:** Synchronous code → Microtasks → Event queue (Futures, Timers)
+
+---
+
+## 4. async & await
+
+### 4.1 The `async` Keyword
+
+Mark a function with `async` to:
+1. Allow using `await` inside it
+2. Automatically wrap the return value in a `Future`
+
+```dart
+// Without async — returns String
+String getName() {
+  return 'Kimi';
+}
+
+// With async — returns Future<String>
+Future<String> getNameAsync() async {
+  return 'Kimi';  // Automatically wrapped in Future.value()
+}
+
+void main() {
+  print(getName());        // Kimi
+  print(getNameAsync());   // Instance of 'Future<String>'
+}
+```
+
+### 4.2 The `await` Keyword
+
+`await` **pauses** the function execution until the Future completes, **without blocking** other code.
+
+```dart
+Future<void> fetchUserProfile() async {
+  print('Fetching user...');
+
+  // Pause here, but DON'T block other code
+  String user = await fetchUserFromAPI();
+  print('User: $user');
+
+  // Pause here again
+  String orders = await fetchOrdersForUser(user);
+  print('Orders: $orders');
+
+  print('Done!');
+}
+
+Future<String> fetchUserFromAPI() async {
+  await Future.delayed(Duration(seconds: 1));
+  return 'Kimi';
+}
+
+Future<String> fetchOrdersForUser(String user) async {
+  await Future.delayed(Duration(seconds: 1));
+  return '5 orders';
+}
+
+void main() async {
+  await fetchUserProfile();
+
+  // Output (takes ~2 seconds total):
+  // Fetching user...
+  // [1 second passes]
+  // User: Kimi
+  // [1 second passes]
+  // Orders: 5 orders
+  // Done!
+}
+```
+
+### 4.3 Sequential vs Parallel Execution
+
+```dart
+// SEQUENTIAL — one after another (slower)
+Future<void> sequentialFetch() async {
+  var stopwatch = Stopwatch()..start();
+
+  var users = await fetchUsers();      // 1 second
+  var posts = await fetchPosts();      // 1 second
+  var comments = await fetchComments(); // 1 second
+
+  stopwatch.stop();
+  print('Sequential: ${stopwatch.elapsedMilliseconds}ms');  // ~3000ms
+}
+
+// PARALLEL — all at once (faster!)
+Future<void> parallelFetch() async {
+  var stopwatch = Stopwatch()..start();
+
+  // Start all futures simultaneously
+  var usersFuture = fetchUsers();
+  var postsFuture = fetchPosts();
+  var commentsFuture = fetchComments();
+
+  // Wait for all to complete
+  var users = await usersFuture;
+  var posts = await postsFuture;
+  var comments = await commentsFuture;
+
+  stopwatch.stop();
+  print('Parallel: ${stopwatch.elapsedMilliseconds}ms');  // ~1000ms
+}
+
+// EVEN BETTER — using Future.wait
+Future<void> parallelFetchBetter() async {
+  var stopwatch = Stopwatch()..start();
+
+  var results = await Future.wait([
+    fetchUsers(),
+    fetchPosts(),
+    fetchComments(),
+  ]);
+
+  stopwatch.stop();
+  print('Future.wait: ${stopwatch.elapsedMilliseconds}ms');  // ~1000ms
+}
+
+Future<String> fetchUsers() => Future.delayed(Duration(seconds: 1), () => 'Users');
+Future<String> fetchPosts() => Future.delayed(Duration(seconds: 1), () => 'Posts');
+Future<String> fetchComments() => Future.delayed(Duration(seconds: 1), () => 'Comments');
+
+void main() async {
+  await sequentialFetch();
+  await parallelFetch();
+  await parallelFetchBetter();
+}
+```
+
+### 4.4 `Future.wait` with Error Handling
+
+```dart
+Future<void> fetchAllData() async {
+  try {
+    // If ANY future fails, the whole wait fails
+    var results = await Future.wait([
+      fetchUsers(),
+      fetchPosts(),
+      fetchComments(),
+    ]);
+    print('All succeeded: $results');
+  } catch (e) {
+    print('One failed: $e');
+  }
+
+  // With eagerError: true — fail fast on first error
+  try {
+    var results = await Future.wait([
+      fetchUsers(),
+      fetchPosts(),
+      Future.error('Comments failed!'),
+    ], eagerError: true);
+  } catch (e) {
+    print('Failed fast: $e');
+  }
+}
+```
+
+### 4.5 `Future.any` — First to Complete Wins
+
+```dart
+Future<String> fetchWithTimeout() async {
+  return await Future.any([
+    fetchDataFromServer(),
+    Future.delayed(Duration(seconds: 5), () => throw 'Timeout!'),
+  ]);
+}
+
+Future<String> fetchDataFromServer() async {
+  await Future.delayed(Duration(seconds: 2));
+  return 'Server data';
+}
+```
+
+---
+
+## 5. Future Methods & Chaining
+
+### 5.1 `then()` — Handle Success
+
+```dart
+void main() {
+  fetchUser()
+    .then((user) {
+      print('Got user: $user');
+      return fetchOrders(user);  // Return another Future
+    })
+    .then((orders) {
+      print('Got orders: $orders');
+    });
+}
+
+Future<String> fetchUser() => Future.delayed(Duration(seconds: 1), () => 'Kimi');
+Future<String> fetchOrders(String user) => Future.delayed(Duration(seconds: 1), () => '5 orders');
+```
+
+### 5.2 `catchError()` — Handle Errors
+
+```dart
+void main() {
+  riskyOperation()
+    .then((value) => print('Success: $value'))
+    .catchError((error) {
+      print('Error caught: $error');
+      return 'Default value';  // Provide fallback
+    })
+    .then((value) => print('Final value: $value'));
+}
+
+Future<String> riskyOperation() {
+  return Future.error('Network failed');
+}
+
+// Output:
+// Error caught: Network failed
+// Final value: Default value
+```
+
+### 5.3 `whenComplete()` — Always Runs
+
+```dart
+void main() {
+  fetchData()
+    .then((data) => print('Data: $data'))
+    .catchError((error) => print('Error: $error'))
+    .whenComplete(() => print('Cleanup: Close connection'));
+}
+
+Future<String> fetchData() => Future.error('Failed');
+
+// Output:
+// Error: Failed
+// Cleanup: Close connection
+```
+
+### 5.4 `timeout()` — Add Time Limit
+
+```dart
+Future<void> fetchWithTimeout() async {
+  try {
+    var data = await fetchSlowData()
+      .timeout(Duration(seconds: 2));
+    print('Data: $data');
+  } on TimeoutException {
+    print('Request timed out!');
+  }
+}
+
+Future<String> fetchSlowData() => Future.delayed(Duration(seconds: 5), () => 'Data');
+```
+
+### 5.5 Future Chaining Summary
+
+```dart
+Future<String> operation = fetchData();
+
+operation
+  .then((value) => process(value))     // Transform success
+  .catchError((e) => handleError(e))   // Handle failure
+  .whenComplete(() => cleanup())       // Always run
+  .timeout(Duration(seconds: 5));      // Add deadline
+```
+
+---
+
+## 6. Stream Deep Dive
+
+### 6.1 What is a Stream?
+
+A `Stream` is a **sequence of asynchronous events**. While a `Future` delivers a single value, a `Stream` delivers **multiple values over time**.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              Future vs Stream                               │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Future<int> ──→ single value ──→ 42                       │
+│                                                             │
+│  Stream<int> ──→ multiple values ──→ 1, 2, 3, 4, 5...      │
+│                                                             │
+│  Think: Future = single download                            │
+│        Stream = live video feed                             │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 6.2 Creating Streams
+
+```dart
+import 'dart:async';
+
+void main() {
+  // Stream from iterable
+  Stream<int> numberStream = Stream.fromIterable([1, 2, 3, 4, 5]);
+
+  // Stream from Future
+  Stream<String> futureStream = Stream.fromFuture(Future.value('Hello'));
+
+  // Stream with periodic events
+  Stream<int> timerStream = Stream.periodic(
+    Duration(seconds: 1),
+    (count) => count,
+  );
+
+  // Stream controller (manual control)
+  StreamController<String> controller = StreamController<String>();
+  controller.add('Event 1');
+  controller.add('Event 2');
+  controller.close();
+
+  // Async generator (yield)
+  Stream<int> asyncGenerator() async* {
+    for (int i = 0; i < 5; i++) {
+      await Future.delayed(Duration(seconds: 1));
+      yield i;  // Emit value
+    }
+  }
+}
+```
+
+### 6.3 Listening to Streams
+
+```dart
+void main() async {
+  Stream<int> stream = Stream.fromIterable([1, 2, 3, 4, 5]);
+
+  // Method 1: await for (async generator style)
+  await for (int value in stream) {
+    print('Received: $value');
+  }
+
+  // Method 2: listen() (callback style)
+  Stream<int> stream2 = Stream.fromIterable([10, 20, 30]);
+  stream2.listen(
+    (value) => print('Data: $value'),     // onData
+    onError: (error) => print('Error: $error'),  // onError
+    onDone: () => print('Stream closed'),   // onDone
+    cancelOnError: false,
+  );
+}
+```
+
+### 6.4 Single-Subscription vs Broadcast Streams
+
+```dart
+void main() {
+  // Single-subscription stream (default)
+  Stream<int> single = Stream.fromIterable([1, 2, 3]);
+
+  single.listen((v) => print('Listener 1: $v'));
+  // single.listen((v) => print('Listener 2: $v'));  // ❌ ERROR!
+
+  // Broadcast stream (multiple listeners)
+  StreamController<int> broadcastController = StreamController<int>.broadcast();
+  Stream<int> broadcast = broadcastController.stream;
+
+  broadcast.listen((v) => print('A: $v'));
+  broadcast.listen((v) => print('B: $v'));  // ✅ OK!
+
+  broadcastController.add(1);
+  broadcastController.add(2);
+  broadcastController.close();
+
+  // Convert single to broadcast
+  Stream<int> singleStream = Stream.fromIterable([1, 2, 3]);
+  Stream<int> asBroadcast = singleStream.asBroadcastStream();
+
+  asBroadcast.listen((v) => print('X: $v'));
+  asBroadcast.listen((v) => print('Y: $v'));  // ✅ Works!
+}
+```
+
+### 6.5 Stream Subscriptions
+
+```dart
+void main() async {
+  StreamController<int> controller = StreamController<int>();
+
+  // Get a subscription
+  StreamSubscription<int> subscription = controller.stream.listen(
+    (value) => print('Value: $value'),
+  );
+
+  controller.add(1);
+  controller.add(2);
+
+  // Pause the stream
+  subscription.pause();
+  controller.add(3);  // Not received while paused
+
+  // Resume the stream
+  await Future.delayed(Duration(seconds: 1));
+  subscription.resume();
+
+  controller.add(4);  // Received
+
+  // Cancel subscription
+  await subscription.cancel();
+  controller.add(5);  // Not received
+
+  controller.close();
+}
+```
+
+---
+
+## 7. Stream Methods & Transformations
+
+### 7.1 Transforming Streams
+
+```dart
+void main() async {
+  Stream<int> numbers = Stream.fromIterable([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+
+  // map: Transform each value
+  var doubled = numbers.map((n) => n * 2);
+  print(await doubled.toList());  // [2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
+
+  // where: Filter values
+  var evens = numbers.where((n) => n.isEven);
+  print(await evens.toList());  // [2, 4, 6, 8, 10]
+
+  // take: Take first N values
+  var first3 = numbers.take(3);
+  print(await first3.toList());  // [1, 2, 3]
+
+  // skip: Skip first N values
+  var skip3 = numbers.skip(3);
+  print(await skip3.toList());  // [4, 5, 6, 7, 8, 9, 10]
+
+  // takeWhile: Take while condition is true
+  var lessThan5 = numbers.takeWhile((n) => n < 5);
+  print(await lessThan5.toList());  // [1, 2, 3, 4]
+
+  // skipWhile: Skip while condition is true
+  var from5 = numbers.skipWhile((n) => n < 5);
+  print(await from5.toList());  // [5, 6, 7, 8, 9, 10]
+
+  // distinct: Remove consecutive duplicates
+  Stream<int> withDups = Stream.fromIterable([1, 1, 2, 2, 2, 3, 3]);
+  print(await withDups.distinct().toList());  // [1, 2, 3]
+
+  // expand: Flatten nested streams
+  var expanded = numbers.expand((n) => [n, n * 10]);
+  print(await expanded.toList());  // [1, 10, 2, 20, 3, 30, ...]
+}
+```
+
+### 7.2 Combining Streams
+
+```dart
+void main() async {
+  // merge: Combine multiple streams
+  Stream<int> stream1 = Stream.periodic(Duration(seconds: 1), (i) => i).take(3);
+  Stream<int> stream2 = Stream.periodic(Duration(milliseconds: 500), (i) => i + 100).take(3);
+
+  // StreamGroup.merge from async package (or custom)
+
+  // zip: Combine latest from multiple streams
+  // Use RxDart or combineLatest
+
+  // concat: One after another
+  var concatenated = Stream.fromIterable([1, 2, 3]).followedBy(Stream.fromIterable([4, 5, 6]));
+  print(await concatenated.toList());  // [1, 2, 3, 4, 5, 6]
+}
+```
+
+### 7.3 Stream.reduce & Stream.fold
+
+```dart
+void main() async {
+  Stream<int> numbers = Stream.fromIterable([1, 2, 3, 4, 5]);
+
+  // reduce: Combine to single value (first element is initial)
+  int sum = await numbers.reduce((a, b) => a + b);
+  print('Sum: $sum');  // 15
+
+  // fold: Combine with custom initial value
+  Stream<int> moreNumbers = Stream.fromIterable([1, 2, 3, 4, 5]);
+  int product = await moreNumbers.fold(1, (a, b) => a * b);
+  print('Product: $product');  // 120
+
+  // Collect to list
+  Stream<int> allNumbers = Stream.fromIterable([1, 2, 3, 4, 5]);
+  List<int> list = await allNumbers.toList();
+  print('List: $list');  // [1, 2, 3, 4, 5]
+
+  // Join to string
+  Stream<String> words = Stream.fromIterable(['Hello', 'Flutter', 'World']);
+  String sentence = await words.join(' ');
+  print(sentence);  // Hello Flutter World
+}
+```
+
+### 7.4 StreamBuilder Basics (Flutter Context)
+
+```dart
+// In Flutter, you'll use StreamBuilder like this:
+/*
+StreamBuilder<int>(
+  stream: counterStream,
+  builder: (context, snapshot) {
+    if (snapshot.hasError) {
+      return Text('Error: ${snapshot.error}');
+    }
+    if (snapshot.connectionState == ConnectionState.waiting) {
+      return CircularProgressIndicator();
+    }
+    return Text('Count: ${snapshot.data}');
+  },
+)
+*/
+
+// Connection states:
+// - none: No stream attached
+// - waiting: Waiting for first event
+// - active: Receiving events
+// - done: Stream closed
+```
+
+---
+
+## 8. Error Handling in Dart
+
+### 8.1 try / catch / finally
+
+```dart
+Future<void> fetchData() async {
+  try {
+    // Code that might throw
+    var response = await httpGet('/api/data');
+    var data = jsonDecode(response);
+    print('Data: $data');
+  } catch (e) {
+    // Catch ANY error
+    print('Error occurred: $e');
+  } finally {
+    // ALWAYS runs (cleanup)
+    print('Closing connection...');
+  }
+}
+```
+
+### 8.2 Catching Specific Errors (`on`)
+
+```dart
+Future<void> fetchDataSafely() async {
+  try {
+    var response = await httpGet('/api/data');
+    var data = jsonDecode(response);
+    processData(data);
+  } on FormatException catch (e) {
+    // Specific error type
+    print('JSON format error: $e');
+  } on TimeoutException catch (e) {
+    print('Request timed out: $e');
+  } on SocketException catch (e) {
+    print('Network error: $e');
+  } catch (e, stackTrace) {
+    // Catch-all with stack trace
+    print('Unexpected error: $e');
+    print('Stack: $stackTrace');
+  } finally {
+    print('Request completed');
+  }
+}
+```
+
+### 8.3 `rethrow` — Propagate Errors
+
+```dart
+Future<void> processUserData() async {
+  try {
+    var user = await fetchUser();
+    await validateUser(user);
+    await saveUser(user);
+  } catch (e) {
+    // Log the error locally
+    print('Processing failed: $e');
+    // But let caller handle it too
+    rethrow;  // Propagates the error up the call stack
+  }
+}
+
+void main() async {
+  try {
+    await processUserData();
+  } catch (e) {
+    print('Main caught: $e');  // Same error, caught here too
+  }
+}
+```
+
+### 8.4 Error Handling in Futures
+
+```dart
+void main() {
+  // Method 1: try-catch with await
+  fetchData().then((data) {
+    print(data);
+  }).catchError((error) {
+    print('Error: $error');
+  });
+
+  // Method 2: try-catch in async function
+  fetchSafely();
+}
+
+Future<void> fetchSafely() async {
+  try {
+    var data = await fetchData();
+    print(data);
+  } catch (e) {
+    print('Caught: $e');
+  }
+}
+```
+
+### 8.5 Custom Exceptions
+
+```dart
+// Define custom exception
+class NetworkException implements Exception {
+  final String message;
+  final int statusCode;
+
+  NetworkException(this.message, this.statusCode);
+
+  @override
+  String toString() => 'NetworkException: $message (Status: $statusCode)';
+}
+
+class ValidationException implements Exception {
+  final String field;
+  final String message;
+
+  ValidationException(this.field, this.message);
+
+  @override
+  String toString() => 'ValidationException: $field - $message';
+}
+
+// Usage
+Future<void> fetchUser() async {
+  var response = await httpGet('/api/user');
+  if (response.statusCode != 200) {
+    throw NetworkException('Failed to fetch user', response.statusCode);
+  }
+  if (response.body.isEmpty) {
+    throw ValidationException('user', 'User data is empty');
+  }
+}
+```
+
+### 8.6 Result Pattern (Functional Error Handling)
+
+```dart
+// Instead of throwing, return a Result type
+sealed class Result<T> {
+  const Result();
+}
+
+class Success<T> extends Result<T> {
+  final T data;
+  const Success(this.data);
+}
+
+class Failure<T> extends Result<T> {
+  final String message;
+  final Exception? exception;
+  const Failure(this.message, {this.exception});
+}
+
+// Usage
+Future<Result<String>> fetchDataSafe() async {
+  try {
+    var data = await httpGet('/api/data');
+    return Success(data);
+  } catch (e) {
+    return Failure('Failed to fetch data', exception: e as Exception?);
+  }
+}
+
+void main() async {
+  var result = await fetchDataSafe();
+
+  switch (result) {
+    case Success<String>(data: var data):
+      print('Success: $data');
+    case Failure<String>(message: var msg):
+      print('Failed: $msg');
+  }
+}
+```
+
+---
+
+## 9. Functional Programming with Collections
+
+### 9.1 Collection Operations Master List
+
+```dart
+void main() {
+  List<int> numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+  // map: Transform each element
+  var squares = numbers.map((n) => n * n);
+  print(squares.toList());  // [1, 4, 9, 16, 25, 36, 49, 64, 81, 100]
+
+  // where: Filter elements
+  var evens = numbers.where((n) => n % 2 == 0);
+  print(evens.toList());  // [2, 4, 6, 8, 10]
+
+  // reduce: Combine to single value
+  var sum = numbers.reduce((a, b) => a + b);
+  print(sum);  // 55
+
+  // fold: Reduce with initial value
+  var product = numbers.fold(1, (a, b) => a * b);
+  print(product);  // 3628800
+
+  // any: At least one matches?
+  print(numbers.any((n) => n > 8));  // true
+
+  // every: All match?
+  print(numbers.every((n) => n > 0));  // true
+
+  // firstWhere: Find first match
+  var firstEven = numbers.firstWhere((n) => n.isEven);
+  print(firstEven);  // 2
+
+  // singleWhere: Exactly one match (throws if 0 or 2+)
+  var single = numbers.singleWhere((n) => n == 5);
+  print(single);  // 5
+
+  // expand: Flatten
+  var pairs = numbers.expand((n) => [n, n * 2]);
+  print(pairs.toList());  // [1, 2, 2, 4, 3, 6, ...]
+
+  // followedBy: Concatenate
+  var combined = numbers.followedBy([11, 12, 13]);
+  print(combined.toList());  // [1, 2, ..., 10, 11, 12, 13]
+
+  // take / skip
+  print(numbers.take(3).toList());   // [1, 2, 3]
+  print(numbers.skip(7).toList());   // [8, 9, 10]
+
+  // takeWhile / skipWhile
+  print(numbers.takeWhile((n) => n < 5).toList());  // [1, 2, 3, 4]
+
+  // sort (modifies original)
+  var unsorted = [3, 1, 4, 1, 5, 9, 2, 6];
+  unsorted.sort();
+  print(unsorted);  // [1, 1, 2, 3, 4, 5, 6, 9]
+
+  // reversed
+  print(numbers.reversed.toList());  // [10, 9, 8, ..., 1]
+
+  // contains
+  print(numbers.contains(5));  // true
+
+  // join
+  print(numbers.join(', '));  // 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+
+  // forEach (side effects)
+  numbers.forEach((n) => print('Number: $n'));
+}
+```
+
+### 9.2 Chaining Operations
+
+```dart
+void main() {
+  var users = [
+    {'name': 'Alice', 'age': 25, 'active': true},
+    {'name': 'Bob', 'age': 17, 'active': true},
+    {'name': 'Charlie', 'age': 30, 'active': false},
+    {'name': 'Diana', 'age': 22, 'active': true},
+    {'name': 'Eve', 'age': 19, 'active': false},
+  ];
+
+  // Pipeline: Filter → Transform → Sort → Take
+  var result = users
+    .where((u) => u['active'] == true)           // Active users only
+    .where((u) => (u['age'] as int) >= 18)       // Adults only
+    .map((u) => u['name'] as String)             // Extract names
+    .map((name) => name.toUpperCase())            // Uppercase
+    .toList()                                     // Convert to list
+    ..sort();                                     // Sort alphabetically
+
+  print(result);  // [ALICE, DIANA]
+}
+```
+
+### 9.3 Functional Programming on Maps
+
+```dart
+void main() {
+  Map<String, int> scores = {
+    'Alice': 95,
+    'Bob': 82,
+    'Charlie': 78,
+    'Diana': 91,
+  };
+
+  // map entries
+  var gradeLetters = scores.map((name, score) => 
+    MapEntry(name, score >= 90 ? 'A' : score >= 80 ? 'B' : 'C'));
+  print(gradeLetters);  // {Alice: A, Bob: B, Charlie: C, Diana: A}
+
+  // filter entries
+  var topStudents = Map.fromEntries(
+    scores.entries.where((e) => e.value >= 90)
+  );
+  print(topStudents);  // {Alice: 95, Diana: 91}
+
+  // forEach
+  scores.forEach((name, score) {
+    print('$name: $score');
+  });
+
+  // update
+  scores.update('Alice', (value) => value + 5);
+  print(scores['Alice']);  // 100
+
+  // updateAll
+  scores.updateAll((key, value) => value + 2);  // Curve all grades!
+  print(scores);
+}
+```
+
+---
+
+## 10. Records (Dart 3)
+
+### 10.1 What are Records?
+
+Records are **anonymous, immutable, aggregate types**. They let you bundle multiple values without creating a class.
+
+```dart
+void main() {
+  // Positional record
+  var point = (3, 4);  // Record with 2 int fields
+  print(point);        // (3, 4)
+  print(point.$1);     // 3 (first field)
+  print(point.$2);     // 4 (second field)
+
+  // Named record
+  var person = (name: 'Kimi', age: 25);
+  print(person.name);  // Kimi
+  print(person.age);   // 25
+
+  // Mixed record (positional + named)
+  var user = ('Kimi', age: 25, active: true);
+  print(user.$1);      // Kimi
+  print(user.age);     // 25
+  print(user.active);  // true
+
+  // Record with type annotation
+  (String, int) coordinates = ('A1', 42);
+  ({String name, int score}) player = (name: 'Kimi', score: 100);
+}
+```
+
+### 10.2 Records as Return Values
+
+```dart
+// Return multiple values without creating a class!
+({int quotient, int remainder}) divide(int a, int b) {
+  return (quotient: a ~/ b, remainder: a % b);
+}
+
+(String name, int age, bool isActive) getUser() {
+  return ('Kimi', 25, true);
+}
+
+void main() {
+  var result = divide(17, 5);
+  print('${result.quotient} remainder ${result.remainder}');  // 3 remainder 2
+
+  var user = getUser();
+  print('${user.$1} is ${user.$2} years old');  // Kimi is 25 years old
+}
+```
+
+### 10.3 Record Equality
+
+```dart
+void main() {
+  var a = (1, 2);
+  var b = (1, 2);
+  var c = (1, 3);
+
+  print(a == b);  // true (same values)
+  print(a == c);  // false (different values)
+
+  // Named records
+  var x = (name: 'Kimi', age: 25);
+  var y = (age: 25, name: 'Kimi');  // Order doesn't matter for named!
+  print(x == y);  // true
+}
+```
+
+### 10.4 Records in Flutter
+
+```dart
+// Common pattern: Return (width, height) from a function
+(double, double) getScreenSize() {
+  // In Flutter: return (MediaQuery.of(context).size.width, MediaQuery.of(context).size.height);
+  return (392.0, 783.0);
+}
+
+// Return (success, errorMessage) from validation
+(bool, String?) validateEmail(String email) {
+  if (email.contains('@')) {
+    return (true, null);
+  }
+  return (false, 'Invalid email format');
+}
+
+void main() {
+  var (width, height) = getScreenSize();
+  print('Screen: ${width}x${height}');
+
+  var (isValid, error) = validateEmail('test@example.com');
+  print('Valid: $isValid, Error: $error');
+}
+```
+
+---
+
+## 11. Patterns & Pattern Matching (Dart 3)
+
+### 11.1 Destructuring with Patterns
+
+```dart
+void main() {
+  // Destructuring a record
+  var (x, y) = (10, 20);
+  print('x=$x, y=$y');  // x=10, y=20
+
+  // Destructuring a list
+  var [first, second, ...rest] = [1, 2, 3, 4, 5];
+  print('first=$first, rest=$rest');  // first=1, rest=[3, 4, 5]
+
+  // Destructuring a map
+  var {'name': name, 'age': age} = {'name': 'Kimi', 'age': 25};
+  print('$name is $age');  // Kimi is 25
+
+  // Destructuring a class
+  var Point(:x, :y) = Point(10, 20);
+  print('Point: ($x, $y)');  // Point: (10, 20)
+}
+
+class Point {
+  final double x;
+  final double y;
+  Point(this.x, this.y);
+}
+```
+
+### 11.2 Switch Expressions with Patterns
+
+```dart
+String describeValue(Object value) {
+  return switch (value) {
+    int() when value < 0 => 'Negative number',
+    int() when value == 0 => 'Zero',
+    int() when value < 10 => 'Single digit: $value',
+    int() => 'Multi-digit number: $value',
+    String() when value.isEmpty => 'Empty string',
+    String() => 'String: "$value"',
+    bool() => 'Boolean: $value',
+    [_, _, ...] => 'List with 2+ elements',
+    [] => 'Empty list',
+    {'name': String name} => 'Map with name: $name',
+    _ => 'Something else',
+  };
+}
+
+void main() {
+  print(describeValue(5));        // Single digit: 5
+  print(describeValue(-3));       // Negative number
+  print(describeValue('Hello'));  // String: "Hello"
+  print(describeValue([1, 2, 3])); // List with 2+ elements
+  print(describeValue({'name': 'Kimi'})); // Map with name: Kimi
+}
+```
+
+### 11.3 if-case Patterns
+
+```dart
+void main() {
+  var json = {'name': 'Kimi', 'age': 25};
+
+  // Pattern matching in if statement
+  if (json case {'name': String name, 'age': int age}) {
+    print('User: $name, Age: $age');
+  }
+
+  // List pattern matching
+  var numbers = [1, 2, 3];
+  if (numbers case [int first, int second, ...]) {
+    print('First: $first, Second: $second');
+  }
+
+  // Null check pattern
+  String? maybeName = 'Kimi';
+  if (maybeName case String name) {
+    print('Name is: $name');
+  }
+}
+```
+
+### 11.4 for-loop Patterns
+
+```dart
+void main() {
+  var points = [(1, 2), (3, 4), (5, 6)];
+
+  // Destructure in for loop
+  for (var (x, y) in points) {
+    print('Point: ($x, $y)');
+  }
+
+  // With map entries
+  var scores = {'Alice': 95, 'Bob': 87};
+  for (var MapEntry(:key, :value) in scores.entries) {
+    print('$key: $value');
+  }
+}
+```
+
+---
+
+## 12. Hands-On Project 1: Async JSON Data Fetcher
+
+```dart
+import 'dart:convert';
+
+// Simulated HTTP client
+class HttpClient {
+  static Future<String> get(String url) async {
+    await Future.delayed(Duration(milliseconds: 800));  // Network delay
+
+    if (url.contains('users')) {
+      return jsonEncode([
+        {'id': 1, 'name': 'Kimi', 'email': 'kimi@example.com', 'age': 25},
+        {'id': 2, 'name': 'Alex', 'email': 'alex@example.com', 'age': 30},
+        {'id': 3, 'name': 'Sam', 'email': 'sam@example.com', 'age': 22},
+      ]);
+    }
+
+    if (url.contains('posts')) {
+      return jsonEncode([
+        {'id': 1, 'userId': 1, 'title': 'Flutter Tips', 'body': 'Learn widgets...'},
+        {'id': 2, 'userId': 1, 'title': 'Dart Patterns', 'body': 'Records are great...'},
+        {'id': 3, 'userId': 2, 'title': 'State Management', 'body': 'Use Riverpod...'},
+      ]);
+    }
+
+    throw Exception('404 Not Found');
+  }
+}
+
+// Model classes
+class User {
+  final int id;
+  final String name;
+  final String email;
+  final int age;
+
+  User({required this.id, required this.name, required this.email, required this.age});
+
+  factory User.fromJson(Map<String, dynamic> json) {
+    return User(
+      id: json['id'],
+      name: json['name'],
+      email: json['email'],
+      age: json['age'],
+    );
+  }
+
+  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'email': email, 'age': age};
+
+  @override
+  String toString() => 'User(id: $id, name: $name, email: $email, age: $age)';
+}
+
+class Post {
+  final int id;
+  final int userId;
+  final String title;
+  final String body;
+
+  Post({required this.id, required this.userId, required this.title, required this.body});
+
+  factory Post.fromJson(Map<String, dynamic> json) {
+    return Post(
+      id: json['id'],
+      userId: json['userId'],
+      title: json['title'],
+      body: json['body'],
+    );
+  }
+
+  @override
+  String toString() => 'Post($title by user $userId)';
+}
+
+// API Service with error handling
+class ApiService {
+  static Future<List<User>> fetchUsers() async {
+    try {
+      final response = await HttpClient.get('/api/users')
+        .timeout(Duration(seconds: 3));
+
+      final List<dynamic> jsonList = jsonDecode(response);
+      return jsonList.map((json) => User.fromJson(json)).toList();
+    } on FormatException catch (e) {
+      print('JSON parsing error: $e');
+      return [];
+    } on TimeoutException {
+      print('Request timed out');
+      return [];
+    } catch (e) {
+      print('Unexpected error: $e');
+      return [];
+    }
+  }
+
+  static Future<List<Post>> fetchPosts() async {
+    try {
+      final response = await HttpClient.get('/api/posts')
+        .timeout(Duration(seconds: 3));
+
+      final List<dynamic> jsonList = jsonDecode(response);
+      return jsonList.map((json) => Post.fromJson(json)).toList();
+    } catch (e) {
+      print('Error fetching posts: $e');
+      return [];
+    }
+  }
+
+  static Future<({List<User> users, List<Post> posts})> fetchAll() async {
+    final results = await Future.wait([
+      fetchUsers(),
+      fetchPosts(),
+    ]);
+
+    return (users: results[0] as List<User>, posts: results[1] as List<Post>);
+  }
+}
+
+void main() async {
+  print('╔═══════════════════════════════════════╗');
+  print('║      ASYNC JSON DATA FETCHER          ║');
+  print('╚═══════════════════════════════════════╝');
+  print('');
+
+  // Sequential fetch
+  print('⏳ Fetching users...');
+  var users = await ApiService.fetchUsers();
+  print('✅ Found ${users.length} users');
+  users.forEach(print);
+
+  print('');
+  print('⏳ Fetching posts...');
+  var posts = await ApiService.fetchPosts();
+  print('✅ Found ${posts.length} posts');
+  posts.forEach(print);
+
+  // Parallel fetch with record return
+  print('');
+  print('⏳ Fetching everything in parallel...');
+  var all = await ApiService.fetchAll();
+  print('✅ Users: ${all.users.length}, Posts: ${all.posts.length}');
+
+  // Functional processing
+  print('');
+  print('📊 ANALYSIS:');
+
+  var adults = all.users.where((u) => u.age >= 25).toList();
+  print('Adult users (25+): ${adults.map((u) => u.name).join(', ')}');
+
+  var averageAge = all.users.map((u) => u.age).reduce((a, b) => a + b) / all.users.length;
+  print('Average age: ${averageAge.toStringAsFixed(1)}');
+
+  var postsByKimi = all.posts.where((p) => p.userId == 1).toList();
+  print('Posts by Kimi: ${postsByKimi.length}');
+}
+```
+
+---
+
+## 13. Hands-On Project 2: Real-Time Stream Dashboard
+
+```dart
+import 'dart:async';
+import 'dart:math';
+
+// Simulated sensor data
+class SensorReading {
+  final String sensorId;
+  final double temperature;
+  final double humidity;
+  final DateTime timestamp;
+
+  SensorReading(this.sensorId, this.temperature, this.humidity)
+    : timestamp = DateTime.now();
+
+  bool get isHot => temperature > 30;
+  bool get isCold => temperature < 15;
+  bool get isNormal => !isHot && !isCold;
+
+  @override
+  String toString() =>
+    '[${timestamp.toString().substring(11, 19)}] $sensorId: '
+    '${temperature.toStringAsFixed(1)}°C, ${humidity.toStringAsFixed(1)}% '
+    '${isHot ? '🔥' : isCold ? '❄️' : '✅'}';
+}
+
+class SensorDashboard {
+  final List<StreamController<SensorReading>> _controllers = [];
+  final List<StreamSubscription<SensorReading>> _subscriptions = [];
+  final List<SensorReading> _history = [];
+
+  // Create a simulated sensor stream
+  Stream<SensorReading> createSensor(String id, double baseTemp, double baseHumidity) {
+    var controller = StreamController<SensorReading>.broadcast();
+    _controllers.add(controller);
+
+    var random = Random();
+
+    // Emit readings every second
+    Timer.periodic(Duration(seconds: 1), (timer) {
+      if (controller.isClosed) {
+        timer.cancel();
+        return;
+      }
+
+      var temp = baseTemp + random.nextDouble() * 10 - 5;
+      var humidity = baseHumidity + random.nextDouble() * 20 - 10;
+      var reading = SensorReading(id, temp, humidity.clamp(0, 100));
+      controller.add(reading);
+    });
+
+    return controller.stream;
+  }
+
+  void monitorSensor(Stream<SensorReading> stream, String label) {
+    var sub = stream.listen(
+      (reading) {
+        _history.add(reading);
+        print('$label $reading');
+
+        // Alert on extreme values
+        if (reading.temperature > 35) {
+          print('  ⚠️  HIGH TEMPERATURE ALERT!');
+        }
+        if (reading.humidity > 80) {
+          print('  ⚠️  HIGH HUMIDITY ALERT!');
+        }
+      },
+      onError: (e) => print('$label Error: $e'),
+      onDone: () => print('$label Stream closed'),
+    );
+    _subscriptions.add(sub);
+  }
+
+  void printStats() {
+    if (_history.isEmpty) return;
+
+    var temps = _history.map((r) => r.temperature);
+    var humidities = _history.map((r) => r.humidity);
+
+    print('');
+    print('╔═══════════════════════════════════════╗');
+    print('║         SENSOR STATISTICS             ║');
+    print('╠═══════════════════════════════════════╣');
+    print('║ Total Readings: ${_history.length}');
+    print('║ Avg Temperature: ${(temps.reduce((a, b) => a + b) / temps.length).toStringAsFixed(1)}°C');
+    print('║ Avg Humidity: ${(humidities.reduce((a, b) => a + b) / humidities.length).toStringAsFixed(1)}%');
+    print('║ Max Temperature: ${temps.reduce(max).toStringAsFixed(1)}°C');
+    print('║ Min Temperature: ${temps.reduce(min).toStringAsFixed(1)}°C');
+    print('║ Hot Readings: ${_history.where((r) => r.isHot).length}');
+    print('║ Cold Readings: ${_history.where((r) => r.isCold).length}');
+    print('╚═══════════════════════════════════════╝');
+  }
+
+  Future<void> dispose() async {
+    for (var sub in _subscriptions) {
+      await sub.cancel();
+    }
+    for (var controller in _controllers) {
+      await controller.close();
+    }
+  }
+}
+
+void main() async {
+  print('╔═══════════════════════════════════════╗');
+  print('║    REAL-TIME STREAM DASHBOARD         ║');
+  print('╚═══════════════════════════════════════╝');
+  print('Monitoring sensors for 5 seconds...');
+  print('');
+
+  var dashboard = SensorDashboard();
+
+  // Create sensor streams
+  var sensorA = dashboard.createSensor('Sensor-A', 22, 50);
+  var sensorB = dashboard.createSensor('Sensor-B', 28, 60);
+  var sensorC = dashboard.createSensor('Sensor-C', 18, 45);
+
+  // Monitor all sensors
+  dashboard.monitorSensor(sensorA, '🏠 Room A');
+  dashboard.monitorSensor(sensorB, '🏭 Factory B');
+  dashboard.monitorSensor(sensorC, '❄️ Cold Storage C');
+
+  // Also collect to list for stats
+  var allReadings = <SensorReading>[];
+  sensorA.listen((r) => allReadings.add(r));
+  sensorB.listen((r) => allReadings.add(r));
+  sensorC.listen((r) => allReadings.add(r));
+
+  // Wait 5 seconds
+  await Future.delayed(Duration(seconds: 5));
+
+  // Print statistics
+  dashboard.printStats();
+
+  // Filtered view
+  print('');
+  print('🔥 HOT READINGS (>30°C):');
+  allReadings.where((r) => r.isHot).forEach((r) => print('  $r'));
+
+  await dashboard.dispose();
+  print('');
+  print('Dashboard closed.');
+}
+```
+
+---
+
+## 14. Common Mistakes & How to Avoid Them
+
+### Mistake 1: Forgetting `await`
+```dart
+// ❌ WRONG — Future is not awaited
+void main() {
+  fetchData();  // Fire and forget! Error goes unhandled!
+  print('Done');  // Prints before fetch completes
+}
+
+// ✅ CORRECT
+void main() async {
+  await fetchData();  // Waits for completion
+  print('Done');
+}
+```
+
+### Mistake 2: Using `await` in Non-async Function
+```dart
+// ❌ WRONG
+void main() {
+  var data = await fetchData();  // Syntax error!
+}
+
+// ✅ CORRECT
+void main() async {
+  var data = await fetchData();
+}
+```
+
+### Mistake 3: Not Handling Future Errors
+```dart
+// ❌ WRONG — Unhandled exception crashes app
+Future<void> risky() async {
+  var data = await fetchData();  // Might throw!
+  print(data);
+}
+
+// ✅ CORRECT
+Future<void> safe() async {
+  try {
+    var data = await fetchData();
+    print(data);
+  } catch (e) {
+    print('Error: $e');
+  }
+}
+```
+
+### Mistake 4: Sequential When Parallel is Possible
+```dart
+// ❌ SLOW — 3 seconds total
+var a = await fetchA();  // 1s
+var b = await fetchB();  // 1s
+var c = await fetchC();  // 1s
+
+// ✅ FAST — ~1 second total
+var results = await Future.wait([fetchA(), fetchB(), fetchC()]);
+```
+
+### Mistake 5: Listening to Single-Subscription Stream Twice
+```dart
+// ❌ WRONG
+var stream = Stream.fromIterable([1, 2, 3]);
+stream.listen(print);
+stream.listen(print);  // Runtime error!
+
+// ✅ CORRECT
+var stream = Stream.fromIterable([1, 2, 3]).asBroadcastStream();
+stream.listen(print);
+stream.listen(print);  // Works!
+```
+
+### Mistake 6: Not Closing Stream Controllers
+```dart
+// ❌ WRONG — Memory leak!
+var controller = StreamController<int>();
+// ... use controller ...
+// Forgot to close!
+
+// ✅ CORRECT
+var controller = StreamController<int>();
+// ... use controller ...
+await controller.close();  // Always close!
+```
+
+### Mistake 7: Catching All Errors Blindly
+```dart
+// ❌ WRONG — Swallows ALL errors including programming mistakes
+try {
+  // code
+} catch (e) {  // Catches EVERYTHING
+  print(e);
+}
+
+// ✅ CORRECT — Catch specific errors
+import 'dart:io';
+try {
+  // code
+} on SocketException catch (e) {
+  print('Network error: $e');
+} on FormatException catch (e) {
+  print('Bad data: $e');
+} catch (e) {
+  print('Unexpected: $e');
+  rethrow;  // Let caller know something unexpected happened
+}
+```
+
+### Mistake 8: Confusing `map()` on List vs Stream
+```dart
+// List map — returns Iterable (synchronous)
+[1, 2, 3].map((n) => n * 2);  // Returns Iterable<int>
+
+// Stream map — returns Stream (asynchronous)
+stream.map((n) => n * 2);  // Returns Stream<int>
+
+// Both are lazy — call .toList() or .listen() to execute
+```
+
+---
+
+## 15. Day 5 Checklist
+
+Use this checklist to verify mastery:
+
+- [ ] Understands synchronous vs asynchronous programming
+- [ ] Can create and use `Future` objects
+- [ ] Can write `async` functions and use `await`
+- [ ] Knows the difference between sequential and parallel execution
+- [ ] Can use `Future.wait`, `Future.any`, `Future.delayed`
+- [ ] Can chain Futures with `then`, `catchError`, `whenComplete`, `timeout`
+- [ ] Understands what a `Stream` is and when to use it
+- [ ] Can create streams from iterables, futures, and controllers
+- [ ] Knows the difference between single-subscription and broadcast streams
+- [ ] Can listen to streams and manage subscriptions
+- [ ] Can transform streams with `map`, `where`, `take`, `skip`, `distinct`
+- [ ] Can use `Stream.reduce`, `Stream.fold`, `Stream.toList`
+- [ ] Can handle errors with `try/catch/finally`
+- [ ] Can catch specific error types with `on`
+- [ ] Can use `rethrow` to propagate errors
+- [ ] Can create custom exception classes
+- [ ] Masters functional collection operations: `map`, `where`, `reduce`, `fold`
+- [ ] Can chain collection operations into pipelines
+- [ ] Can create and use records `()` for multiple return values
+- [ ] Can destructure records, lists, and maps with patterns
+- [ ] Can use switch expressions with pattern matching
+- [ ] Can use `if-case` for pattern matching
+- [ ] Built the Async JSON Data Fetcher with error handling
+- [ ] Built the Real-Time Stream Dashboard
+- [ ] Pushed both projects to GitHub
+
+---
+
+## 🧠 Key Takeaways (Memorize These!)
+
+1. **`async` makes a function return a Future.** `await` pauses the function without blocking other code.
+
+2. **Use `Future.wait([...])` for parallel execution.** It's much faster than sequential awaits.
+
+3. **A `Future` is a single value in the future.** A `Stream` is multiple values over time.
+
+4. **Always close `StreamController`s.** They cause memory leaks if left open.
+
+5. **Single-subscription streams can only have one listener.** Use `.asBroadcastStream()` for multiple listeners.
+
+6. **Catch specific errors with `on`.** Use `catch` as a fallback and `rethrow` when you can't handle it.
+
+7. **`map`, `where`, `reduce` work on both Lists and Streams.** But Streams are async and lazy.
+
+8. **Records `()` let you return multiple values** without creating a class. Use named fields for clarity.
+
+9. **Pattern matching with `switch` expressions** is cleaner than long if-else chains in Dart 3.
+
+10. **Any I/O operation (network, file, database) should be async.** Keep the UI thread free for 60 FPS.
+
+---
+
+## 📚 Extra Practice (Do These Tonight!)
+
+1. **Weather API Client:** Create a service that fetches weather data asynchronously, handles timeouts, retries on failure, and parses JSON into models.
+
+2. **Chat Message Stream:** Build a chat system with `StreamController` that emits messages, filters by user, and maintains a message history.
+
+3. **File Processor:** Read a CSV file asynchronously, process each row with functional operations (map, filter), and write results to a new file.
+
+4. **Stock Price Ticker:** Create a stream that emits random stock prices every second. Use `where` to filter significant changes and `fold` to calculate running averages.
+
+5. **Login Flow:** Build an async login system with validation, API call, token storage, and proper error handling for network/auth/server errors.
+
+---
+
+> 🎉 **Congratulations!** You've completed Day 5. You now understand async programming, streams, error handling, functional collections, records, and pattern matching. These are the advanced Dart features that power real-world Flutter apps.
+
+**Next Up → Day 6: Flutter Widgets Fundamentals**
+
+
 
 
 
