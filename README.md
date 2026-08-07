@@ -8257,6 +8257,1665 @@ Use this checklist to verify mastery:
 **Next Up → Day 6: Flutter Widgets Fundamentals**
 
 
+# 📘 Day 6: Flutter Widgets Fundamentals — Complete Deep Dive
+> **Goal:** Understand the widget system and build basic layouts confidently.
+> *This is your first real Flutter UI day — every concept explained with visual diagrams, code, and hands-on practice.*
+
+---
+
+## Table of Contents
+1. [The "Everything is a Widget" Philosophy](#1-the-everything-is-a-widget-philosophy)
+2. [Widget Tree & Element Tree Explained](#2-widget-tree--element-tree-explained)
+3. [StatelessWidget vs StatefulWidget](#3-statelesswidget-vs-statefulwidget)
+4. [BuildContext Deep Dive](#4-buildcontext-deep-dive)
+5. [Keys in Flutter](#5-keys-in-flutter)
+6. [Basic Widgets Masterclass](#6-basic-widgets-masterclass)
+7. [Layout Widgets: Row, Column, Stack](#7-layout-widgets-row-column-stack)
+8. [Flexible & Expanded Explained](#8-flexible--expanded-explained)
+9. [Container Deep Dive](#9-container-deep-dive)
+10. [Text Widget Mastery](#10-text-widget-mastery)
+11. [Hands-On Project: Business Card UI](#11-hands-on-project-business-card-ui)
+12. [Common Mistakes & How to Avoid Them](#12-common-mistakes--how-to-avoid-them)
+13. [Day 6 Checklist](#13-day-6-checklist)
+
+---
+
+## 1. The "Everything is a Widget" Philosophy
+
+### What Does "Everything is a Widget" Mean?
+
+In Flutter, **everything you see on screen is a widget**. But more than that — everything that *configures* what you see is also a widget.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              EVERYTHING IS A WIDGET                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Visible things are widgets:        Invisible things too:   │
+│  ─────────────────────────          ─────────────────────     │
+│  • Text                             • Padding               │
+│  • Button                           • Margin                │
+│  • Image                            • Alignment             │
+│  • Icon                             • Expanded              │
+│  • Container                        • Center                │
+│  • List                             • GestureDetector       │
+│                                                             │
+│  Even the APP itself is a widget:   • MaterialApp           │
+│                                     • Scaffold              │
+│                                     • Theme                 │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Widgets Are Just Configuration Objects
+
+```dart
+// A widget is NOT the actual UI element on screen
+// It's a BLUEPRINT that tells Flutter WHAT to build
+
+Text('Hello')  // This is a configuration object
+               // It says: "Put text 'Hello' here"
+
+Container(     // This is a configuration object
+  width: 100,  // It says: "Make a box 100px wide"
+  height: 100, // "Make it 100px tall"
+  color: Colors.red,  // "Fill it with red"
+)
+```
+
+### The Three-Layer Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  LAYER 1: WIDGETS (Your Code)                               │
+│  ─────────────────────────────                              │
+│  Immutable configuration objects                            │
+│  You create these in build() methods                        │
+│  Cheap to create, throw away, and recreate                  │
+│                                                             │
+├─────────────────────────────────────────────────────────────┤
+│  LAYER 2: ELEMENTS (Flutter Engine)                         │
+│  ─────────────────────────────────                          │
+│  Mutable, long-lived objects                                │
+│  Hold references to widgets and state                       │
+│  Manage the widget lifecycle                                │
+│  One Element per Widget in the tree                         │
+│                                                             │
+├─────────────────────────────────────────────────────────────┤
+│  LAYER 3: RENDER OBJECTS (Flutter Engine)                   │
+│  ─────────────────────────────────────                      │
+│  Actually paint on screen                                   │
+│  Handle layout, painting, hit-testing                       │
+│  Know about sizes, positions, colors                        │
+│  Expensive to create — reused when possible                 │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+> 💡 **Key Insight:** You write Widgets. Flutter manages Elements and RenderObjects. When you call `setState()`, Flutter compares the new widget tree with the old one and updates only what changed.
+
+---
+
+## 2. Widget Tree & Element Tree Explained
+
+### The Widget Tree (What You Write)
+
+```dart
+MaterialApp(
+  home: Scaffold(
+    appBar: AppBar(
+      title: Text('My App'),        // Widget
+    ),
+    body: Center(                   // Widget
+      child: Column(                // Widget
+        children: [
+          Text('Hello'),            // Widget
+          Container(                // Widget
+            child: Icon(Icons.star),// Widget
+          ),
+        ],
+      ),
+    ),
+  ),
+)
+```
+
+### Visual Widget Tree
+
+```
+                    MaterialApp
+                         │
+                    Scaffold
+                    /        \
+              AppBar          Body: Center
+                 │                │
+            Text('My App')    Column
+                               /      \
+                          Text      Container
+                          ('Hello')      │
+                                      Icon
+                                    (Icons.star)
+```
+
+### How Flutter Updates the UI
+
+```
+Step 1: You call setState()
+        ↓
+Step 2: Flutter calls build() → New Widget Tree created
+        ↓
+Step 3: Flutter compares New Widget Tree vs Old Widget Tree
+        ↓
+Step 4: For widgets that changed type or key:
+        • Destroy old Element + RenderObject
+        • Create new Element + RenderObject
+        ↓
+Step 5: For widgets that stayed the same:
+        • Update existing Element with new configuration
+        • Reuse RenderObject, just update properties
+        ↓
+Step 6: Flutter repaints only changed areas
+```
+
+> 🎯 **This is why Flutter is fast:** It doesn't redraw everything. It only updates what changed.
+
+---
+
+## 3. StatelessWidget vs StatefulWidget
+
+### The Fundamental Decision
+
+Every time you create a widget, you must choose:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Does this widget need to CHANGE after it's built?          │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│     NO ──→ StatelessWidget                                  │
+│     │                                                       │
+│     │   • Display static content                            │
+│     │   • No user interaction that changes UI               │
+│     │   • Configuration/settings display                    │
+│     │   • Icon, Label, Static Image                         │
+│     │                                                       │
+│     YES ──→ StatefulWidget                                  │
+│         │                                                   │
+│         • User taps a button                                │
+│         • Form input changes                                │
+│         • Animation plays                                   │
+│         • Data loads from API                               │
+│         • Checkbox toggles                                  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### StatelessWidget — Immutable UI
+
+```dart
+// A StatelessWidget NEVER changes after it's built
+// If the parent rebuilds, it gets a NEW instance
+
+class GreetingCard extends StatelessWidget {
+  final String name;
+  final String message;
+
+  // Constructor with const = performance boost!
+  const GreetingCard({
+    super.key,
+    required this.name,
+    required this.message,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Hello, $name!', style: TextStyle(fontSize: 24)),
+            const SizedBox(height: 8),
+            Text(message),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+void main() {
+  runApp(MaterialApp(
+    home: Scaffold(
+      body: Center(
+        child: GreetingCard(
+          name: 'Kimi',
+          message: 'Welcome to Flutter!',
+        ),
+      ),
+    ),
+  ));
+}
+```
+
+**StatelessWidget Rules:**
+- ✅ Use `final` fields only
+- ✅ Use `const` constructor when possible
+- ❌ Never call `setState()`
+- ❌ Never have mutable fields (non-final)
+
+### StatefulWidget — Mutable UI
+
+```dart
+// A StatefulWidget CAN change after it's built
+// It has a separate State object that holds mutable data
+
+class CounterApp extends StatefulWidget {
+  const CounterApp({super.key});
+
+  @override
+  State<CounterApp> createState() => _CounterAppState();
+}
+
+// The State object lives longer than the widget
+class _CounterAppState extends State<CounterApp> {
+  int _counter = 0;  // Mutable state!
+
+  void _increment() {
+    setState(() {
+      _counter++;  // Change state → triggers rebuild
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Counter')),
+      body: Center(
+        child: Text('Count: $_counter', style: TextStyle(fontSize: 48)),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _increment,
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+```
+
+### The StatefulWidget Lifecycle
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│           StatefulWidget Lifecycle                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  1. Constructor                                             │
+│     └─→ Widget created (configuration only)                 │
+│                                                             │
+│  2. createState()                                           │
+│     └─→ State object created (lives long!)                  │
+│                                                             │
+│  3. initState()                                             │
+│     └─→ One-time setup (subscribe to streams, etc.)         │
+│                                                             │
+│  4. build() ←────────────────────┐                          │
+│     └─→ Create widget tree       │                          │
+│                                  │                          │
+│  5. setState() ──→ triggers rebuild()                       │
+│     └─→ didUpdateWidget() if parent changed                 │
+│                                  │                          │
+│  6. deactivate() ──→ widget removed from tree               │
+│                                                             │
+│  7. dispose() ──→ cleanup (cancel subscriptions, etc.)      │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### initState() — One-Time Setup
+
+```dart
+class _TimerWidgetState extends State<TimerWidget> {
+  late Timer _timer;
+  int _seconds = 0;
+
+  @override
+  void initState() {
+    super.initState();  // ALWAYS call super.initState() first!
+
+    // One-time setup
+    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
+      setState(() {
+        _seconds++;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();  // Cleanup!
+    super.dispose();  // ALWAYS call super.dispose() last!
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text('$_seconds seconds elapsed');
+  }
+}
+```
+
+### When to Use Which?
+
+| Scenario | Widget Type | Why |
+|----------|-------------|-----|
+| Static text label | `StatelessWidget` | Never changes |
+| Button that just navigates | `StatelessWidget` | No internal state |
+| Counter | `StatefulWidget` | State changes on tap |
+| Form input field | `StatefulWidget` | Text changes as user types |
+| List from API | `StatefulWidget` | Data loads, then displays |
+| App bar title | `StatelessWidget` | Set once by parent |
+| Loading spinner | `StatefulWidget` | Shows/hides based on state |
+
+---
+
+## 4. BuildContext Deep Dive
+
+### What is BuildContext?
+
+`BuildContext` is a **handle to the location of a widget in the widget tree**. It's how Flutter knows where you are.
+
+```dart
+class MyWidget extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {  // ← This is BuildContext!
+    // 'context' knows:
+    // • Where this widget is in the tree
+    // • How to find parent widgets (Theme, Navigator, etc.)
+    // • How to register for rebuilds
+
+    return Container();
+  }
+}
+```
+
+### What You Can Do With BuildContext
+
+```dart
+class ContextDemo extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    // 1. Access Theme data
+    var theme = Theme.of(context);
+    var primaryColor = theme.primaryColor;
+    var textTheme = theme.textTheme;
+
+    // 2. Access MediaQuery (screen size, orientation)
+    var mediaQuery = MediaQuery.of(context);
+    var screenWidth = mediaQuery.size.width;
+    var screenHeight = mediaQuery.size.height;
+    var isPortrait = mediaQuery.orientation == Orientation.portrait;
+    var padding = mediaQuery.padding;  // Notch, status bar
+
+    // 3. Navigate to new screen
+    // Navigator.of(context).push(MaterialPageRoute(...));
+
+    // 4. Show snackbar
+    // ScaffoldMessenger.of(context).showSnackBar(...);
+
+    // 5. Show dialog
+    // showDialog(context: context, builder: ...);
+
+    // 6. Find ancestor widget
+    // var scaffold = Scaffold.of(context);
+
+    return Container();
+  }
+}
+```
+
+### The BuildContext Tree
+
+```
+MaterialApp (context: root)
+  └── Scaffold (context: scaffold)
+        ├── AppBar (context: appbar)
+        │     └── Text (context: text1)
+        └── Body: Center (context: center)
+              └── Column (context: column)
+                    ├── Text (context: text2)
+                    └── Button (context: button)
+                          └── Text (context: text3)
+
+Each widget has its OWN BuildContext
+Context knows about ancestors, not descendants
+```
+
+### Common BuildContext Methods
+
+```dart
+// Theme
+Theme.of(context)                    // Get theme data
+Theme.of(context).primaryColor       // Primary color
+Theme.of(context).textTheme          // Text styles
+
+// MediaQuery
+MediaQuery.of(context).size          // Screen size
+MediaQuery.of(context).padding       // Safe area padding
+MediaQuery.of(context).orientation   // Portrait/Landscape
+
+// Navigation
+Navigator.of(context)                // Navigator
+Navigator.of(context).push(route)    // Go to new screen
+Navigator.of(context).pop()          // Go back
+
+// Scaffold
+Scaffold.of(context)                 // Access Scaffold
+ScaffoldMessenger.of(context)        // Show snackbars
+
+// Localization
+Localizations.of(context, type)      // Translated strings
+
+// Inherited Widgets
+Provider.of<MyModel>(context)        // State management
+BlocProvider.of<MyBloc>(context)     // BLoC pattern
+```
+
+### The `context` Trap
+
+```dart
+// ❌ WRONG — Using context after async gap
+void _onPressed(BuildContext context) async {
+  await Future.delayed(Duration(seconds: 1));
+  // ⚠️ DANGER: Widget might have been disposed!
+  Navigator.of(context).pop();  // Might crash!
+}
+
+// ✅ CORRECT — Check mounted first (in StatefulWidget)
+void _onPressed() async {
+  await Future.delayed(Duration(seconds: 1));
+  if (mounted) {  // Check if widget still exists
+    Navigator.of(context).pop();
+  }
+}
+
+// ✅ CORRECT — Use context safely
+void _onPressed(BuildContext context) async {
+  var navigator = Navigator.of(context);  // Capture before async
+  await Future.delayed(Duration(seconds: 1));
+  navigator.pop();  // Safe — we captured the navigator
+}
+```
+
+---
+
+## 5. Keys in Flutter
+
+### Why Do Keys Matter?
+
+Keys tell Flutter: **"This widget is the same one, just with updated data"** vs **"This is a completely different widget."**
+
+```
+Without Keys (PROBLEM):
+┌─────────────────────────────────────────────────────────────┐
+│  Old Tree              New Tree              Result          │
+│  ─────────             ─────────             ──────          │
+│  ListView                                    ❌ WRONG!     │
+│    ├── Widget A (red)  ├── Widget B (blue)   Blue shows     │
+│    └── Widget B (blue) └── Widget A (red)    where red was  │
+│                                              Flutter thinks   │
+│                                              A became B!    │
+└─────────────────────────────────────────────────────────────┘
+
+With Keys (FIXED):
+┌─────────────────────────────────────────────────────────────┐
+│  Old Tree              New Tree              Result          │
+│  ─────────             ─────────             ──────          │
+│  ListView                                    ✅ CORRECT!    │
+│    ├── Widget A (red)  ├── Widget B (blue)   B moved to top │
+│    └── Widget B (blue) └── Widget A (red)    A moved down   │
+│                                              Flutter knows   │
+│                                              which is which  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Types of Keys
+
+```dart
+// 1. ValueKey — Most common
+// Use when widgets have a unique value
+ListView.builder(
+  itemCount: users.length,
+  itemBuilder: (context, index) {
+    return ListTile(
+      key: ValueKey(users[index].id),  // Unique ID
+      title: Text(users[index].name),
+    );
+  },
+)
+
+// 2. ObjectKey — Use the entire object as key
+ListView.builder(
+  itemCount: items.length,
+  itemBuilder: (context, index) {
+    return ListTile(
+      key: ObjectKey(items[index]),  // Entire object is the key
+      title: Text(items[index].name),
+    );
+  },
+)
+
+// 3. UniqueKey — Always unique (rarely needed)
+Widget build(BuildContext context) {
+  return Container(
+    key: UniqueKey(),  // Different every build — forces rebuild!
+  );
+}
+
+// 4. GlobalKey — Access widget from anywhere
+class _MyFormState extends State<MyForm> {
+  final _formKey = GlobalKey<FormState>();  // Access form state globally
+
+  @override
+  Widget build(BuildContext context) {
+    return Form(
+      key: _formKey,
+      child: Column(
+        children: [
+          TextFormField(),
+          ElevatedButton(
+            onPressed: () {
+              if (_formKey.currentState!.validate()) {
+                // Form is valid!
+              }
+            },
+            child: Text('Submit'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// 5. PageStorageKey — Preserve scroll position
+ListView(
+  key: PageStorageKey('my_list'),  // Remembers scroll position
+  children: [...],
+)
+```
+
+### When to Use Keys
+
+| Scenario | Key Type | Why |
+|----------|----------|-----|
+| Reorderable list | `ValueKey(id)` | Track items when moved |
+| Form validation | `GlobalKey<FormState>()` | Access form state |
+| Tab view scroll position | `PageStorageKey` | Remember position |
+| Animated list | `ValueKey(id)` | Animate correct item |
+| Simple static list | No key needed | Items don't move |
+
+---
+
+## 6. Basic Widgets Masterclass
+
+### 6.1 Text Widget
+
+```dart
+Text(
+  'Hello, Flutter!',
+  style: TextStyle(
+    fontSize: 24,                    // Size in logical pixels
+    fontWeight: FontWeight.bold,     // w400 (normal), w700 (bold)
+    color: Colors.blue,              // Text color
+    fontFamily: 'Roboto',            // Custom font
+    letterSpacing: 1.5,              // Space between letters
+    wordSpacing: 2.0,                // Space between words
+    height: 1.5,                     // Line height multiplier
+    decoration: TextDecoration.underline,
+    decorationColor: Colors.red,
+    decorationStyle: TextDecorationStyle.dashed,
+    shadows: [
+      Shadow(color: Colors.black26, offset: Offset(2, 2), blurRadius: 4),
+    ],
+  ),
+  textAlign: TextAlign.center,       // left, right, center, justify
+  overflow: TextOverflow.ellipsis,   // fade, clip, ellipsis, visible
+  maxLines: 2,                       // Limit lines
+  softWrap: true,                    // Wrap at soft line breaks
+)
+```
+
+### 6.2 Icon Widget
+
+```dart
+Icon(
+  Icons.favorite,                    // Material icon
+  size: 48,                         // Size in logical pixels
+  color: Colors.red,                // Icon color
+  semanticLabel: 'Favorite',        // Accessibility
+)
+
+// Common icons:
+// Icons.home, Icons.settings, Icons.person, Icons.search
+// Icons.add, Icons.delete, Icons.edit, Icons.share
+// Icons.arrow_back, Icons.menu, Icons.close
+// Icons.favorite, Icons.favorite_border (outlined)
+// Icons.check_circle, Icons.error, Icons.warning
+```
+
+### 6.3 Image Widget
+
+```dart
+// From assets (requires pubspec.yaml configuration)
+Image.asset(
+  'assets/images/logo.png',
+  width: 100,
+  height: 100,
+  fit: BoxFit.cover,                // cover, contain, fill, fitWidth, fitHeight
+)
+
+// From network URL
+Image.network(
+  'https://example.com/image.jpg',
+  loadingBuilder: (context, child, progress) {
+    if (progress == null) return child;
+    return CircularProgressIndicator(
+      value: progress.expectedTotalBytes != null
+        ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes!
+        : null,
+    );
+  },
+  errorBuilder: (context, error, stackTrace) {
+    return Icon(Icons.error);
+  },
+)
+
+// From memory (Uint8List)
+Image.memory(bytes)
+
+// From file
+Image.file(File('/path/to/image.jpg'))
+```
+
+### 6.4 ElevatedButton
+
+```dart
+ElevatedButton(
+  onPressed: () {
+    print('Button pressed!');
+  },
+  onLongPress: () {
+    print('Long press!');
+  },
+  style: ElevatedButton.styleFrom(
+    backgroundColor: Colors.blue,     // Button color
+    foregroundColor: Colors.white,    // Text/icon color
+    elevation: 4,                     // Shadow depth
+    padding: EdgeInsets.all(16),      // Internal padding
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(8),
+    ),
+    minimumSize: Size(200, 50),       // Minimum dimensions
+  ),
+  child: Text('Click Me'),
+)
+
+// With icon
+ElevatedButton.icon(
+  onPressed: () {},
+  icon: Icon(Icons.send),
+  label: Text('Send'),
+)
+```
+
+### 6.5 Other Button Types
+
+```dart
+// TextButton — Flat, no elevation
+TextButton(
+  onPressed: () {},
+  child: Text('Text Button'),
+)
+
+// OutlinedButton — Border only
+OutlinedButton(
+  onPressed: () {},
+  child: Text('Outlined'),
+)
+
+// IconButton — Just an icon
+IconButton(
+  onPressed: () {},
+  icon: Icon(Icons.favorite),
+  tooltip: 'Add to favorites',
+)
+
+// FloatingActionButton
+FloatingActionButton(
+  onPressed: () {},
+  child: Icon(Icons.add),
+)
+
+// FloatingActionButton.extended
+FloatingActionButton.extended(
+  onPressed: () {},
+  icon: Icon(Icons.add),
+  label: Text('Add'),
+)
+```
+
+---
+
+## 7. Layout Widgets: Row, Column, Stack
+
+### 7.1 Row — Horizontal Layout
+
+```dart
+Row(
+  mainAxisAlignment: MainAxisAlignment.center,  // Horizontal
+  crossAxisAlignment: CrossAxisAlignment.center, // Vertical
+  mainAxisSize: MainAxisSize.max,               // max or min
+  children: [
+    Icon(Icons.star, color: Colors.yellow),
+    SizedBox(width: 8),                         // Spacing
+    Text('Rating: 4.5'),
+    Spacer(),                                    // Pushes next item to end
+    Text('120 reviews'),
+  ],
+)
+
+// MainAxisAlignment options:
+// start    → Left aligned (default)
+// end      → Right aligned
+// center   → Centered
+// spaceBetween → Equal space BETWEEN items
+// spaceAround  → Equal space AROUND items
+// spaceEvenly  → Equal space EVERYWHERE
+
+// CrossAxisAlignment options:
+// start    → Top aligned
+// end      → Bottom aligned
+// center   → Centered (default)
+// stretch  → Stretch to fill height
+// baseline → Align by text baseline
+```
+
+**Visual MainAxisAlignment:**
+```
+start:     [A][B][C]                
+end:                    [A][B][C]   
+center:        [A][B][C]            
+spaceBetween:[A]    [B]    [C]     
+spaceAround: [A]  [B]  [C]         
+spaceEvenly: [ A ] [ B ] [ C ]     
+```
+
+### 7.2 Column — Vertical Layout
+
+```dart
+Column(
+  mainAxisAlignment: MainAxisAlignment.center,   // Vertical
+  crossAxisAlignment: CrossAxisAlignment.start,  // Horizontal
+  mainAxisSize: MainAxisSize.min,                // Wrap content height
+  children: [
+    Text('Title', style: TextStyle(fontSize: 24)),
+    SizedBox(height: 16),
+    Text('Description goes here...'),
+    SizedBox(height: 24),
+    Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        ElevatedButton(onPressed: () {}, child: Text('OK')),
+        TextButton(onPressed: () {}, child: Text('Cancel')),
+      ],
+    ),
+  ],
+)
+```
+
+### 7.3 Stack — Overlapping Layout
+
+```dart
+Stack(
+  alignment: Alignment.center,       // Default alignment for children
+  fit: StackFit.expand,              // expand, loose, passthrough
+  children: [
+    // Bottom layer
+    Image.asset('assets/background.jpg', fit: BoxFit.cover),
+
+    // Middle layer
+    Container(
+      color: Colors.black.withOpacity(0.5),
+    ),
+
+    // Top layer — positioned
+    Positioned(
+      bottom: 20,
+      left: 20,
+      right: 20,
+      child: Text(
+        'Welcome to Flutter',
+        style: TextStyle(color: Colors.white, fontSize: 24),
+        textAlign: TextAlign.center,
+      ),
+    ),
+
+    // Top-right corner
+    Positioned(
+      top: 10,
+      right: 10,
+      child: IconButton(
+        icon: Icon(Icons.close, color: Colors.white),
+        onPressed: () {},
+      ),
+    ),
+  ],
+)
+```
+
+**Stack Alignment Values:**
+```
+topLeft      topCenter      topRight
+    │            │             │
+    ├────────────┼─────────────┤
+    │            │             │
+centerLeft   center      centerRight
+    │            │             │
+    ├────────────┼─────────────┤
+    │            │             │
+bottomLeft  bottomCenter  bottomRight
+```
+
+---
+
+## 8. Flexible & Expanded Explained
+
+### The Flex Problem
+
+```dart
+// ❌ WRONG — This overflows!
+Row(
+  children: [
+    Container(width: 200, color: Colors.red),
+    Container(width: 200, color: Colors.green),
+    Container(width: 200, color: Colors.blue),
+  ],
+)
+// Total: 600px, but screen is only 400px → OVERFLOW!
+```
+
+### Expanded — Fill Available Space
+
+```dart
+// ✅ CORRECT — Each takes equal space
+Row(
+  children: [
+    Expanded(child: Container(color: Colors.red)),
+    Expanded(child: Container(color: Colors.green)),
+    Expanded(child: Container(color: Colors.blue)),
+  ],
+)
+// Each gets 1/3 of available space
+
+// With flex factors (unequal distribution)
+Row(
+  children: [
+    Expanded(flex: 2, child: Container(color: Colors.red)),    // 2/3
+    Expanded(flex: 1, child: Container(color: Colors.green)),  // 1/3
+  ],
+)
+```
+
+### Flexible — Allow Shrinking
+
+```dart
+Row(
+  children: [
+    // Flexible allows this to shrink if needed
+    Flexible(
+      child: Text('This is a very long text that needs to wrap'),
+    ),
+    Container(width: 100, color: Colors.blue),
+  ],
+)
+
+// Flexible vs Expanded:
+// Expanded = Flexible with fit: FlexFit.tight (forces fill)
+// Flexible = Flexible with fit: FlexFit.loose (can be smaller)
+```
+
+### Visual Comparison
+
+```
+Row with 3 children, screen width = 300px
+
+Without Expanded:
+[Child A (200px)] [Child B (200px)] [Child C (200px)]
+←────────────────────── OVERFLOW! ──────────────────────→
+
+With Expanded:
+[  A (100px)  ] [  B (100px)  ] [  C (100px)  ]
+←────────────────── Fits perfectly ───────────────────→
+
+With Expanded (flex: 2, 1, 1):
+[    A (150px)    ] [ B (75px) ] [ C (75px) ]
+←────────────────── Fits perfectly ───────────────────→
+```
+
+---
+
+## 9. Container Deep Dive
+
+### The Swiss Army Knife of Widgets
+
+```dart
+Container(
+  // Size
+  width: 200,
+  height: 100,
+  constraints: BoxConstraints(
+    minWidth: 100,
+    maxWidth: 300,
+    minHeight: 50,
+    maxHeight: 200,
+  ),
+
+  // Margin (space OUTSIDE the container)
+  margin: EdgeInsets.all(16),           // All sides
+  // margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+  // margin: EdgeInsets.only(left: 16, top: 8),
+  // margin: EdgeInsets.fromLTRB(16, 8, 16, 8),
+
+  // Padding (space INSIDE the container)
+  padding: EdgeInsets.all(16),
+
+  // Alignment of child
+  alignment: Alignment.center,
+
+  // Decoration (background, border, shadow, shape)
+  decoration: BoxDecoration(
+    color: Colors.blue,                    // Background color
+
+    // Border radius
+    borderRadius: BorderRadius.circular(12),
+    // borderRadius: BorderRadius.only(topLeft: Radius.circular(12)),
+    // borderRadius: BorderRadius.horizontal(left: Radius.circular(12)),
+
+    // Border
+    border: Border.all(
+      color: Colors.black,
+      width: 2,
+    ),
+
+    // Gradient
+    gradient: LinearGradient(
+      colors: [Colors.blue, Colors.purple],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    ),
+
+    // Box shadow
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withOpacity(0.3),
+        blurRadius: 10,
+        spreadRadius: 2,
+        offset: Offset(4, 4),  // x, y
+      ),
+    ],
+
+    // Shape
+    shape: BoxShape.rectangle,  // or BoxShape.circle
+  ),
+
+  // Transform
+  transform: Matrix4.rotationZ(0.1),  // Rotate 0.1 radians
+
+  // Child widget
+  child: Text('Hello', style: TextStyle(color: Colors.white)),
+)
+```
+
+### Container vs SizedBox vs Padding
+
+```dart
+// Container — Full featured (margin, padding, decoration, alignment)
+Container(
+  margin: EdgeInsets.all(16),
+  padding: EdgeInsets.all(16),
+  decoration: BoxDecoration(color: Colors.red),
+  child: Text('Hello'),
+)
+
+// SizedBox — Just size, very lightweight
+SizedBox(
+  width: 100,
+  height: 100,
+  child: Text('Hello'),
+)
+
+// SizedBox.shrink() — Takes no space
+SizedBox.shrink()
+
+// SizedBox.expand() — Fills parent
+SizedBox.expand(child: Text('Fill'))
+
+// Padding — Just padding, lightweight
+Padding(
+  padding: EdgeInsets.all(16),
+  child: Text('Hello'),
+)
+
+// Center — Just centering, lightweight
+Center(child: Text('Hello'))
+```
+
+> 🎯 **Performance Tip:** Use the most specific widget. `Padding` is cheaper than `Container` with only padding.
+
+---
+
+## 10. Text Widget Mastery
+
+### RichText for Mixed Styles
+
+```dart
+RichText(
+  text: TextSpan(
+    style: TextStyle(color: Colors.black, fontSize: 16),
+    children: [
+      TextSpan(text: 'Hello '),
+      TextSpan(
+        text: 'Flutter',
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          color: Colors.blue,
+          fontSize: 20,
+        ),
+      ),
+      TextSpan(text: ' developer! '),
+      TextSpan(
+        text: 'Learn more',
+        style: TextStyle(
+          color: Colors.blue,
+          decoration: TextDecoration.underline,
+        ),
+        recognizer: TapGestureRecognizer()..onTap = () {
+          print('Tapped!');
+        },
+      ),
+    ],
+  ),
+)
+```
+
+### Text with Theme
+
+```dart
+Text(
+  'Headline',
+  style: Theme.of(context).textTheme.headlineLarge,
+)
+
+Text(
+  'Body text',
+  style: Theme.of(context).textTheme.bodyLarge,
+)
+
+// Available text styles in Material 3:
+// displayLarge, displayMedium, displaySmall
+// headlineLarge, headlineMedium, headlineSmall
+// titleLarge, titleMedium, titleSmall
+// bodyLarge, bodyMedium, bodySmall
+// labelLarge, labelMedium, labelSmall
+```
+
+---
+
+## 11. Hands-On Project: Business Card UI
+
+Build a professional business card:
+
+```dart
+import 'package:flutter/material.dart';
+
+void main() {
+  runApp(const BusinessCardApp());
+}
+
+class BusinessCardApp extends StatelessWidget {
+  const BusinessCardApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
+        useMaterial3: true,
+      ),
+      home: const BusinessCardScreen(),
+    );
+  }
+}
+
+class BusinessCardScreen extends StatelessWidget {
+  const BusinessCardScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.teal.shade50,
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const BusinessCard(),
+              const SizedBox(height: 32),
+              const SkillsSection(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class BusinessCard extends StatelessWidget {
+  const BusinessCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 350,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 20,
+            spreadRadius: 5,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header with avatar
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.teal.shade400, Colors.teal.shade700],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
+            ),
+            child: Column(
+              children: [
+                // Avatar
+                Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 4),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.person,
+                    size: 50,
+                    color: Colors.teal,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Kimi Developer',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Flutter Developer',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Contact info
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                _buildInfoRow(Icons.email, 'kimi@flutter.dev'),
+                const SizedBox(height: 12),
+                _buildInfoRow(Icons.phone, '+91 98765 43210'),
+                const SizedBox(height: 12),
+                _buildInfoRow(Icons.location_on, 'Mumbai, India'),
+                const SizedBox(height: 12),
+                _buildInfoRow(Icons.web, 'www.flutter.dev'),
+              ],
+            ),
+          ),
+
+          // Social buttons
+          Padding(
+            padding: const EdgeInsets.only(bottom: 24),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildSocialButton(Icons.code, Colors.blue),
+                const SizedBox(width: 16),
+                _buildSocialButton(Icons.business, Colors.blue.shade800),
+                const SizedBox(width: 16),
+                _buildSocialButton(Icons.chat, Colors.green),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String text) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.teal, size: 20),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(fontSize: 14, color: Colors.black87),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSocialButton(IconData icon, Color color) {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        shape: BoxShape.circle,
+      ),
+      child: IconButton(
+        icon: Icon(icon, color: color, size: 20),
+        onPressed: () {},
+      ),
+    );
+  }
+}
+
+class SkillsSection extends StatelessWidget {
+  const SkillsSection({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final skills = [
+      ('Flutter', 0.9, Colors.blue),
+      ('Dart', 0.85, Colors.teal),
+      ('Firebase', 0.75, Colors.orange),
+      ('UI/UX', 0.8, Colors.purple),
+    ];
+
+    return Container(
+      width: 350,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Skills',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ...skills.map((skill) => _buildSkillBar(skill.$1, skill.$2, skill.$3)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSkillBar(String name, double progress, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(name, style: const TextStyle(fontSize: 14)),
+              Text('${(progress * 100).toInt()}%', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: progress,
+              backgroundColor: Colors.grey.shade200,
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+              minHeight: 8,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+```
+
+---
+
+## 12. Common Mistakes & How to Avoid Them
+
+### Mistake 1: Using `setState()` in StatelessWidget
+```dart
+// ❌ WRONG
+class MyWidget extends StatelessWidget {
+  int count = 0;  // Mutable field in StatelessWidget!
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton(
+      onPressed: () {
+        count++;  // This won't update the UI!
+        // setState(() {});  // Doesn't exist here!
+      },
+      child: Text('$count'),
+    );
+  }
+}
+
+// ✅ CORRECT
+class MyWidget extends StatefulWidget {
+  @override
+  State<MyWidget> createState() => _MyWidgetState();
+}
+
+class _MyWidgetState extends State<MyWidget> {
+  int count = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton(
+      onPressed: () {
+        setState(() {
+          count++;
+        });
+      },
+      child: Text('$count'),
+    );
+  }
+}
+```
+
+### Mistake 2: Deeply Nested Widgets (Pyramid of Doom)
+```dart
+// ❌ WRONG — Hard to read, hard to maintain
+return Scaffold(
+  body: Center(
+    child: Container(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  child: Text('...'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  ),
+);
+
+// ✅ CORRECT — Extract methods/widgets
+return Scaffold(
+  body: Center(
+    child: _buildContent(),
+  ),
+);
+
+Widget _buildContent() {
+  return Container(
+    padding: EdgeInsets.all(16),
+    child: Column(
+      children: [
+        _buildHeader(),
+        _buildBody(),
+      ],
+    ),
+  );
+}
+```
+
+### Mistake 3: Forgetting `const` Constructors
+```dart
+// ❌ Wasteful — Creates new instances every build
+Text('Hello')
+
+// ✅ Efficient — Reuses same instance
+const Text('Hello')
+
+// ✅ Even better — const entire subtree
+const Padding(
+  padding: EdgeInsets.all(16),
+  child: const Text('Hello'),
+)
+```
+
+### Mistake 4: Row/Column Overflow
+```dart
+// ❌ WRONG — Will overflow on small screens
+Row(
+  children: [
+    Text('Very long text that might overflow the screen width'),
+    Icon(Icons.arrow_forward),
+  ],
+)
+
+// ✅ CORRECT — Use Expanded or Flexible
+Row(
+  children: [
+    Expanded(
+      child: Text('Very long text...'),
+    ),
+    Icon(Icons.arrow_forward),
+  ],
+)
+```
+
+### Mistake 5: Using `Container` for Everything
+```dart
+// ❌ Overkill
+Container(
+  padding: EdgeInsets.all(16),
+  child: Text('Hello'),
+)
+
+// ✅ Better — Use specific widget
+Padding(
+  padding: EdgeInsets.all(16),
+  child: Text('Hello'),
+)
+
+// ❌ Overkill
+Container(
+  alignment: Alignment.center,
+  child: Text('Hello'),
+)
+
+// ✅ Better
+Center(child: Text('Hello'))
+```
+
+### Mistake 6: Not Using `super.key`
+```dart
+// ❌ Missing key parameter
+class MyWidget extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) { }
+}
+
+// ✅ Correct
+class MyWidget extends StatelessWidget {
+  const MyWidget({super.key});
+  @override
+  Widget build(BuildContext context) { }
+}
+```
+
+### Mistake 7: Calling `setState()` in `build()`
+```dart
+// ❌ WRONG — Infinite loop!
+@override
+Widget build(BuildContext context) {
+  setState(() { count++; });  // Triggers rebuild → calls build again!
+  return Text('$count');
+}
+
+// ✅ CORRECT — Only in response to user action
+@override
+Widget build(BuildContext context) {
+  return ElevatedButton(
+    onPressed: () => setState(() { count++; }),
+    child: Text('$count'),
+  );
+}
+```
+
+### Mistake 8: Not Handling `BuildContext` After Async
+```dart
+// ❌ WRONG
+void _onTap(BuildContext context) async {
+  await Future.delayed(Duration(seconds: 1));
+  Navigator.of(context).pop();  // Might crash!
+}
+
+// ✅ CORRECT
+void _onTap() async {
+  await Future.delayed(Duration(seconds: 1));
+  if (mounted) {  // Check if still in tree
+    Navigator.of(context).pop();
+  }
+}
+```
+
+---
+
+## 13. Day 6 Checklist
+
+Use this checklist to verify mastery:
+
+- [ ] Can explain "Everything is a Widget" philosophy
+- [ ] Understands the 3-layer architecture: Widget → Element → RenderObject
+- [ ] Can explain how Flutter updates UI efficiently
+- [ ] Knows when to use StatelessWidget vs StatefulWidget
+- [ ] Understands the StatefulWidget lifecycle (initState, build, dispose)
+- [ ] Knows what BuildContext is and what it provides
+- [ ] Can use `Theme.of(context)`, `MediaQuery.of(context)`, `Navigator.of(context)`
+- [ ] Understands when and why to use Keys
+- [ ] Can use ValueKey, GlobalKey, and PageStorageKey
+- [ ] Can build layouts with Row, Column, and Stack
+- [ ] Understands mainAxisAlignment and crossAxisAlignment
+- [ ] Can use Positioned within Stack
+- [ ] Can use Expanded and Flexible to prevent overflow
+- [ ] Can use Container with decoration, margin, padding, alignment
+- [ ] Can create gradients, shadows, and rounded corners
+- [ ] Can use Text with rich styling
+- [ ] Can use RichText for mixed styles
+- [ ] Can create buttons: ElevatedButton, TextButton, OutlinedButton, IconButton
+- [ ] Can display images from assets and network
+- [ ] Built the Business Card UI with Card, gradient, shadow
+- [ ] Built the Skills Section with progress bars
+- [ ] Understands performance: use `const`, use specific widgets over Container
+- [ ] Pushed the project to GitHub
+
+---
+
+## 🧠 Key Takeaways (Memorize These!)
+
+1. **Everything is a Widget** — Not just visible things, but also layout, padding, and gestures.
+
+2. **StatelessWidget = immutable.** Use for static content. StatefulWidget = mutable. Use for interactive content.
+
+3. **Widgets are cheap to create.** Flutter reuses Elements and RenderObjects. Don't worry about creating widgets.
+
+4. **BuildContext is your location in the tree.** Use it to access Theme, MediaQuery, Navigator, and ancestor widgets.
+
+5. **Use `const` constructors everywhere possible.** It tells Flutter: "This widget never changes, reuse it."
+
+6. **Row = horizontal, Column = vertical, Stack = overlapping.** These are your layout building blocks.
+
+7. **Use Expanded/Flexible to prevent overflow.** Never put unbounded width widgets in a Row without Expanded.
+
+8. **Container is powerful but heavy.** Use Padding, Center, SizedBox when you only need one feature.
+
+9. **Extract widgets to avoid deep nesting.** If you have more than 3-4 levels of nesting, extract a method.
+
+10. **Keys tell Flutter which widget is which.** Essential for lists, animations, and maintaining state across rebuilds.
+
+---
+
+## 📚 Extra Practice (Do These Tonight!)
+
+1. **Profile Card Variations:** Create 3 different profile card designs (minimal, colorful, corporate) using only the widgets from today.
+
+2. **Login Screen:** Build a login screen with a logo (Icon), email field (TextField), password field, login button, and "Forgot password" link. Use Column, Padding, and Container.
+
+3. **Product Card:** Create an e-commerce product card with an image placeholder (Container with color), product name, price, rating (Row of stars), and "Add to Cart" button. Use Stack for an "SALE" badge.
+
+4. **Settings Screen:** Build a settings list with icons, labels, and toggle switches. Use Row for each setting item.
+
+5. **Dashboard Grid:** Create a 2x2 grid of statistic cards using Row and Column. Each card shows an icon, number, and label.
+
+---
+
+> 🎉 **Congratulations!** You've completed Day 6 — your first real Flutter UI day! You now understand the widget system, can build basic layouts, and know the difference between Stateless and Stateful widgets. Tomorrow, we dive deeper into layouts and constraints!
+
+**Next Up → Day 7: Layouts & Constraints**
+
+
 
 
 
