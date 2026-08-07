@@ -4514,4 +4514,2000 @@ Use this checklist to verify mastery:
 **Next Up → Day 4: Dart OOP Advanced (Inheritance, Abstract Classes, Mixins, Extensions)**
 
 
+# 📘 Day 4: Dart OOP Advanced — Complete Deep Dive
+> **Goal:** Master advanced OOP concepts in Dart — the tools that separate beginners from professional developers.
+> *This guide covers inheritance, abstraction, mixins, extensions, generics, and modern Dart 3 enums with real-world examples.*
+
+---
+
+## Table of Contents
+1. [Why Advanced OOP Matters](#1-why-advanced-oop-matters)
+2. [Inheritance (`extends`)](#2-inheritance-extends)
+3. [Method Overriding (`@override`)](#3-method-overriding-override)
+4. [The `super` Keyword Deep Dive](#4-the-super-keyword-deep-dive)
+5. [Abstract Classes](#5-abstract-classes)
+6. [Interfaces (`implements`)](#6-interfaces-implements)
+7. [Mixins (`with`)](#7-mixins-with)
+8. [Extension Methods](#8-extension-methods)
+9. [Generics (`<T>`)](#9-generics-t)
+10. [Enums & Enhanced Enums (Dart 3)](#10-enums--enhanced-enums-dart-3)
+11. [Hands-On Project 1: Shape Hierarchy with Area Calculator](#11-hands-on-project-1-shape-hierarchy-with-area-calculator)
+12. [Hands-On Project 2: E-Commerce System with Mixins & Generics](#12-hands-on-project-2-e-commerce-system-with-mixins--generics)
+13. [Common Mistakes & How to Avoid Them](#13-common-mistakes--how-to-avoid-them)
+14. [Day 4 Checklist](#14-day-4-checklist)
+
+---
+
+## 1. Why Advanced OOP Matters
+
+### The Problem with Basic OOP
+Basic classes work for simple apps. But real-world Flutter apps need:
+- **Code reuse** across unrelated classes (Mixins)
+- **Type safety** for collections and APIs (Generics)
+- **Adding functionality** to existing classes without inheritance (Extensions)
+- **Strict contracts** for plugin architectures (Interfaces)
+- **State representation** with data (Enhanced Enums)
+
+### How Flutter Uses These Concepts
+| Concept | Flutter Example |
+|---------|----------------|
+| **Inheritance** | `StatelessWidget extends Widget` |
+| **Abstract Class** | `Widget` is abstract — you can't instantiate it directly |
+| **Mixin** | `TickerProviderStateMixin` for animations |
+| **Interface** | Every class implicitly defines an interface |
+| **Extension** | `BuildContext` extensions in packages |
+| **Generic** | `List<T>`, `Map<K,V>`, `Future<T>` |
+| **Enum** | `Brightness.light`, `Brightness.dark` |
+
+> 💡 **Realization:** When you write `class MyApp extends StatelessWidget with TickerProviderStateMixin`, you're using inheritance, interfaces, AND mixins all at once!
+
+---
+
+## 2. Inheritance (`extends`)
+
+### 2.1 What is Inheritance?
+
+Inheritance allows a class to **acquire properties and methods** from another class. It represents an **"is-a"** relationship.
+
+```
+        Animal (Parent/Super/Base)
+           │
+    ┌──────┴──────┐
+    │             │
+   Dog           Cat
+ (Child)       (Child)
+
+Dog "is-a" Animal
+Cat "is-a" Animal
+```
+
+### 2.2 Basic Inheritance
+
+```dart
+// Parent class (Superclass)
+class Animal {
+  String name;
+  int age;
+
+  Animal(this.name, this.age);
+
+  void speak() {
+    print('$name makes a sound');
+  }
+
+  void eat() {
+    print('$name is eating');
+  }
+
+  void sleep() {
+    print('$name is sleeping 💤');
+  }
+}
+
+// Child class (Subclass) — inherits from Animal
+class Dog extends Animal {
+  String breed;
+
+  // Call parent constructor using super
+  Dog(String name, int age, this.breed) : super(name, age);
+
+  void fetch() {
+    print('$name is fetching the ball 🎾');
+  }
+}
+
+// Another child class
+class Cat extends Animal {
+  String color;
+
+  Cat(String name, int age, this.color) : super(name, age);
+
+  void climb() {
+    print('$name is climbing 🐱');
+  }
+}
+
+void main() {
+  var dog = Dog('Buddy', 3, 'Golden Retriever');
+  var cat = Cat('Whiskers', 2, 'Orange');
+
+  // Dog inherited methods from Animal
+  dog.speak();   // Buddy makes a sound
+  dog.eat();     // Buddy is eating
+  dog.fetch();   // Buddy is fetching the ball 🎾
+
+  // Cat inherited methods from Animal
+  cat.speak();   // Whiskers makes a sound
+  cat.climb();   // Whiskers is climbing 🐱
+
+  // Type checking
+  print(dog is Animal);  // true ✅
+  print(dog is Dog);     // true ✅
+  print(dog is Cat);     // false ❌
+
+  print(cat is Animal);  // true ✅
+}
+```
+
+### 2.3 Single Inheritance in Dart
+
+Dart supports **single inheritance only** — a class can only extend ONE parent.
+
+```dart
+// ✅ CORRECT
+class Dog extends Animal { }
+
+// ❌ WRONG — Dart doesn't support multiple inheritance
+// class Dog extends Animal, Pet { }
+
+// ✅ Solution: Use mixins for multiple behaviors
+class Dog extends Animal with PetMixin { }
+```
+
+### 2.4 The `is` and `as` Operators
+
+```dart
+void main() {
+  Animal animal = Dog('Buddy', 3, 'Labrador');
+
+  // 'is' checks type
+  if (animal is Dog) {
+    print('This is a dog!');
+    animal.fetch();  // ✅ Works because of type promotion
+  }
+
+  // 'as' casts to a type (unsafe if wrong!)
+  Dog dog = animal as Dog;
+  dog.fetch();
+
+  // Safe casting pattern
+  if (animal is Cat) {
+    (animal as Cat).climb();
+  }
+}
+```
+
+> ⚠️ **Warning:** `as` throws a runtime error if the cast is wrong. Always check with `is` first.
+
+### 2.5 The `covariant` Keyword
+
+Use `covariant` when a subclass wants to narrow the parameter type:
+
+```dart
+class Animal {
+  void chase(Animal animal) {
+    print('Animal chasing animal');
+  }
+}
+
+class Cat extends Animal {
+  // Cat can only chase mice, not any animal
+  @override
+  void chase(covariant Mouse mouse) {
+    print('Cat chasing mouse 🐭');
+  }
+}
+
+class Mouse extends Animal { }
+
+void main() {
+  var cat = Cat();
+  cat.chase(Mouse());  // ✅ Works
+  // cat.chase(Dog()); // ❌ Compile error — Dog is not a Mouse
+}
+```
+
+---
+
+## 3. Method Overriding (`@override`)
+
+### 3.1 What is Overriding?
+
+A child class **replaces** a parent method with its own implementation.
+
+```dart
+class Animal {
+  String name;
+  Animal(this.name);
+
+  void speak() {
+    print('$name makes a generic sound');
+  }
+
+  void describe() {
+    print('I am an animal named $name');
+  }
+}
+
+class Dog extends Animal {
+  Dog(super.name);  // Shorthand for : super(name)
+
+  @override
+  void speak() {
+    print('$name says: Woof! Woof! 🐕');
+  }
+
+  @override
+  void describe() {
+    print('I am a dog named $name and I am loyal ❤️');
+  }
+}
+
+class Cat extends Animal {
+  Cat(super.name);
+
+  @override
+  void speak() {
+    print('$name says: Meow! 🐱');
+  }
+}
+
+class Cow extends Animal {
+  Cow(super.name);
+
+  @override
+  void speak() {
+    print('$name says: Moo! 🐄');
+  }
+}
+
+void main() {
+  List<Animal> animals = [
+    Dog('Buddy'),
+    Cat('Whiskers'),
+    Cow('Bessie'),
+  ];
+
+  // Polymorphism in action!
+  for (var animal in animals) {
+    animal.speak();
+  }
+
+  // Output:
+  // Buddy says: Woof! Woof! 🐕
+  // Whiskers says: Meow! 🐱
+  // Bessie says: Moo! 🐄
+}
+```
+
+### 3.2 The `@override` Annotation
+
+Always use `@override` when overriding:
+- ✅ Documents intent
+- ✅ Catches typos (compile error if parent doesn't have the method)
+- ✅ Improves readability
+
+```dart
+class Parent {
+  void doSomething() { }
+}
+
+class Child extends Parent {
+  @override
+  void doSomething() { }  // ✅ Correct
+
+  // @override
+  // void dosomething() { }  // ❌ Compile error — typo caught!
+}
+```
+
+### 3.3 Overriding Getters and Setters
+
+```dart
+class Rectangle {
+  double width;
+  double height;
+
+  Rectangle(this.width, this.height);
+
+  double get area => width * height;
+  String get description => 'Rectangle: ${width}x${height}';
+}
+
+class Square extends Rectangle {
+  Square(double side) : super(side, side);
+
+  @override
+  String get description => 'Square: side=${width}';
+}
+
+void main() {
+  var square = Square(5);
+  print(square.area);        // 25.0 (inherited)
+  print(square.description); // Square: side=5.0 (overridden)
+}
+```
+
+### 3.4 `noSuchMethod` — Handling Missing Methods
+
+```dart
+class Proxy {
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    print('Method ${invocation.memberName} was called');
+    print('Arguments: ${invocation.positionalArguments}');
+    return null;
+  }
+}
+
+void main() {
+  dynamic proxy = Proxy();
+  proxy.doSomething('hello', 42);  // Intercepted!
+}
+```
+
+---
+
+## 4. The `super` Keyword Deep Dive
+
+`super` refers to the **parent class**.
+
+### 4.1 Calling Parent Constructor
+
+```dart
+class Vehicle {
+  String brand;
+  int year;
+
+  Vehicle(this.brand, this.year);
+}
+
+class Car extends Vehicle {
+  int doors;
+
+  // Call parent constructor
+  Car(String brand, int year, this.doors) : super(brand, year);
+
+  // Named constructor calling parent named constructor
+  Car.tesla(int year) : super('Tesla', year) {
+    doors = 4;
+  }
+}
+```
+
+### 4.2 Calling Parent Methods
+
+```dart
+class Employee {
+  String name;
+  double salary;
+
+  Employee(this.name, this.salary);
+
+  void displayInfo() {
+    print('Name: $name');
+    print('Salary: \$$salary');
+  }
+}
+
+class Manager extends Employee {
+  String department;
+
+  Manager(String name, double salary, this.department) 
+    : super(name, salary);
+
+  @override
+  void displayInfo() {
+    print('=== MANAGER INFO ===');
+    super.displayInfo();  // Call parent's method
+    print('Department: $department');
+    print('===================');
+  }
+}
+
+void main() {
+  var manager = Manager('Alice', 90000, 'Engineering');
+  manager.displayInfo();
+
+  // Output:
+  // === MANAGER INFO ===
+  // Name: Alice
+  // Salary: $90000
+  // Department: Engineering
+  // ===================
+}
+```
+
+### 4.3 Accessing Parent Fields
+
+```dart
+class Parent {
+  String message = 'Hello from Parent';
+}
+
+class Child extends Parent {
+  String message = 'Hello from Child';
+
+  void printMessages() {
+    print(message);       // Hello from Child (this.message)
+    print(super.message); // Hello from Parent (parent's field)
+  }
+}
+```
+
+### 4.4 `super` in Initializer Lists
+
+```dart
+class Point {
+  final double x;
+  final double y;
+
+  const Point(this.x, this.y);
+}
+
+class ColoredPoint extends Point {
+  final String color;
+
+  ColoredPoint(double x, double y, this.color) : super(x, y);
+
+  // Redirecting to parent const constructor
+  const ColoredPoint.origin(this.color) : super(0, 0);
+}
+```
+
+---
+
+## 5. Abstract Classes
+
+### 5.1 What is an Abstract Class?
+
+An abstract class **cannot be instantiated**. It defines a **contract** that subclasses must follow.
+
+```dart
+// Abstract class — cannot create instances directly
+abstract class Shape {
+  // Abstract method — no body, MUST be overridden
+  double get area;
+  double get perimeter;
+
+  // Concrete method — CAN be used directly
+  void describe() {
+    print('Area: $area, Perimeter: $perimeter');
+  }
+
+  // Concrete method that uses abstract properties
+  void scale(double factor) {
+    print('Scaling by $factor...');
+    // Subclasses implement actual scaling
+  }
+}
+
+// Concrete implementations
+class Circle extends Shape {
+  final double radius;
+
+  Circle(this.radius);
+
+  @override
+  double get area => 3.14159 * radius * radius;
+
+  @override
+  double get perimeter => 2 * 3.14159 * radius;
+}
+
+class Rectangle extends Shape {
+  final double width;
+  final double height;
+
+  Rectangle(this.width, this.height);
+
+  @override
+  double get area => width * height;
+
+  @override
+  double get perimeter => 2 * (width + height);
+}
+
+class Triangle extends Shape {
+  final double a;
+  final double b;
+  final double c;
+
+  Triangle(this.a, this.b, this.c);
+
+  @override
+  double get area {
+    // Heron's formula
+    double s = perimeter / 2;
+    return sqrt(s * (s - a) * (s - b) * (s - c));
+  }
+
+  @override
+  double get perimeter => a + b + c;
+}
+
+void main() {
+  // var shape = Shape();  // ❌ ERROR — can't instantiate abstract class
+
+  List<Shape> shapes = [
+    Circle(5),
+    Rectangle(10, 5),
+    Triangle(3, 4, 5),
+  ];
+
+  for (var shape in shapes) {
+    shape.describe();
+  }
+
+  // Output:
+  // Area: 78.53975, Perimeter: 31.4159
+  // Area: 50.0, Perimeter: 30.0
+  // Area: 6.0, Perimeter: 12.0
+}
+```
+
+### 5.2 Abstract Class with Constructor
+
+```dart
+abstract class DatabaseEntity {
+  final String id;
+  final DateTime createdAt;
+
+  DatabaseEntity() 
+    : id = _generateId(),
+      createdAt = DateTime.now();
+
+  static String _generateId() {
+    return 'ID-${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  Map<String, dynamic> toJson();
+}
+
+class User extends DatabaseEntity {
+  String name;
+  String email;
+
+  User(this.name, this.email);
+
+  @override
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'createdAt': createdAt.toIso8601String(),
+    'name': name,
+    'email': email,
+  };
+}
+
+void main() {
+  var user = User('Kimi', 'kimi@example.com');
+  print(user.id);        // ID-...
+  print(user.toJson());  // {id: ..., createdAt: ..., name: Kimi, email: ...}
+}
+```
+
+### 5.3 Abstract Class vs Interface
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│         Abstract Class          vs        Interface         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  • Can have fields            │  • Can have fields          │
+│  • Can have constructors      │  • NO constructors          │
+│  • Can have method bodies     │  • NO method bodies         │
+│  • Subclass: extends (1 only) │  • Implement: implements    │
+│  • Partial implementation     │  • Full contract only       │
+│  • "is-a" relationship        │  • "can-do" relationship    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 6. Interfaces (`implements`)
+
+### 6.1 Every Class is an Interface
+
+In Dart, **every class implicitly defines an interface**. You can implement any class!
+
+```dart
+// A regular class that acts as an interface
+class Printer {
+  void printDocument(String content) {
+    print('Printing: $content');
+  }
+
+  void scanDocument() {
+    print('Scanning...');
+  }
+}
+
+// Implementing the interface — MUST implement ALL methods
+class PdfPrinter implements Printer {
+  @override
+  void printDocument(String content) {
+    print('📄 Generating PDF: $content');
+  }
+
+  @override
+  void scanDocument() {
+    print('📄 PDF Scanner not supported');
+  }
+}
+
+class NetworkPrinter implements Printer {
+  final String ipAddress;
+
+  NetworkPrinter(this.ipAddress);
+
+  @override
+  void printDocument(String content) {
+    print('🌐 Sending to printer at $ipAddress: $content');
+  }
+
+  @override
+  void scanDocument() {
+    print('🌐 Scanning via network...');
+  }
+}
+
+void main() {
+  List<Printer> printers = [
+    PdfPrinter(),
+    NetworkPrinter('192.168.1.100'),
+  ];
+
+  for (var printer in printers) {
+    printer.printDocument('Hello World');
+  }
+}
+```
+
+### 6.2 Implementing Multiple Interfaces
+
+Unlike `extends`, you can `implement` multiple classes:
+
+```dart
+class Flyable {
+  void fly() => print('Flying ✈️');
+}
+
+class Swimmable {
+  void swim() => print('Swimming 🏊');
+}
+
+class Walkable {
+  void walk() => print('Walking 🚶');
+}
+
+// Duck can fly, swim, AND walk!
+class Duck implements Flyable, Swimmable, Walkable {
+  @override
+  void fly() => print('Duck flying 🦆✈️');
+
+  @override
+  void swim() => print('Duck swimming 🦆🏊');
+
+  @override
+  void walk() => print('Duck walking 🦆🚶');
+}
+
+void main() {
+  var duck = Duck();
+  duck.fly();   // Duck flying 🦆✈️
+  duck.swim();  // Duck swimming 🦆🏊
+  duck.walk();  // Duck walking 🦆🚶
+}
+```
+
+### 6.3 True Interface with `abstract class`
+
+Best practice: Define interfaces as abstract classes with no implementation:
+
+```dart
+abstract class Repository<T> {
+  Future<T> getById(String id);
+  Future<List<T>> getAll();
+  Future<void> create(T item);
+  Future<void> update(T item);
+  Future<void> delete(String id);
+}
+
+abstract class Cacheable {
+  void clearCache();
+  bool get isCached;
+}
+
+// A concrete implementation
+class UserRepository implements Repository<User>, Cacheable {
+  final Map<String, User> _cache = {};
+
+  @override
+  Future<User> getById(String id) async {
+    if (_cache.containsKey(id)) return _cache[id]!;
+    // Fetch from API...
+    return User(id: id, name: 'Kimi');
+  }
+
+  @override
+  Future<List<User>> getAll() async => [];
+
+  @override
+  Future<void> create(User item) async { }
+
+  @override
+  Future<void> update(User item) async { }
+
+  @override
+  Future<void> delete(String id) async { }
+
+  @override
+  void clearCache() => _cache.clear();
+
+  @override
+  bool get isCached => _cache.isNotEmpty;
+}
+
+class User {
+  final String id;
+  final String name;
+  User({required this.id, required this.name});
+}
+```
+
+---
+
+## 7. Mixins (`with`)
+
+### 7.1 What is a Mixin?
+
+A mixin is a way to **reuse code across multiple class hierarchies** without inheritance. It solves the "diamond problem" of multiple inheritance.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              MIXIN vs INHERITANCE                           │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  INHERITANCE (extends)          MIXIN (with)                │
+│  ─────────────────────          ────────────                │
+│  • "is-a" relationship          • "has-capability"          │
+│  • Single only                  • Multiple allowed          │
+│  • Tight coupling               • Loose coupling            │
+│  • Dog is an Animal             • Dog can Fly (mixin)       │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 7.2 Creating and Using Mixins
+
+```dart
+// Define a mixin using 'mixin' keyword
+mixin Walkable {
+  int steps = 0;
+
+  void walk() {
+    steps++;
+    print('Walking... Step count: $steps 🚶');
+  }
+
+  void run() {
+    steps += 2;
+    print('Running... Step count: $steps 🏃');
+  }
+}
+
+mixin Flyable {
+  double maxAltitude = 1000;
+
+  void fly() {
+    print('Flying at $maxAltitude meters ✈️');
+  }
+
+  void land() {
+    print('Landing safely 🛬');
+  }
+}
+
+mixin Swimmable {
+  void swim() {
+    print('Swimming 🏊');
+  }
+
+  void dive() {
+    print('Diving deep 🤿');
+  }
+}
+
+// Use mixins with 'with'
+class Human extends Mammal with Walkable {
+  String name;
+  Human(this.name);
+}
+
+class Bird extends Animal with Flyable, Walkable {
+  String species;
+  Bird(this.species) : super(species, 1);
+}
+
+class Duck extends Animal with Walkable, Flyable, Swimmable {
+  Duck() : super('Duck', 2);
+}
+
+class Mammal extends Animal {
+  Mammal(super.name, super.age);
+}
+
+void main() {
+  var human = Human('Kimi');
+  human.walk();   // From Walkable mixin
+  human.run();    // From Walkable mixin
+
+  var bird = Bird('Eagle');
+  bird.fly();     // From Flyable mixin
+  bird.walk();    // From Walkable mixin
+
+  var duck = Duck();
+  duck.walk();    // Walkable
+  duck.fly();     // Flyable
+  duck.swim();    // Swimmable
+  duck.dive();    // Swimmable
+}
+```
+
+### 7.3 Mixin with Constraints (`on`)
+
+Restrict which classes can use the mixin:
+
+```dart
+// Only classes that extend/implements Animal can use this mixin
+mixin PetBehavior on Animal {
+  void pet() {
+    print('Petting $name ❤️');  // Can access Animal's 'name' field
+  }
+
+  void feed() {
+    print('Feeding $name 🍖');
+  }
+}
+
+class Dog extends Animal with PetBehavior {
+  Dog(super.name, super.age);
+}
+
+// class Robot with PetBehavior { }  // ❌ ERROR — Robot doesn't extend Animal
+
+void main() {
+  var dog = Dog('Buddy', 3);
+  dog.pet();   // Petting Buddy ❤️
+  dog.feed();  // Feeding Buddy 🍖
+}
+```
+
+### 7.4 Mixin vs Abstract Class vs Interface
+
+```dart
+// Use 'mixin' when: Reusable behavior across unrelated classes
+mixin Logger {
+  void log(String message) => print('[LOG] $message');
+}
+
+// Use 'abstract class' when: Base class with shared implementation
+abstract class Database {
+  void connect();
+  void disconnect() => print('Disconnected');
+}
+
+// Use 'implements' when: Defining a strict contract
+class Cache {
+  void get(String key) { }
+  void set(String key, dynamic value) { }
+}
+
+// A class can use all three!
+class AppService extends Database with Logger implements Cache {
+  @override
+  void connect() => log('Connecting...');
+
+  @override
+  void get(String key) => log('Getting $key');
+
+  @override
+  void set(String key, dynamic value) => log('Setting $key');
+}
+```
+
+---
+
+## 8. Extension Methods
+
+### 8.1 What are Extension Methods?
+
+Extension methods let you **add functionality to existing classes** without modifying them or using inheritance.
+
+```dart
+// Add methods to String
+extension StringExtensions on String {
+  // Capitalize first letter
+  String get capitalize {
+    if (isEmpty) return this;
+    return '${this[0].toUpperCase()}${substring(1)}';
+  }
+
+  // Capitalize all words
+  String get titleCase {
+    return split(' ').map((word) => word.capitalize).join(' ');
+  }
+
+  // Check if valid email
+  bool get isValidEmail {
+    return contains('@') && contains('.');
+  }
+
+  // Reverse string
+  String get reversed {
+    return split('').reversed.join();
+  }
+
+  // Repeat string
+  String repeat(int times) {
+    return List.filled(times, this).join();
+  }
+}
+
+void main() {
+  print('hello'.capitalize);        // Hello
+  print('hello world'.titleCase);   // Hello World
+  print('test@email.com'.isValidEmail);  // true
+  print('hello'.reversed);          // olleh
+  print('ab'.repeat(3));            // ababab
+}
+```
+
+### 8.2 Extension on Built-in Types
+
+```dart
+// Extensions on int
+extension IntExtensions on int {
+  // Check if even
+  bool get isEvenNumber => this % 2 == 0;
+
+  // Check if prime
+  bool get isPrime {
+    if (this < 2) return false;
+    for (int i = 2; i <= sqrt(this); i++) {
+      if (this % i == 0) return false;
+    }
+    return true;
+  }
+
+  // Times repetition
+  void times(void Function(int) action) {
+    for (int i = 0; i < this; i++) {
+      action(i);
+    }
+  }
+
+  // Duration helpers
+  Duration get seconds => Duration(seconds: this);
+  Duration get minutes => Duration(minutes: this);
+  Duration get hours => Duration(hours: this);
+  Duration get days => Duration(days: this);
+}
+
+// Extensions on List
+extension ListExtensions<T> on List<T> {
+  // Safe access
+  T? get firstOrNull => isEmpty ? null : first;
+  T? get lastOrNull => isEmpty ? null : last;
+
+  // Random element
+  T get random => this[Random().nextInt(length)];
+
+  // Split into chunks
+  List<List<T>> chunked(int size) {
+    List<List<T>> chunks = [];
+    for (int i = 0; i < length; i += size) {
+      chunks.add(sublist(i, (i + size < length) ? i + size : length));
+    }
+    return chunks;
+  }
+}
+
+void main() {
+  // Int extensions
+  print(7.isPrime);        // true
+  print(10.isPrime);       // false
+
+  3.times((i) => print('Hello $i'));
+  // Hello 0
+  // Hello 1
+  // Hello 2
+
+  print(5.minutes);        // Duration: 0:05:00
+
+  // List extensions
+  var numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  print(numbers.random);   // Random element
+  print(numbers.chunked(3));  // [[1,2,3], [4,5,6], [7,8,9], [10]]
+}
+```
+
+### 8.3 Extension with Name Conflicts
+
+```dart
+extension DateTimeFormatting on DateTime {
+  String get formatted => '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
+  String get timeOnly => '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+}
+
+void main() {
+  var now = DateTime.now();
+  print(now.formatted);   // 2026-08-04
+  print(now.timeOnly);    // 14:30
+}
+```
+
+> 🎯 **Flutter Context:** Extensions are heavily used in Flutter packages:
+> ```dart
+> // context.go('/home') — from GoRouter extension
+> // 16.padding — from flutter_screenutil extension
+> // 'assets/image.png'.svg — from flutter_svg extension
+> ```
+
+---
+
+## 9. Generics (`<T>`)
+
+### 9.1 What are Generics?
+
+Generics allow you to write **type-safe, reusable code** that works with any type.
+
+```
+Without Generics              With Generics
+─────────────────             ─────────────
+List items = [];              List<String> items = []
+items.add('hello');           items.add('hello') ✅
+items.add(42);                items.add(42) ❌ Compile error!
+String s = items[0];          String s = items[0] ✅
+```
+
+### 9.2 Generic Classes
+
+```dart
+// A generic Box that can hold any type
+class Box<T> {
+  T _content;
+
+  Box(this._content);
+
+  T get content => _content;
+
+  void update(T newContent) {
+    _content = newContent;
+  }
+
+  bool isSameType<X>() => _content is X;
+}
+
+void main() {
+  var stringBox = Box<String>('Hello');
+  var intBox = Box<int>(42);
+  var doubleBox = Box<double>(3.14);
+
+  print(stringBox.content);  // Hello
+  print(intBox.content);     // 42
+
+  stringBox.update('World');  // ✅ OK
+  // stringBox.update(42);    // ❌ Compile error!
+
+  print(stringBox.isSameType<String>());  // true
+  print(stringBox.isSameType<int>());     // false
+}
+```
+
+### 9.3 Generic Functions
+
+```dart
+// Generic function that swaps two values
+void swap<T>(T a, T b) {
+  T temp = a;
+  a = b;
+  b = temp;
+  print('Swapped: a=$a, b=$b');
+}
+
+// Generic function that finds max
+T findMax<T extends Comparable<T>>(List<T> items) {
+  T max = items[0];
+  for (var item in items) {
+    if (item.compareTo(max) > 0) {
+      max = item;
+    }
+  }
+  return max;
+}
+
+// Generic function with multiple type parameters
+Map<K, V> zipToMap<K, V>(List<K> keys, List<V> values) {
+  Map<K, V> map = {};
+  for (int i = 0; i < keys.length && i < values.length; i++) {
+    map[keys[i]] = values[i];
+  }
+  return map;
+}
+
+void main() {
+  swap<int>(10, 20);        // Swapped: a=20, b=10
+  swap<String>('a', 'b');   // Swapped: a=b, b=a
+
+  print(findMax([3, 1, 4, 1, 5]));           // 5
+  print(findMax(['apple', 'banana', 'cherry']));  // cherry
+
+  var map = zipToMap(['name', 'age'], ['Kimi', 25]);
+  print(map);  // {name: Kimi, age: 25}
+}
+```
+
+### 9.4 Generic Constraints (`extends`)
+
+```dart
+// T must be a Number or its subclass
+class Calculator<T extends num> {
+  T add(T a, T b) => (a + b) as T;
+  T subtract(T a, T b) => (a - b) as T;
+  T multiply(T a, T b) => (a * b) as T;
+}
+
+// T must implement Comparable
+T findLargest<T extends Comparable<T>>(List<T> items) {
+  return items.reduce((curr, next) => curr.compareTo(next) > 0 ? curr : next);
+}
+
+void main() {
+  var calc = Calculator<int>();
+  print(calc.add(5, 3));       // 8
+  print(calc.multiply(4, 7));  // 28
+
+  // var badCalc = Calculator<String>();  // ❌ ERROR — String doesn't extend num
+
+  print(findLargest([10, 50, 30, 20]));              // 50
+  print(findLargest(['zebra', 'apple', 'mango']));   // zebra
+}
+```
+
+### 9.5 Generic in Flutter Context
+
+```dart
+// Generic API response wrapper
+class ApiResponse<T> {
+  final bool success;
+  final T? data;
+  final String? error;
+
+  ApiResponse._({required this.success, this.data, this.error});
+
+  factory ApiResponse.success(T data) => 
+    ApiResponse._(success: true, data: data);
+
+  factory ApiResponse.error(String error) => 
+    ApiResponse._(success: false, error: error);
+}
+
+class User {
+  final String name;
+  User(this.name);
+}
+
+class Product {
+  final String title;
+  Product(this.title);
+}
+
+void main() {
+  var userResponse = ApiResponse<User>.success(User('Kimi'));
+  var productResponse = ApiResponse<Product>.success(Product('iPhone'));
+  var errorResponse = ApiResponse<User>.error('Network failed');
+
+  if (userResponse.success) {
+    print(userResponse.data?.name);  // Kimi
+  }
+
+  if (errorResponse.success) {
+    print(errorResponse.data);
+  } else {
+    print('Error: ${errorResponse.error}');  // Error: Network failed
+  }
+}
+```
+
+---
+
+## 10. Enums & Enhanced Enums (Dart 3)
+
+### 10.1 Basic Enums
+
+```dart
+enum Status { pending, approved, rejected }
+
+void main() {
+  var currentStatus = Status.pending;
+
+  print(currentStatus);           // Status.pending
+  print(currentStatus.name);      // 'pending' (Dart 2.15+)
+  print(currentStatus.index);     // 0
+
+  // Convert string to enum
+  var fromString = Status.values.byName('approved');
+  print(fromString);  // Status.approved
+
+  // All values
+  print(Status.values);  // [Status.pending, Status.approved, Status.rejected]
+
+  // Switch on enum
+  switch (currentStatus) {
+    case Status.pending:
+      print('⏳ Waiting for approval');
+    case Status.approved:
+      print('✅ Approved!');
+    case Status.rejected:
+      print('❌ Rejected');
+  }
+}
+```
+
+### 10.2 Enhanced Enums (Dart 3) — The Game Changer
+
+Dart 3 enums can have **fields, methods, constructors, and even implement interfaces**!
+
+```dart
+enum Priority {
+  low(1, 'Low', '🟢'),
+  medium(2, 'Medium', '🟡'),
+  high(3, 'High', '🔴'),
+  critical(4, 'Critical', '🔥');
+
+  // Fields
+  final int level;
+  final String label;
+  final String icon;
+
+  // Constructor
+  const Priority(this.level, this.label, this.icon);
+
+  // Methods
+  bool get isUrgent => this == high || this == critical;
+
+  bool canOverride(Priority other) => level > other.level;
+
+  String get display => '$icon $label';
+
+  // Factory constructor
+  factory Priority.fromLevel(int level) {
+    return values.firstWhere(
+      (p) => p.level == level,
+      orElse: () => Priority.low,
+    );
+  }
+}
+
+void main() {
+  var taskPriority = Priority.high;
+
+  print(taskPriority.display);        // 🔴 High
+  print(taskPriority.isUrgent);       // true
+  print(taskPriority.canOverride(Priority.low));  // true
+
+  var fromLevel = Priority.fromLevel(2);
+  print(fromLevel.display);           // 🟡 Medium
+
+  // Sorting by priority level
+  var tasks = [Priority.low, Priority.critical, Priority.medium];
+  tasks.sort((a, b) => a.level.compareTo(b.level));
+  print(tasks.map((p) => p.display).toList());
+  // [🟢 Low, 🟡 Medium, 🔥 Critical]
+}
+```
+
+### 10.3 Enum with Flutter Theme
+
+```dart
+enum AppTheme {
+  light(
+    primaryColor: 0xFF6200EE,
+    backgroundColor: 0xFFFFFFFF,
+    textColor: 0xFF000000,
+    isDark: false,
+  ),
+  dark(
+    primaryColor: 0xFFBB86FC,
+    backgroundColor: 0xFF121212,
+    textColor: 0xFFFFFFFF,
+    isDark: true,
+  ),
+  blue(
+    primaryColor: 0xFF2196F3,
+    backgroundColor: 0xFFE3F2FD,
+    textColor: 0xFF0D47A1,
+    isDark: false,
+  );
+
+  final int primaryColor;
+  final int backgroundColor;
+  final int textColor;
+  final bool isDark;
+
+  const AppTheme({
+    required this.primaryColor,
+    required this.backgroundColor,
+    required this.textColor,
+    required this.isDark,
+  });
+
+  // Convert to Flutter Color
+  Color get primary => Color(primaryColor);
+  Color get background => Color(backgroundColor);
+  Color get text => Color(textColor);
+}
+
+void main() {
+  var theme = AppTheme.dark;
+  print('Using ${theme.isDark ? "dark" : "light"} theme');
+  print('Primary: #${theme.primaryColor.toRadixString(16)}');
+}
+```
+
+### 10.4 Enum Implementing an Interface
+
+```dart
+abstract class Serializable {
+  String toJson();
+}
+
+enum UserRole implements Serializable {
+  admin,
+  editor,
+  viewer;
+
+  @override
+  String toJson() => '"$name"';
+
+  bool get canEdit => this == admin || this == editor;
+  bool get canDelete => this == admin;
+}
+
+void main() {
+  var role = UserRole.editor;
+  print(role.toJson());      // "editor"
+  print(role.canEdit);       // true
+  print(role.canDelete);     // false
+}
+```
+
+---
+
+## 11. Hands-On Project 1: Shape Hierarchy with Area Calculator
+
+```dart
+import 'dart:math';
+
+// Abstract base class
+abstract class Shape {
+  String get name;
+  double get area;
+  double get perimeter;
+
+  void describe() {
+    print('$name: Area=${area.toStringAsFixed(2)}, Perimeter=${perimeter.toStringAsFixed(2)}');
+  }
+}
+
+// Interface for shapes that can be colored
+abstract class Colored {
+  String get color;
+  set color(String value);
+}
+
+// Interface for shapes that can be rotated
+abstract class Rotatable {
+  double get rotation;
+  void rotate(double degrees);
+}
+
+// Circle
+class Circle extends Shape {
+  final double radius;
+
+  Circle(this.radius);
+
+  @override
+  String get name => 'Circle';
+
+  @override
+  double get area => pi * radius * radius;
+
+  @override
+  double get perimeter => 2 * pi * radius;
+
+  double get diameter => 2 * radius;
+}
+
+// Rectangle
+class Rectangle extends Shape implements Colored, Rotatable {
+  final double width;
+  final double height;
+  @override
+  String color = 'black';
+  @override
+  double rotation = 0;
+
+  Rectangle(this.width, this.height);
+
+  @override
+  String get name => 'Rectangle';
+
+  @override
+  double get area => width * height;
+
+  @override
+  double get perimeter => 2 * (width + height);
+
+  bool get isSquare => width == height;
+
+  @override
+  void rotate(double degrees) {
+    rotation = (rotation + degrees) % 360;
+    print('Rotated to $rotation°');
+  }
+}
+
+// Triangle
+class Triangle extends Shape {
+  final double a;
+  final double b;
+  final double c;
+
+  Triangle(this.a, this.b, this.c);
+
+  @override
+  String get name => 'Triangle';
+
+  @override
+  double get area {
+    double s = perimeter / 2;
+    return sqrt(s * (s - a) * (s - b) * (s - c));
+  }
+
+  @override
+  double get perimeter => a + b + c;
+
+  bool get isValid {
+    return (a + b > c) && (a + c > b) && (b + c > a);
+  }
+
+  bool get isEquilateral => a == b && b == c;
+  bool get isIsosceles => a == b || b == c || a == c;
+  bool get isRight {
+    List<double> sides = [a, b, c]..sort();
+    return pow(sides[0], 2) + pow(sides[1], 2) == pow(sides[2], 2);
+  }
+}
+
+// Square (special rectangle)
+class Square extends Rectangle {
+  Square(double side) : super(side, side);
+
+  @override
+  String get name => 'Square';
+
+  double get side => width;
+
+  double get diagonal => width * sqrt(2);
+}
+
+// Shape calculator with generics
+class ShapeCalculator<T extends Shape> {
+  final List<T> _shapes = [];
+
+  void add(T shape) => _shapes.add(shape);
+
+  double get totalArea {
+    return _shapes.fold(0, (sum, shape) => sum + shape.area);
+  }
+
+  double get totalPerimeter {
+    return _shapes.fold(0, (sum, shape) => sum + shape.perimeter);
+  }
+
+  T? get largest {
+    if (_shapes.isEmpty) return null;
+    return _shapes.reduce((curr, next) => curr.area > next.area ? curr : next);
+  }
+
+  void printReport() {
+    print('');
+    print('╔═══════════════════════════════════════╗');
+    print('║         SHAPE CALCULATOR REPORT       ║');
+    print('╠═══════════════════════════════════════╣');
+    for (var shape in _shapes) {
+      shape.describe();
+    }
+    print('╠═══════════════════════════════════════╣');
+    print('║ Total Shapes: ${_shapes.length}');
+    print('║ Total Area: ${totalArea.toStringAsFixed(2)}');
+    print('║ Total Perimeter: ${totalPerimeter.toStringAsFixed(2)}');
+    print('║ Largest: ${largest?.name} (Area: ${largest?.area.toStringAsFixed(2)})');
+    print('╚═══════════════════════════════════════╝');
+  }
+}
+
+void main() {
+  var calculator = ShapeCalculator<Shape>();
+
+  calculator.add(Circle(5));
+  calculator.add(Rectangle(10, 5));
+  calculator.add(Triangle(3, 4, 5));
+  calculator.add(Square(6));
+
+  calculator.printReport();
+
+  // Test specific shapes
+  var rect = Rectangle(10, 5);
+  rect.color = 'blue';
+  rect.rotate(45);
+  print('Rectangle color: ${rect.color}, rotation: ${rect.rotation}°');
+
+  var tri = Triangle(3, 4, 5);
+  print('Triangle is right: ${tri.isRight}');  // true (3-4-5 triangle!)
+}
+```
+
+---
+
+## 12. Hands-On Project 2: E-Commerce System with Mixins & Generics
+
+```dart
+import 'dart:math';
+
+// Generic repository interface
+abstract class Repository<T extends Entity> {
+  final Map<String, T> _items = {};
+
+  void save(T item) => _items[item.id] = item;
+  T? findById(String id) => _items[id];
+  List<T> getAll() => _items.values.toList();
+  void delete(String id) => _items.remove(id);
+}
+
+// Base entity
+abstract class Entity {
+  String get id;
+  DateTime get createdAt;
+}
+
+// Mixin for items that can be discounted
+mixin Discountable {
+  double get basePrice;
+  double get discountPercent;
+
+  double get discountedPrice => basePrice * (1 - discountPercent / 100);
+  double get savings => basePrice - discountedPrice;
+
+  bool get hasDiscount => discountPercent > 0;
+}
+
+// Mixin for items that can be reviewed
+mixin Reviewable {
+  final List<Review> _reviews = [];
+
+  void addReview(Review review) => _reviews.add(review);
+
+  double get averageRating {
+    if (_reviews.isEmpty) return 0;
+    return _reviews.map((r) => r.rating).reduce((a, b) => a + b) / _reviews.length;
+  }
+
+  List<Review> get reviews => List.unmodifiable(_reviews);
+}
+
+class Review {
+  final String userId;
+  final double rating;  // 1-5
+  final String comment;
+  final DateTime date;
+
+  Review(this.userId, this.rating, this.comment) : date = DateTime.now();
+}
+
+// Product class
+class Product extends Entity with Discountable, Reviewable {
+  @override
+  final String id;
+  final String name;
+  final String category;
+  @override
+  final double basePrice;
+  @override
+  final double discountPercent;
+  int stockQuantity;
+  @override
+  final DateTime createdAt;
+
+  Product({
+    required this.name,
+    required this.category,
+    required this.basePrice,
+    this.discountPercent = 0,
+    this.stockQuantity = 0,
+  })  : id = 'PROD-${Random().nextInt(90000) + 10000}',
+        createdAt = DateTime.now();
+
+  bool get isInStock => stockQuantity > 0;
+
+  void reduceStock(int quantity) {
+    if (quantity <= stockQuantity) {
+      stockQuantity -= quantity;
+    }
+  }
+
+  @override
+  String toString() {
+    var price = hasDiscount 
+      ? '\$${discountedPrice.toStringAsFixed(2)} (was \$${basePrice.toStringAsFixed(2)})'
+      : '\$${basePrice.toStringAsFixed(2)}';
+    return '$name | $price | Stock: $stockQuantity | ⭐ ${averageRating.toStringAsFixed(1)}';
+  }
+}
+
+// User class
+class User extends Entity {
+  @override
+  final String id;
+  final String name;
+  final String email;
+  @override
+  final DateTime createdAt;
+  final List<Order> _orders = [];
+
+  User({required this.name, required this.email})
+    : id = 'USR-${Random().nextInt(90000) + 10000}',
+      createdAt = DateTime.now();
+
+  void placeOrder(Order order) => _orders.add(order);
+  List<Order> get orders => List.unmodifiable(_orders);
+  double get totalSpent => _orders.fold(0, (sum, o) => sum + o.total);
+}
+
+// Order class
+class Order extends Entity {
+  @override
+  final String id;
+  final String userId;
+  final List<OrderItem> items;
+  final OrderStatus status;
+  @override
+  final DateTime createdAt;
+
+  Order({required this.userId, required this.items, this.status = OrderStatus.pending})
+    : id = 'ORD-${Random().nextInt(90000) + 10000}',
+      createdAt = DateTime.now();
+
+  double get total => items.fold(0, (sum, item) => sum + item.totalPrice);
+  int get itemCount => items.fold(0, (sum, item) => sum + item.quantity);
+
+  @override
+  String toString() => 'Order $id | Items: $itemCount | Total: \$${total.toStringAsFixed(2)} | ${status.icon} ${status.label}';
+}
+
+class OrderItem {
+  final Product product;
+  final int quantity;
+
+  OrderItem(this.product, this.quantity);
+
+  double get totalPrice => product.discountedPrice * quantity;
+}
+
+enum OrderStatus {
+  pending('Pending', '⏳'),
+  processing('Processing', '🔧'),
+  shipped('Shipped', '📦'),
+  delivered('Delivered', '✅'),
+  cancelled('Cancelled', '❌');
+
+  final String label;
+  final String icon;
+  const OrderStatus(this.label, this.icon);
+
+  bool get isFinal => this == delivered || this == cancelled;
+}
+
+// Generic product repository
+class ProductRepository extends Repository<Product> {
+  List<Product> findByCategory(String category) {
+    return getAll().where((p) => p.category == category).toList();
+  }
+
+  List<Product> findOnSale() {
+    return getAll().where((p) => p.hasDiscount).toList();
+  }
+
+  List<Product> search(String query) {
+    return getAll().where((p) => p.name.toLowerCase().contains(query.toLowerCase())).toList();
+  }
+}
+
+// Extensions for e-commerce
+extension ProductListExtension on List<Product> {
+  List<Product> get inStock => where((p) => p.isInStock).toList();
+  List<Product> sortedByPrice({bool ascending = true}) {
+    return [...this]..sort((a, b) => ascending 
+      ? a.discountedPrice.compareTo(b.discountedPrice)
+      : b.discountedPrice.compareTo(a.discountedPrice));
+  }
+  double get averagePrice => isEmpty ? 0 : map((p) => p.discountedPrice).reduce((a, b) => a + b) / length;
+}
+
+void main() {
+  // Create products
+  var phone = Product(
+    name: 'FlutterPhone Pro',
+    category: 'Electronics',
+    basePrice: 999.99,
+    discountPercent: 15,
+    stockQuantity: 50,
+  );
+
+  var laptop = Product(
+    name: 'DartBook Air',
+    category: 'Electronics',
+    basePrice: 1499.99,
+    discountPercent: 10,
+    stockQuantity: 20,
+  );
+
+  var book = Product(
+    name: 'Flutter Mastery',
+    category: 'Books',
+    basePrice: 49.99,
+    stockQuantity: 100,
+  );
+
+  // Add reviews
+  phone.addReview(Review('u1', 5, 'Best phone ever!'));
+  phone.addReview(Review('u2', 4, 'Great but expensive'));
+  laptop.addReview(Review('u3', 5, 'Perfect for coding'));
+
+  // Create repository
+  var productRepo = ProductRepository();
+  productRepo.save(phone);
+  productRepo.save(laptop);
+  productRepo.save(book);
+
+  // Create user and order
+  var user = User(name: 'Kimi', email: 'kimi@example.com');
+
+  var order = Order(
+    userId: user.id,
+    items: [
+      OrderItem(phone, 1),
+      OrderItem(book, 2),
+    ],
+  );
+  user.placeOrder(order);
+
+  // Print results
+  print('╔═══════════════════════════════════════╗');
+  print('║      E-COMMERCE SYSTEM DEMO           ║');
+  print('╚═══════════════════════════════════════╝');
+  print('');
+
+  print('📦 PRODUCTS:');
+  for (var p in productRepo.getAll()) {
+    print('  • $p');
+  }
+
+  print('');
+  print('🏷️  ON SALE:');
+  for (var p in productRepo.findOnSale()) {
+    print('  • ${p.name} — Save \$${p.savings.toStringAsFixed(2)}!');
+  }
+
+  print('');
+  print('👤 USER: ${user.name}');
+  print('   Total Spent: \$${user.totalSpent.toStringAsFixed(2)}');
+  for (var o in user.orders) {
+    print('   $o');
+  }
+
+  print('');
+  print('📊 STATS:');
+  var allProducts = productRepo.getAll();
+  print('   Total Products: ${allProducts.length}');
+  print('   In Stock: ${allProducts.inStock.length}');
+  print('   Average Price: \$${allProducts.averagePrice.toStringAsFixed(2)}');
+}
+```
+
+---
+
+## 13. Common Mistakes & How to Avoid Them
+
+### Mistake 1: Instantiating Abstract Classes
+```dart
+// ❌ WRONG
+var shape = Shape();  // Abstract classes can't be instantiated
+
+// ✅ CORRECT
+var circle = Circle(5);  // Instantiate concrete subclass
+Shape shape = Circle(5);  // Polymorphism — reference as abstract type
+```
+
+### Mistake 2: Forgetting `@override`
+```dart
+class Dog extends Animal {
+  // ❌ Missing @override — works but bad practice
+  void speak() { }
+
+  // ✅ Good practice
+  @override
+  void speak() { }
+}
+```
+
+### Mistake 3: Multiple Inheritance Attempt
+```dart
+// ❌ WRONG — Dart doesn't support multiple extends
+class Dog extends Animal, Pet { }
+
+// ✅ CORRECT — Use mixin for additional behavior
+class Dog extends Animal with PetMixin { }
+```
+
+### Mistake 4: Implementing Without Full Implementation
+```dart
+// ❌ WRONG — Missing methods
+class MyCache implements Cache {
+  void get(String key) { }  // Missing set()!
+}
+
+// ✅ CORRECT — Implement ALL methods
+class MyCache implements Cache {
+  void get(String key) { }
+  void set(String key, value) { }
+}
+```
+
+### Mistake 5: Using `extends` When You Need `implements`
+```dart
+// ❌ WRONG — Inherits implementation you don't want
+class MockRepository extends RealRepository { }
+
+// ✅ CORRECT — Fresh implementation
+class MockRepository implements Repository { }
+```
+
+### Mistake 6: Generic Type Mismatch
+```dart
+// ❌ WRONG
+List<String> names = ['Kimi'];
+names.add(42);  // Compile error — good!
+
+// But this runtime error:
+var dynamicList = [];
+dynamicList.add('hello');
+dynamicList.add(42);
+List<String> strings = dynamicList as List<String>;  // 💥 Runtime error!
+```
+
+### Mistake 7: Confusing `super` and `this`
+```dart
+class Child extends Parent {
+  @override
+  void doWork() {
+    this.doWork();   // ❌ Infinite recursion — calls itself!
+    super.doWork();  // ✅ Correct — calls parent's method
+  }
+}
+```
+
+### Mistake 8: Enum Values Not Exhaustive in Switch
+```dart
+// ❌ WRONG — Missing cases (compile error in Dart 3)
+switch (status) {
+  case Status.pending: print('Pending');
+  case Status.approved: print('Approved');
+}
+
+// ✅ CORRECT — All cases covered or use default
+switch (status) {
+  case Status.pending: print('Pending');
+  case Status.approved: print('Approved');
+  case Status.rejected: print('Rejected');
+}
+```
+
+---
+
+## 14. Day 4 Checklist
+
+Use this checklist to verify mastery:
+
+- [ ] Can explain inheritance with `extends` and the "is-a" relationship
+- [ ] Can override parent methods using `@override`
+- [ ] Understands `is` and `as` operators for type checking/casting
+- [ ] Can use `super` to call parent constructors and methods
+- [ ] Can create abstract classes with abstract and concrete methods
+- [ ] Understands when to use abstract class vs interface
+- [ ] Can implement multiple interfaces with `implements`
+- [ ] Can create and use mixins with `with`
+- [ ] Understands mixin constraints using `on`
+- [ ] Can create extension methods on any type
+- [ ] Can write generic classes and functions with `<T>`
+- [ ] Can constrain generics using `extends`
+- [ ] Can create basic enums and use `.values`, `.name`, `.index`
+- [ ] Can create enhanced enums with fields, methods, and constructors
+- [ ] Can implement interfaces with enums
+- [ ] Built the Shape Hierarchy with abstract classes and interfaces
+- [ ] Built the E-Commerce System with mixins, generics, and enhanced enums
+- [ ] Can explain the difference: extends vs implements vs with
+- [ ] Can choose the right OOP tool for any scenario
+- [ ] Pushed both projects to GitHub
+
+---
+
+## 🧠 Key Takeaways (Memorize These!)
+
+1. **`extends` = "is-a"** — Single inheritance only. Use for true parent-child relationships.
+
+2. **`implements` = "can-do"** — Implement multiple interfaces. Must implement ALL methods.
+
+3. **`with` = "has-capability"** — Add behavior without inheritance. Multiple mixins allowed.
+
+4. **Abstract classes** define contracts with optional shared code. Can't be instantiated.
+
+5. **`@override`** is not optional in your mental model — always use it for clarity and safety.
+
+6. **`super`** calls the parent. Use in constructors (`super()`) and methods (`super.method()`).
+
+7. **Extensions** add methods to existing classes without inheritance — perfect for utilities.
+
+8. **Generics** (`<T>`) make code type-safe and reusable — always use them for collections.
+
+9. **Enhanced enums** (Dart 3) can have fields, methods, constructors — they're full classes now.
+
+10. **Choose the right tool:** extends for hierarchy, implements for contracts, mixins for shared behavior, extensions for utility methods.
+
+---
+
+## 📚 Extra Practice (Do These Tonight!)
+
+1. **Payment System:** Create abstract `PaymentMethod`. Implement `CreditCard`, `PayPal`, `Crypto`. Use mixin for `Refundable`.
+
+2. **Notification System:** Create `Notification` interface. Implement `EmailNotification`, `PushNotification`, `SMSNotification`. Use generic `NotificationQueue<T>`.
+
+3. **File Parser:** Create extension methods on `String` for `toSnakeCase()`, `toCamelCase()`, `isValidUrl()`. Create generic `Parser<T>`.
+
+4. **Game Characters:** Create abstract `Character`. Use mixin for `WarriorSkills`, `MageSkills`, `HealerSkills`. Create `Player` that can mix abilities.
+
+5. **API Client:** Create generic `ApiClient<T>` with `get()`, `post()`, `put()`, `delete()`. Use enum for `HttpStatus` with code and message.
+
+---
+
+> 🎉 **Congratulations!** You've completed Day 4. You now understand advanced OOP concepts that professional Dart developers use daily. These patterns appear in every Flutter app, package, and framework.
+
+**Next Up → Day 5: Dart Advanced — Async, Collections & Functional Programming**
+
+
+
 
