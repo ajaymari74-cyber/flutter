@@ -13210,6 +13210,1473 @@ Use this checklist to verify mastery:
 
 **Next Up → Day 9: Navigation & Routing**
 
+# Day 9: Navigation & Routing
+## Complete Deep Dive
+
+**Goal:** Implement multi-screen navigation professionally with Navigator 1.0, Named Routes, Arguments, Results, and Navigation 2.0 Router API. This guide covers every navigation pattern, data passing strategy, transition animations, and a complete e-commerce product browsing app.
+
+---
+
+# Table of Contents
+1. Why Navigation Matters in Flutter
+2. Understanding the Navigator & Route
+3. Navigator 1.0: push & pop
+4. Passing Data to Screens (Forward)
+5. Returning Data from Screens (Backward)
+6. Named Routes & onGenerateRoute
+7. Arguments & RouteSettings
+8. Navigation 2.0 / Router API (Declarative)
+9. Deep Linking Basics
+10. Advanced Navigation Patterns
+11. Hands-On Project: E-commerce Product Browsing App
+12. Common Mistakes & How to Avoid Them
+13. Day 9 Checklist
+
+---
+
+# 1. Why Navigation Matters in Flutter
+
+## Navigation Is Everywhere
+Every multi-screen app needs navigation:
+- Login → Home dashboard
+- Product list → Product detail → Cart → Checkout
+- Profile → Settings → Edit Profile
+- Splash → Onboarding → Main App
+- Bottom tabs switching
+
+## The Navigation Challenge
+| Challenge | Solution |
+|---|---|
+| Move between screens | Navigator push/pop |
+| Pass data forward | Constructor arguments / RouteSettings |
+| Return data backward | await Navigator.push / pop with result |
+| Deep links from outside | Router API + deep linking |
+| Browser-style URLs (Web) | Navigation 2.0 declarative routing |
+| Prevent duplicate pages | pushReplacement, pushAndRemoveUntil |
+| Bottom navigation state | IndexedStack or multiple Navigators |
+
+---
+
+# 2. Understanding the Navigator & Route
+
+## What is a Route?
+A `Route` represents a screen/page in the app. Flutter uses `MaterialPageRoute` or `CupertinoPageRoute` to wrap widgets with platform-appropriate transitions.
+
+## What is the Navigator?
+The `Navigator` is a widget that manages a stack of Route objects. It provides imperative methods to push/pop routes.
+
+```dart
+// The Navigator is already inside MaterialApp/CupertinoApp
+// You access it via: Navigator.of(context)
+```
+
+## Navigation Stack Visual
+```
+[Screen C]  ← Top (visible)
+[Screen B]
+[Screen A]  ← Bottom
+```
+- `push()` → adds a new screen on top
+- `pop()` → removes the top screen
+
+---
+
+# 3. Navigator 1.0: push & pop
+
+## Basic Push
+```dart
+// Navigate to a new screen
+Navigator.push(
+  context,
+  MaterialPageRoute(builder: (context) => const DetailScreen()),
+);
+```
+
+## Basic Pop (Go Back)
+```dart
+// Return to previous screen
+Navigator.pop(context);
+```
+
+## Push with Cupertino Style (iOS slide transition)
+```dart
+Navigator.push(
+  context,
+  CupertinoPageRoute(builder: (context) => const DetailScreen()),
+);
+```
+
+## Push Replacement (Replace current screen)
+Use when you don't want the user to come back (e.g., Login → Home).
+```dart
+Navigator.pushReplacement(
+  context,
+  MaterialPageRoute(builder: (context) => const HomeScreen()),
+);
+```
+
+## Push And Remove Until (Clear stack)
+Use for splash → home or logout → login.
+```dart
+Navigator.pushAndRemoveUntil(
+  context,
+  MaterialPageRoute(builder: (context) => const HomeScreen()),
+  (route) => false, // Remove all previous routes
+);
+```
+
+## Pop Until (Go back multiple screens)
+```dart
+Navigator.popUntil(context, (route) => route.isFirst);
+// Or pop to a named route
+Navigator.popUntil(context, ModalRoute.withName('/home'));
+```
+
+## Can Pop Check
+```dart
+if (Navigator.canPop(context)) {
+  Navigator.pop(context);
+}
+```
+
+---
+
+# 4. Passing Data to Screens (Forward)
+
+## Method 1: Constructor Arguments (Recommended for simple cases)
+```dart
+// Sending screen
+Navigator.push(
+  context,
+  MaterialPageRoute(
+    builder: (context) => const ProductDetailScreen(productId: 42),
+  ),
+);
+
+// Receiving screen
+class ProductDetailScreen extends StatelessWidget {
+  final int productId;
+  const ProductDetailScreen({super.key, required this.productId});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('Product $productId')),
+    );
+  }
+}
+```
+
+## Method 2: Multiple Arguments
+```dart
+Navigator.push(
+  context,
+  MaterialPageRoute(
+    builder: (context) => UserProfileScreen(
+      userId: 'u123',
+      userName: 'Kimi',
+      isPremium: true,
+    ),
+  ),
+);
+```
+
+## Method 3: Passing Objects
+```dart
+final product = Product(id: 1, name: 'Flutter Book', price: 29.99);
+
+Navigator.push(
+  context,
+  MaterialPageRoute(
+    builder: (context) => ProductScreen(product: product),
+  ),
+);
+```
+
+---
+
+# 5. Returning Data from Screens (Backward)
+
+## Using await + pop with result
+```dart
+// Screen A: Open selection screen and wait for result
+void _openColorPicker() async {
+  final selectedColor = await Navigator.push(
+    context,
+    MaterialPageRoute(builder: (context) => const ColorPickerScreen()),
+  );
+
+  if (selectedColor != null) {
+    setState(() {
+      _backgroundColor = selectedColor;
+    });
+  }
+}
+```
+
+```dart
+// Screen B: Return data when popping
+class ColorPickerScreen extends StatelessWidget {
+  const ColorPickerScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Pick a Color')),
+      body: ListView(
+        children: [
+          ListTile(
+            leading: const CircleAvatar(backgroundColor: Colors.red),
+            title: const Text('Red'),
+            onTap: () => Navigator.pop(context, Colors.red),
+          ),
+          ListTile(
+            leading: const CircleAvatar(backgroundColor: Colors.green),
+            title: const Text('Green'),
+            onTap: () => Navigator.pop(context, Colors.green),
+          ),
+          ListTile(
+            leading: const CircleAvatar(backgroundColor: Colors.blue),
+            title: const Text('Blue'),
+            onTap: () => Navigator.pop(context, Colors.blue),
+          ),
+        ],
+      ),
+    );
+  }
+}
+```
+
+## Returning Complex Objects
+```dart
+// Return a result object
+Navigator.pop(context, {
+  'name': 'Kimi',
+  'age': 25,
+  'isDeveloper': true,
+});
+
+// Or a dedicated class
+Navigator.pop(context, EditResult(saved: true, data: userData));
+```
+
+---
+
+# 6. Named Routes & onGenerateRoute
+
+## Why Named Routes?
+- Avoid hardcoding routes everywhere
+- Centralized route management
+- Easier deep linking setup
+- Cleaner code
+
+## Setting Up Named Routes
+```dart
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Navigation Demo',
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const HomeScreen(),
+        '/profile': (context) => const ProfileScreen(),
+        '/settings': (context) => const SettingsScreen(),
+      },
+    );
+  }
+}
+```
+
+## Navigating with Named Routes
+```dart
+// Push
+Navigator.pushNamed(context, '/profile');
+
+// Push and remove current
+Navigator.pushReplacementNamed(context, '/home');
+
+// Push and clear all
+Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+
+// Pop
+Navigator.pop(context);
+```
+
+## Limitation of Simple Named Routes
+The `routes` map doesn't support passing arguments directly. Use `onGenerateRoute` for dynamic arguments.
+
+---
+
+# 7. Arguments & RouteSettings
+
+## onGenerateRoute (The Professional Way)
+```dart
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Navigation Demo',
+      initialRoute: '/',
+      onGenerateRoute: (settings) {
+        // Extract arguments
+        final args = settings.arguments;
+
+        switch (settings.name) {
+          case '/':
+            return MaterialPageRoute(builder: (_) => const HomeScreen());
+
+          case '/product':
+            if (args is Product) {
+              return MaterialPageRoute(
+                builder: (_) => ProductDetailScreen(product: args),
+              );
+            }
+            return _errorRoute();
+
+          case '/profile':
+            final userId = args as String?;
+            return MaterialPageRoute(
+              builder: (_) => ProfileScreen(userId: userId ?? ''),
+            );
+
+          default:
+            return _errorRoute();
+        }
+      },
+    );
+  }
+
+  static Route<dynamic> _errorRoute() {
+    return MaterialPageRoute(
+      builder: (_) => const Scaffold(
+        body: Center(child: Text('Page not found!')),
+      ),
+    );
+  }
+}
+```
+
+## Passing Arguments with Named Routes
+```dart
+// Push with arguments
+Navigator.pushNamed(
+  context,
+  '/product',
+  arguments: Product(id: 1, name: 'Book', price: 29.99),
+);
+
+// Or with RouteSettings explicitly
+Navigator.push(
+  context,
+  MaterialPageRoute(
+    builder: (_) => const DetailScreen(),
+    settings: const RouteSettings(
+      name: '/detail',
+      arguments: {'id': 42, 'title': 'Flutter'},
+    ),
+  ),
+);
+```
+
+## Extracting Arguments in the Target Screen
+```dart
+class ProductDetailScreen extends StatelessWidget {
+  const ProductDetailScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // Extract arguments from ModalRoute
+    final product = ModalRoute.of(context)!.settings.arguments as Product;
+
+    return Scaffold(
+      appBar: AppBar(title: Text(product.name)),
+      body: Center(child: Text('$${product.price}')),
+    );
+  }
+}
+```
+
+---
+
+# 8. Navigation 2.0 / Router API (Declarative)
+
+## Why Navigation 2.0?
+- URL-aware navigation (essential for Flutter Web)
+- Declarative: UI reflects the current route state
+- Handle browser back/forward buttons
+- Deep linking out of the box
+- Sync app state with URL
+
+## Core Components
+| Component | Purpose |
+|---|---|
+| `Router` | Widget that handles routing |
+| `RouteInformationParser` | Parses URL to route state |
+| `RouterDelegate` | Builds Navigator based on app state |
+| `BackButtonDispatcher` | Handles platform back button |
+| `RouteInformationProvider` | Reports route changes to system |
+
+## Simple RouterDelegate Example
+```dart
+// App state that represents current route
+class AppRouteState extends ChangeNotifier {
+  String _currentPath = '/';
+  String? _selectedProductId;
+
+  String get currentPath => _currentPath;
+  String? get selectedProductId => _selectedProductId;
+
+  void goToHome() {
+    _currentPath = '/';
+    _selectedProductId = null;
+    notifyListeners();
+  }
+
+  void goToProduct(String id) {
+    _currentPath = '/product';
+    _selectedProductId = id;
+    notifyListeners();
+  }
+
+  void goToProfile() {
+    _currentPath = '/profile';
+    _selectedProductId = null;
+    notifyListeners();
+  }
+}
+
+// Router Delegate
+class AppRouterDelegate extends RouterDelegate<String>
+    with ChangeNotifier, PopNavigatorRouterDelegateMixin<String> {
+
+  final AppRouteState appState;
+
+  AppRouterDelegate(this.appState) {
+    appState.addListener(notifyListeners);
+  }
+
+  @override
+  GlobalKey<NavigatorState> get navigatorKey => GlobalKey<NavigatorState>();
+
+  @override
+  String? get currentConfiguration => appState.currentPath;
+
+  @override
+  Widget build(BuildContext context) {
+    return Navigator(
+      key: navigatorKey,
+      pages: [
+        const MaterialPage(child: HomeScreen()),
+        if (appState.currentPath == '/product' && appState.selectedProductId != null)
+          MaterialPage(
+            child: ProductDetailScreen(productId: appState.selectedProductId!),
+          ),
+        if (appState.currentPath == '/profile')
+          const MaterialPage(child: ProfileScreen()),
+      ],
+      onPopPage: (route, result) {
+        if (!route.didPop(result)) return false;
+        appState.goToHome();
+        return true;
+      },
+    );
+  }
+
+  @override
+  Future<void> setNewRoutePath(String configuration) async {
+    // Handle deep links here
+    if (configuration.startsWith('/product/')) {
+      final id = configuration.replaceFirst('/product/', '');
+      appState.goToProduct(id);
+    } else if (configuration == '/profile') {
+      appState.goToProfile();
+    } else {
+      appState.goToHome();
+    }
+  }
+}
+
+// Route Information Parser
+class AppRouteInformationParser extends RouteInformationParser<String> {
+  @override
+  Future<String> parseRouteInformation(RouteInformation routeInformation) async {
+    final uri = Uri.parse(routeInformation.uri.toString());
+    if (uri.pathSegments.isEmpty) return '/';
+    if (uri.pathSegments.length == 2 && uri.pathSegments[0] == 'product') {
+      return '/product/${uri.pathSegments[1]}';
+    }
+    return uri.path;
+  }
+
+  @override
+  RouteInformation restoreRouteInformation(String configuration) {
+    return RouteInformation(uri: Uri.parse(configuration));
+  }
+}
+
+// Usage in MaterialApp
+class MyApp extends StatelessWidget {
+  final AppRouteState appState = AppRouteState();
+
+  MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp.router(
+      routerDelegate: AppRouterDelegate(appState),
+      routeInformationParser: AppRouteInformationParser(),
+    );
+  }
+}
+```
+
+## When to Use What?
+| Scenario | Use Navigator 1.0 | Use Navigation 2.0 |
+|---|---|---|
+| Mobile-only app | ✅ Yes | Optional |
+| Flutter Web | ❌ No | ✅ Yes |
+| Deep linking required | Hard | ✅ Easy |
+| URL sync needed | ❌ No | ✅ Yes |
+| Simple app (2-5 screens) | ✅ Yes | Overkill |
+| Complex state-driven UI | ❌ Hard | ✅ Yes |
+
+---
+
+# 9. Deep Linking Basics
+
+## What is Deep Linking?
+Opening specific screens in your app from external sources:
+- Push notifications → specific screen
+- Web URL → app screen
+- Another app → your app screen
+
+## Android Setup (AndroidManifest.xml)
+```xml
+<activity android:name=".MainActivity"
+    android:launchMode="singleTop">
+    <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="https"
+              android:host="myapp.com"
+              android:pathPrefix="/product" />
+    </intent-filter>
+</activity>
+```
+
+## iOS Setup (Info.plist)
+```xml
+<key>CFBundleURLTypes</key>
+<array>
+  <dict>
+    <key>CFBundleURLSchemes</key>
+    <array>
+      <string>myapp</string>
+    </array>
+  </dict>
+</array>
+```
+
+## Handling Deep Links with go_router (Recommended)
+```dart
+// Add dependency: go_router: ^14.0.0
+import 'package:go_router/go_router.dart';
+
+final GoRouter _router = GoRouter(
+  routes: [
+    GoRoute(
+      path: '/',
+      builder: (context, state) => const HomeScreen(),
+    ),
+    GoRoute(
+      path: '/product/:id',
+      builder: (context, state) {
+        final productId = state.pathParameters['id']!;
+        return ProductDetailScreen(productId: productId);
+      },
+    ),
+    GoRoute(
+      path: '/profile',
+      builder: (context, state) => const ProfileScreen(),
+    ),
+  ],
+);
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp.router(
+      routerConfig: _router,
+    );
+  }
+}
+
+// Navigation with go_router
+context.go('/');
+context.go('/product/123');
+context.push('/profile');
+context.pop();
+```
+
+---
+
+# 10. Advanced Navigation Patterns
+
+## Custom Page Transitions
+```dart
+class SlideRightRoute extends PageRouteBuilder {
+  final Widget page;
+
+  SlideRightRoute({required this.page})
+      : super(
+          pageBuilder: (context, animation, secondaryAnimation) => page,
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            const begin = Offset(1.0, 0.0);
+            const end = Offset.zero;
+            const curve = Curves.easeInOut;
+            var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+            var offsetAnimation = animation.drive(tween);
+            return SlideTransition(position: offsetAnimation, child: child);
+          },
+        );
+}
+
+// Usage
+Navigator.push(context, SlideRightRoute(page: const DetailScreen()));
+```
+
+## Fade Transition
+```dart
+class FadeRoute extends PageRouteBuilder {
+  final Widget page;
+  FadeRoute({required this.page})
+      : super(
+          pageBuilder: (context, animation, secondaryAnimation) => page,
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+        );
+}
+```
+
+## Shared Axis Transition (Material)
+```dart
+import 'package:animations/animations.dart';
+
+OpenContainer(
+  closedBuilder: (context, action) => const ProductCard(),
+  openBuilder: (context, action) => const ProductDetailScreen(),
+);
+```
+
+## Bottom Sheet Navigation
+```dart
+// Modal Bottom Sheet
+showModalBottomSheet(
+  context: context,
+  isScrollControlled: true,
+  shape: const RoundedRectangleBorder(
+    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  ),
+  builder: (context) => const FilterBottomSheet(),
+);
+
+// Persistent Bottom Sheet
+showBottomSheet(
+  context: context,
+  builder: (context) => const PersistentBottomContent(),
+);
+```
+
+## Dialog Navigation
+```dart
+// Alert Dialog
+showDialog(
+  context: context,
+  builder: (context) => AlertDialog(
+    title: const Text('Confirm'),
+    content: const Text('Are you sure?'),
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+      TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm')),
+    ],
+  ),
+);
+
+// Full Screen Dialog
+Navigator.push(
+  context,
+  MaterialPageRoute(
+    builder: (_) => const EditScreen(),
+    fullscreenDialog: true,
+  ),
+);
+```
+
+## Nested Navigation (Bottom Navigation with separate stacks)
+```dart
+class MainScreen extends StatefulWidget {
+  const MainScreen({super.key});
+
+  @override
+  State<MainScreen> createState() => _MainScreenState();
+}
+
+class _MainScreenState extends State<MainScreen> {
+  int _currentIndex = 0;
+
+  final List<GlobalKey<NavigatorState>> _navigatorKeys = [
+    GlobalKey<NavigatorState>(),
+    GlobalKey<NavigatorState>(),
+    GlobalKey<NavigatorState>(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(
+        index: _currentIndex,
+        children: [
+          NavigatorPage(navigatorKey: _navigatorKeys[0], child: const HomeTab()),
+          NavigatorPage(navigatorKey: _navigatorKeys[1], child: const SearchTab()),
+          NavigatorPage(navigatorKey: _navigatorKeys[2], child: const ProfileTab()),
+        ],
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) {
+          if (_currentIndex == index) {
+            // Pop to first route if tapping same tab
+            _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
+          }
+          setState(() => _currentIndex = index);
+        },
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+        ],
+      ),
+    );
+  }
+}
+
+class NavigatorPage extends StatelessWidget {
+  final GlobalKey<NavigatorState> navigatorKey;
+  final Widget child;
+
+  const NavigatorPage({super.key, required this.navigatorKey, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Navigator(
+      key: navigatorKey,
+      onGenerateRoute: (settings) => MaterialPageRoute(builder: (_) => child),
+    );
+  }
+}
+```
+
+---
+
+# 11. Hands-On Project: E-commerce Product Browsing App
+
+## Project Overview
+Build a multi-screen e-commerce app with:
+- Home screen with product grid
+- Product detail screen
+- Cart screen
+- Profile screen
+- Named routes
+- Data passing between screens
+- Hero animations for product images
+- Bottom navigation with nested stacks
+
+## Complete Code
+
+```dart
+import 'package:flutter/material.dart';
+
+void main() {
+  runApp(const EcommerceApp());
+}
+
+// ============ MODELS ============
+class Product {
+  final String id;
+  final String name;
+  final String description;
+  final double price;
+  final String imageUrl;
+  final String category;
+  final double rating;
+
+  Product({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.price,
+    required this.imageUrl,
+    required this.category,
+    required this.rating,
+  });
+}
+
+// ============ MOCK DATA ============
+final List<Product> mockProducts = [
+  Product(
+    id: '1',
+    name: 'Wireless Headphones',
+    description: 'Premium noise-cancelling wireless headphones with 30-hour battery life.',
+    price: 199.99,
+    imageUrl: 'https://via.placeholder.com/300',
+    category: 'Electronics',
+    rating: 4.8,
+  ),
+  Product(
+    id: '2',
+    name: 'Smart Watch Pro',
+    description: 'Advanced fitness tracking, heart rate monitor, and GPS.',
+    price: 299.99,
+    imageUrl: 'https://via.placeholder.com/300',
+    category: 'Electronics',
+    rating: 4.6,
+  ),
+  Product(
+    id: '3',
+    name: 'Running Shoes',
+    description: 'Lightweight breathable running shoes with cushioned sole.',
+    price: 89.99,
+    imageUrl: 'https://via.placeholder.com/300',
+    category: 'Sports',
+    rating: 4.5,
+  ),
+  Product(
+    id: '4',
+    name: 'Backpack',
+    description: 'Water-resistant laptop backpack with multiple compartments.',
+    price: 59.99,
+    imageUrl: 'https://via.placeholder.com/300',
+    category: 'Accessories',
+    rating: 4.7,
+  ),
+];
+
+// ============ APP ============
+class EcommerceApp extends StatelessWidget {
+  const EcommerceApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'ShopEasy',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+        useMaterial3: true,
+        cardTheme: CardTheme(elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+      ),
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const MainNavigationScreen(),
+        '/product_detail': (context) => const ProductDetailScreen(),
+        '/cart': (context) => const CartScreen(),
+        '/profile': (context) => const ProfileScreen(),
+      },
+      onGenerateRoute: (settings) {
+        if (settings.name == '/product_detail') {
+          final product = settings.arguments as Product?;
+          if (product != null) {
+            return MaterialPageRoute(
+              builder: (_) => ProductDetailScreen(product: product),
+            );
+          }
+        }
+        return null;
+      },
+    );
+  }
+}
+
+// ============ MAIN NAVIGATION WITH BOTTOM TABS ============
+class MainNavigationScreen extends StatefulWidget {
+  const MainNavigationScreen({super.key});
+
+  @override
+  State<MainNavigationScreen> createState() => _MainNavigationScreenState();
+}
+
+class _MainNavigationScreenState extends State<MainNavigationScreen> {
+  int _currentIndex = 0;
+
+  final List<Widget> _screens = const [
+    HomeScreen(),
+    SearchScreen(),
+    CartScreen(),
+    ProfileScreen(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _screens,
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) => setState(() => _currentIndex = index),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
+          NavigationDestination(icon: Icon(Icons.search_outlined), selectedIcon: Icon(Icons.search), label: 'Search'),
+          NavigationDestination(icon: Icon(Icons.shopping_cart_outlined), selectedIcon: Icon(Icons.shopping_cart), label: 'Cart'),
+          NavigationDestination(icon: Icon(Icons.person_outlined), selectedIcon: Icon(Icons.person), label: 'Profile'),
+        ],
+      ),
+    );
+  }
+}
+
+// ============ HOME SCREEN ============
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('ShopEasy', style: TextStyle(fontWeight: FontWeight.bold)),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications_outlined),
+            onPressed: () {},
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Search Bar
+            TextField(
+              decoration: InputDecoration(
+                hintText: 'Search products...',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                filled: true,
+                fillColor: Colors.grey.shade100,
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Categories
+            const Text('Categories', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 50,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: ['All', 'Electronics', 'Sports', 'Accessories', 'Fashion']
+                    .map((cat) => Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Chip(
+                            label: Text(cat),
+                            backgroundColor: cat == 'All' ? Colors.indigo : Colors.grey.shade200,
+                            labelStyle: TextStyle(color: cat == 'All' ? Colors.white : Colors.black87),
+                          ),
+                        ))
+                    .toList(),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Products Grid
+            const Text('Popular Products', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                childAspectRatio: 0.75,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              itemCount: mockProducts.length,
+              itemBuilder: (context, index) {
+                final product = mockProducts[index];
+                return ProductCard(product: product);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============ PRODUCT CARD ============
+class ProductCard extends StatelessWidget {
+  final Product product;
+  const ProductCard({super.key, required this.product});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.pushNamed(
+          context,
+          '/product_detail',
+          arguments: product,
+        );
+      },
+      child: Card(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Hero(
+                tag: 'product-${product.id}',
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                  ),
+                  child: const Center(child: Icon(Icons.image, size: 50, color: Colors.grey)),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(product.name, style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 4),
+                  Text('$${product.price}', style: const TextStyle(color: Colors.indigo, fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.star, size: 16, color: Colors.amber),
+                      Text(' ${product.rating}'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============ PRODUCT DETAIL SCREEN ============
+class ProductDetailScreen extends StatelessWidget {
+  final Product? product;
+  const ProductDetailScreen({super.key, this.product});
+
+  @override
+  Widget build(BuildContext context) {
+    final Product displayProduct;
+    if (product != null) {
+      displayProduct = product!;
+    } else {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Product) {
+        displayProduct = args;
+      } else {
+        return const Scaffold(body: Center(child: Text('Product not found')));
+      }
+    }
+
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 300,
+            pinned: true,
+            flexibleSpace: FlexibleSpaceBar(
+              background: Hero(
+                tag: 'product-${displayProduct.id}',
+                child: Container(
+                  color: Colors.grey.shade300,
+                  child: const Center(child: Icon(Icons.image, size: 100, color: Colors.grey)),
+                ),
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          displayProduct.name,
+                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade100,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.star, size: 18, color: Colors.amber),
+                            Text(' ${displayProduct.rating}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '$${displayProduct.price}',
+                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.indigo),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Description', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Text(displayProduct.description, style: TextStyle(color: Colors.grey.shade700, height: 1.5)),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Added to cart!')),
+                        );
+                      },
+                      icon: const Icon(Icons.shopping_cart),
+                      label: const Text('Add to Cart', style: TextStyle(fontSize: 16)),
+                      style: ElevatedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============ SEARCH SCREEN ============
+class SearchScreen extends StatefulWidget {
+  const SearchScreen({super.key});
+
+  @override
+  State<SearchScreen> createState() => _SearchScreenState();
+}
+
+class _SearchScreenState extends State<SearchScreen> {
+  String _query = '';
+
+  List<Product> get _filteredProducts {
+    if (_query.isEmpty) return mockProducts;
+    return mockProducts.where((p) => p.name.toLowerCase().contains(_query.toLowerCase())).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Search')),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: TextField(
+              onChanged: (value) => setState(() => _query = value),
+              decoration: InputDecoration(
+                hintText: 'Search products...',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: _filteredProducts.length,
+              itemBuilder: (context, index) {
+                final product = _filteredProducts[index];
+                return ListTile(
+                  leading: const CircleAvatar(child: Icon(Icons.image)),
+                  title: Text(product.name),
+                  subtitle: Text('$${product.price}'),
+                  onTap: () {
+                    Navigator.pushNamed(context, '/product_detail', arguments: product);
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============ CART SCREEN ============
+class CartScreen extends StatelessWidget {
+  const CartScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Shopping Cart')),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.shopping_cart_outlined, size: 80, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text('Your cart is empty', style: TextStyle(fontSize: 18, color: Colors.grey.shade600)),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                // Navigate to home and switch tab
+                Navigator.pushReplacementNamed(context, '/');
+              },
+              child: const Text('Start Shopping'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============ PROFILE SCREEN ============
+class ProfileScreen extends StatelessWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('My Profile')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            const CircleAvatar(radius: 50, child: Icon(Icons.person, size: 50)),
+            const SizedBox(height: 16),
+            const Text('John Doe', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const Text('john@example.com', style: TextStyle(color: Colors.grey)),
+            const SizedBox(height: 32),
+            _buildMenuItem(Icons.shopping_bag, 'My Orders', () {}),
+            _buildMenuItem(Icons.favorite, 'Wishlist', () {}),
+            _buildMenuItem(Icons.location_on, 'Addresses', () {}),
+            _buildMenuItem(Icons.payment, 'Payment Methods', () {}),
+            _buildMenuItem(Icons.settings, 'Settings', () {}),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () {
+                  // Logout: clear stack and go to login
+                  Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+                },
+                child: const Text('Logout'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenuItem(IconData icon, String title, VoidCallback onTap) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: Icon(icon, color: Colors.indigo),
+        title: Text(title),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 12. Common Mistakes & How to Avoid Them
+
+## Mistake 1: Using BuildContext After Async Gap
+```dart
+// WRONG — context may be invalid after await
+void _navigate() async {
+  await Future.delayed(const Duration(seconds: 1));
+  Navigator.push(context, ...); // Crash risk!
+}
+
+// CORRECT — Check mounted or use a GlobalKey
+void _navigate() async {
+  await Future.delayed(const Duration(seconds: 1));
+  if (mounted) {
+    Navigator.push(context, ...);
+  }
+}
+```
+
+## Mistake 2: Not Handling Pop Result Null
+```dart
+// WRONG — Crashes if user presses back button
+final result = await Navigator.push(...);
+print(result.toString()); // Null check error!
+
+// CORRECT
+final result = await Navigator.push(...);
+if (result != null) {
+  print(result.toString());
+}
+```
+
+## Mistake 3: Hardcoding Routes Everywhere
+```dart
+// WRONG — Typo-prone and hard to maintain
+Navigator.pushNamed(context, '/proflie'); // Silent failure
+
+// CORRECT — Use constants
+class Routes {
+  static const home = '/';
+  static const profile = '/profile';
+  static const productDetail = '/product_detail';
+}
+Navigator.pushNamed(context, Routes.profile);
+```
+
+## Mistake 4: Forgetting to Pass Arguments in Named Routes
+```dart
+// WRONG — Product detail expects arguments
+Navigator.pushNamed(context, '/product_detail'); // Null crash!
+
+// CORRECT
+Navigator.pushNamed(context, '/product_detail', arguments: product);
+```
+
+## Mistake 5: Not Using IndexedStack for Bottom Navigation
+```dart
+// WRONG — State lost when switching tabs
+body: _screens[_currentIndex],
+
+// CORRECT — Preserves state and scroll position
+body: IndexedStack(
+  index: _currentIndex,
+  children: _screens,
+),
+```
+
+## Mistake 6: Blocking Back Button Without Handling
+```dart
+// WRONG — User is trapped
+WillPopScope(
+  onWillPop: () async => false,
+  child: ...,
+)
+
+// CORRECT — Show confirmation or save state
+WillPopScope(
+  onWillPop: () async {
+    return await showDialog(...) ?? false;
+  },
+  child: ...,
+)
+```
+
+## Mistake 7: Deep Linking Without URL Encoding
+```dart
+// WRONG — Spaces and special characters break URLs
+final url = 'https://myapp.com/product/$productName';
+
+// CORRECT
+final url = Uri.https('myapp.com', '/product/${Uri.encodeComponent(productId)}');
+```
+
+---
+
+# 13. Day 9 Checklist
+
+Use this checklist to verify mastery:
+- [ ] Understands difference between Navigator 1.0 and 2.0
+- [ ] Can push and pop screens with `Navigator.push` / `Navigator.pop`
+- [ ] Can use `pushReplacement` for login → home flows
+- [ ] Can use `pushAndRemoveUntil` to clear navigation stack
+- [ ] Can pass data to screens via constructor arguments
+- [ ] Can return data from screens using `await Navigator.push`
+- [ ] Can set up named routes in `MaterialApp.routes`
+- [ ] Can use `onGenerateRoute` for dynamic route handling with arguments
+- [ ] Can extract arguments using `ModalRoute.of(context)!.settings.arguments`
+- [ ] Understands Navigation 2.0 components (Router, RouteInformationParser, RouterDelegate)
+- [ ] Can implement basic deep linking configuration
+- [ ] Can use `go_router` for declarative routing
+- [ ] Can create custom page transitions (Slide, Fade)
+- [ ] Can show modal bottom sheets and dialogs
+- [ ] Can implement bottom navigation with `IndexedStack`
+- [ ] Understands nested navigation concepts
+- [ ] Built the E-commerce Product Browsing App with all screens
+- [ ] App includes Hero animations for product images
+- [ ] App uses named routes with arguments passing
+- [ ] App handles empty states and navigation edge cases
+- [ ] Pushed the project to GitHub
+
+---
+
+# Key Takeaways (Memorize These!)
+
+1. **Use Navigator 1.0** for simple mobile apps. Use **Navigation 2.0 / go_router** for web or complex state-driven navigation.
+2. **Always check `mounted`** before using context after an async operation.
+3. **Use `IndexedStack`** for bottom navigation to preserve tab state and scroll positions.
+4. **Never use both `initialValue` and controller** (Day 8 rule still applies everywhere).
+5. **Define route constants** to avoid string typos in named routes.
+6. **Pass simple data via constructors**, complex data via `RouteSettings.arguments`.
+7. **Use `pushReplacement`** for auth flows so users can't go back to login.
+8. **Use `go_router`** in 2026 for production apps — it's the official recommended package.
+9. **Handle null results** when awaiting navigation — users can press the back button.
+10. **Wrap deep link hosts** properly in AndroidManifest and Info.plist for universal links.
+
+---
+
+# Extra Practice (Do These Tonight!)
+
+1. **Login Flow:** Build a splash → onboarding → login → home flow. Use `pushReplacement` and `pushAndRemoveUntil` appropriately.
+2. **Settings Wizard:** Create a 3-step settings wizard that passes accumulated data forward and returns final settings to the home screen.
+3. **News App with Deep Links:** Build a news app where `/article/:id` opens directly to the article detail screen from a push notification URL.
+4. **E-commerce Checkout Flow:** Extend the Day 9 project with a multi-step checkout (Cart → Shipping → Payment → Confirmation) that passes order data forward.
+5. **Flutter Web Portfolio:** Convert the e-commerce app to Flutter Web using `go_router` with proper URL paths for each screen.
+
+---
+
+**Congratulations!** You've completed Day 9. You now know how to build professional multi-screen Flutter apps with navigation, data passing, deep linking, and advanced routing patterns. These skills are essential for every real-world Flutter app.
+
+**Next Up → Day 10: Theming, Assets & Responsive Design**
+
+---
+
+*Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*
+*Day 9: Navigation & Routing — Complete Deep Dive*
+
+
 
 
 
