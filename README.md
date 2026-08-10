@@ -14676,6 +14676,1496 @@ Use this checklist to verify mastery:
 *Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*
 *Day 9: Navigation & Routing — Complete Deep Dive*
 
+# Day 10: Theming, Assets & Responsive Design
+## Complete Deep Dive
+
+**Goal:** Make Flutter apps beautiful, consistent, and responsive across all screen sizes. This guide covers ThemeData, ColorScheme, custom fonts, image assets, dark mode, responsive layouts, and a complete redesigned multi-screen app.
+
+---
+
+# Table of Contents
+1. Why Theming & Responsive Design Matter
+2. ThemeData & ColorScheme Deep Dive
+3. TextTheme & Typography Mastery
+4. Dark Mode Implementation
+5. Custom Fonts & Google Fonts
+6. Assets: Images, SVG & Icons
+7. Responsive Design Foundations
+8. MediaQuery, LayoutBuilder & OrientationBuilder
+9. flutter_screenutil & Responsive Frameworks
+10. Platform Adaptive UI
+11. Hands-On Project: Themed News Reader App
+12. Common Mistakes & How to Avoid Them
+13. Day 10 Checklist
+
+---
+
+# 1. Why Theming & Responsive Design Matter
+
+## The Real-World Challenge
+| Problem | Impact |
+|---|---|
+| Inconsistent colors across screens | Looks unprofessional, confuses users |
+| Hardcoded colors everywhere | Nightmare to update brand colors |
+| No dark mode support | Users complain, battery drain on OLED |
+| Pixel-based sizing only | UI breaks on tablets and foldables |
+| Missing asset optimization | Slow app startup, large APK size |
+
+## What You'll Master Today
+- Create a single source of truth for app styling
+- Toggle between light and dark themes instantly
+- Load custom fonts and SVG icons
+- Make every screen adapt to phones, tablets, and desktops
+- Build a production-ready themed app
+
+---
+
+# 2. ThemeData & ColorScheme Deep Dive
+
+## What is ThemeData?
+`ThemeData` is the configuration object that controls the visual appearance of your entire app. One change here propagates everywhere.
+
+## Basic Theme Setup
+```dart
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Themed App',
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.indigo,
+          brightness: Brightness.light,
+        ),
+      ),
+      home: const HomeScreen(),
+    );
+  }
+}
+```
+
+## ColorScheme.fromSeed (Recommended in 2026)
+Material 3's dynamic color system generates a complete palette from a single seed color.
+```dart
+ColorScheme.fromSeed(
+  seedColor: Colors.deepPurple,
+  brightness: Brightness.light,
+  // Optional overrides
+  primary: Colors.deepPurple,
+  secondary: Colors.teal,
+  error: Colors.red.shade700,
+)
+```
+
+## Complete ThemeData Configuration
+```dart
+ThemeData(
+  useMaterial3: true,
+  colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+
+  // AppBar theme
+  appBarTheme: AppBarTheme(
+    centerTitle: true,
+    elevation: 0,
+    backgroundColor: Colors.indigo,
+    foregroundColor: Colors.white,
+    titleTextStyle: const TextStyle(
+      fontSize: 20,
+      fontWeight: FontWeight.w600,
+      color: Colors.white,
+    ),
+  ),
+
+  // Card theme
+  cardTheme: CardTheme(
+    elevation: 2,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(16),
+    ),
+    margin: const EdgeInsets.all(8),
+  ),
+
+  // ElevatedButton theme
+  elevatedButtonTheme: ElevatedButtonThemeData(
+    style: ElevatedButton.styleFrom(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+    ),
+  ),
+
+  // Input decoration theme
+  inputDecorationTheme: InputDecorationTheme(
+    filled: true,
+    fillColor: Colors.grey.shade100,
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide.none,
+    ),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+  ),
+
+  // FloatingActionButton theme
+  floatingActionButtonTheme: const FloatingActionButtonThemeData(
+    elevation: 4,
+    shape: CircleBorder(),
+  ),
+
+  // Divider theme
+  dividerTheme: DividerThemeData(
+    color: Colors.grey.shade300,
+    thickness: 1,
+    space: 32,
+  ),
+
+  // Bottom navigation bar theme
+  bottomNavigationBarTheme: BottomNavigationBarThemeData(
+    type: BottomNavigationBarType.fixed,
+    selectedItemColor: Colors.indigo,
+    unselectedItemColor: Colors.grey.shade600,
+    elevation: 8,
+  ),
+)
+```
+
+## Accessing Theme in Widgets
+```dart
+// Get the current theme
+final theme = Theme.of(context);
+final colorScheme = Theme.of(context).colorScheme;
+
+// Use theme colors
+Container(
+  color: colorScheme.primary,
+  child: Text('Hello', style: TextStyle(color: colorScheme.onPrimary)),
+)
+
+// Use theme text styles
+Text('Title', style: theme.textTheme.headlineLarge)
+Text('Body', style: theme.textTheme.bodyLarge)
+```
+
+---
+
+# 3. TextTheme & Typography Mastery
+
+## Material 3 Text Scale (2026 Standard)
+| Style | Size | Weight | Usage |
+|---|---|---|---|
+| `displayLarge` | 57 | Regular | Hero text |
+| `displayMedium` | 45 | Regular | Large headlines |
+| `displaySmall` | 36 | Regular | Medium headlines |
+| `headlineLarge` | 32 | Regular | Screen titles |
+| `headlineMedium` | 28 | Regular | Section headers |
+| `headlineSmall` | 24 | Regular | Card titles |
+| `titleLarge` | 22 | Medium | App bar titles |
+| `titleMedium` | 16 | Medium | List titles |
+| `titleSmall` | 14 | Medium | Dialog titles |
+| `bodyLarge` | 16 | Regular | Primary body text |
+| `bodyMedium` | 14 | Regular | Secondary body text |
+| `bodySmall` | 12 | Regular | Captions |
+| `labelLarge` | 14 | Medium | Buttons |
+| `labelMedium` | 12 | Medium | Small buttons |
+| `labelSmall` | 11 | Medium | Overlines |
+
+## Custom TextTheme
+```dart
+textTheme: TextTheme(
+  displayLarge: GoogleFonts.poppins(fontSize: 57, fontWeight: FontWeight.w300),
+  headlineLarge: GoogleFonts.poppins(fontSize: 32, fontWeight: FontWeight.w600),
+  titleLarge: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w500),
+  bodyLarge: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w400, height: 1.5),
+  bodyMedium: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w400),
+  labelLarge: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
+),
+```
+
+## CopyWith for Local Overrides
+```dart
+Text(
+  'Important!',
+  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+    color: Colors.red,
+    fontWeight: FontWeight.bold,
+  ),
+)
+```
+
+---
+
+# 4. Dark Mode Implementation
+
+## Manual Theme Toggle with Provider (Recommended)
+
+### Step 1: Create Theme Provider
+```dart
+import 'package:flutter/material.dart';
+
+class ThemeProvider extends ChangeNotifier {
+  ThemeMode _themeMode = ThemeMode.system;
+
+  ThemeMode get themeMode => _themeMode;
+  bool get isDarkMode => _themeMode == ThemeMode.dark;
+
+  void toggleTheme(bool isDark) {
+    _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
+    notifyListeners();
+  }
+
+  void setSystemTheme() {
+    _themeMode = ThemeMode.system;
+    notifyListeners();
+  }
+}
+```
+
+### Step 2: Wrap App with ChangeNotifierProvider
+```dart
+void main() {
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => ThemeProvider(),
+      child: const MyApp(),
+    ),
+  );
+}
+```
+
+### Step 3: Configure MaterialApp
+```dart
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
+
+    return MaterialApp(
+      title: 'Adaptive Theme',
+      themeMode: themeProvider.themeMode,
+      theme: _buildLightTheme(),
+      darkTheme: _buildDarkTheme(),
+      home: const HomeScreen(),
+    );
+  }
+
+  ThemeData _buildLightTheme() {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.light,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: Colors.indigo,
+        brightness: Brightness.light,
+      ),
+      scaffoldBackgroundColor: Colors.grey.shade50,
+      cardTheme: CardTheme(
+        color: Colors.white,
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+    );
+  }
+
+  ThemeData _buildDarkTheme() {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: Colors.indigo,
+        brightness: Brightness.dark,
+      ),
+      scaffoldBackgroundColor: const Color(0xFF121212),
+      cardTheme: CardTheme(
+        color: const Color(0xFF1E1E1E),
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+    );
+  }
+}
+```
+
+### Step 4: Add Theme Toggle UI
+```dart
+class SettingsScreen extends StatelessWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final themeProvider = context.read<ThemeProvider>();
+    final isDark = context.select<ThemeProvider, bool>((p) => p.isDarkMode);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Settings')),
+      body: ListView(
+        children: [
+          SwitchListTile(
+            title: const Text('Dark Mode'),
+            subtitle: const Text('Toggle between light and dark theme'),
+            value: isDark,
+            onChanged: (value) => themeProvider.toggleTheme(value),
+          ),
+        ],
+      ),
+    );
+  }
+}
+```
+
+## Adaptive Colors (Light/Dark Safe)
+```dart
+// Instead of hardcoded colors, use the color scheme
+Container(
+  color: Theme.of(context).colorScheme.surface,
+  child: Text(
+    'Hello',
+    style: TextStyle(
+      color: Theme.of(context).colorScheme.onSurface,
+    ),
+  ),
+)
+
+// Or use adaptive colors
+Container(
+  color: Theme.of(context).brightness == Brightness.dark
+      ? Colors.grey.shade900
+      : Colors.grey.shade50,
+)
+```
+
+---
+
+# 5. Custom Fonts & Google Fonts
+
+## Using Google Fonts (Recommended)
+```yaml
+# pubspec.yaml
+dependencies:
+  google_fonts: ^6.2.1
+```
+
+```dart
+import 'package:google_fonts/google_fonts.dart';
+
+Text('Hello', style: GoogleFonts.poppins(fontSize: 24))
+Text('Body', style: GoogleFonts.inter(fontSize: 16))
+Text('Serif', style: GoogleFonts.merriweather(fontSize: 18))
+```
+
+## Using Custom Fonts (Local)
+
+### Step 1: Add fonts to project
+```
+assets/
+  fonts/
+    Poppins-Regular.ttf
+    Poppins-Bold.ttf
+    Poppins-SemiBold.ttf
+```
+
+### Step 2: Declare in pubspec.yaml
+```yaml
+flutter:
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Poppins-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Poppins-Bold.ttf
+          weight: 700
+```
+
+### Step 3: Use in Theme
+```dart
+textTheme: TextTheme(
+  headlineLarge: const TextStyle(
+    fontFamily: 'Poppins',
+    fontWeight: FontWeight.w700,
+    fontSize: 32,
+  ),
+  bodyLarge: const TextStyle(
+    fontFamily: 'Poppins',
+    fontWeight: FontWeight.w400,
+    fontSize: 16,
+  ),
+),
+```
+
+---
+
+# 6. Assets: Images, SVG & Icons
+
+## Image Assets Setup
+```yaml
+# pubspec.yaml
+flutter:
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/animations/
+```
+
+## Loading Local Images
+```dart
+// Asset image
+Image.asset('assets/images/logo.png')
+Image.asset('assets/images/banner.jpg', fit: BoxFit.cover)
+
+// With placeholder and error handling
+Image.asset(
+  'assets/images/photo.png',
+  width: 100,
+  height: 100,
+  fit: BoxFit.cover,
+  errorBuilder: (context, error, stackTrace) =>
+      const Icon(Icons.broken_image),
+)
+```
+
+## Network Images with Caching
+```yaml
+dependencies:
+  cached_network_image: ^3.4.0
+```
+
+```dart
+CachedNetworkImage(
+  imageUrl: 'https://example.com/image.jpg',
+  placeholder: (context, url) => const CircularProgressIndicator(),
+  errorWidget: (context, url, error) => const Icon(Icons.error),
+  fit: BoxFit.cover,
+)
+```
+
+## SVG Support
+```yaml
+dependencies:
+  flutter_svg: ^2.0.10
+```
+
+```dart
+import 'package:flutter_svg/flutter_svg.dart';
+
+SvgPicture.asset('assets/icons/heart.svg', width: 24, height: 24)
+SvgPicture.network('https://example.com/icon.svg')
+```
+
+## App Icons & Launcher
+```yaml
+dependencies:
+  flutter_launcher_icons: ^0.14.0
+```
+
+```yaml
+# pubspec.yaml
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/app_icon.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/app_icon_foreground.png"
+```
+
+```bash
+flutter pub run flutter_launcher_icons
+```
+
+---
+
+# 7. Responsive Design Foundations
+
+## Why Responsive Design?
+| Device | Width Range | Strategy |
+|---|---|---|
+| Small phone | 320-375dp | Compact layout |
+| Medium phone | 376-414dp | Standard layout |
+| Large phone / Foldable | 415-600dp | Expanded layout |
+| Tablet | 601-900dp | Two-pane layout |
+| Desktop | 900dp+ | Multi-column, sidebar |
+
+## Core Principles
+1. **Use relative units** — percentages, fractions, not fixed pixels
+2. **Test on multiple screen sizes** — use device preview
+3. **Breakpoints matter** — adapt layout at key widths
+4. **Orientation-aware** — landscape vs portrait layouts
+5. **Text scaling** — respect user's accessibility settings
+
+---
+
+# 8. MediaQuery, LayoutBuilder & OrientationBuilder
+
+## MediaQuery
+Access device screen dimensions, padding, and platform features.
+
+```dart
+// Screen size
+final size = MediaQuery.of(context).size;
+final width = size.width;
+final height = size.height;
+
+// Safe area padding (notch, status bar, home indicator)
+final padding = MediaQuery.of(context).padding;
+final topPadding = padding.top;
+final bottomPadding = padding.bottom;
+
+// Device pixel ratio
+final pixelRatio = MediaQuery.of(context).devicePixelRatio;
+
+// Text scale factor (accessibility)
+final textScale = MediaQuery.of(context).textScaleFactor;
+
+// Platform brightness
+final brightness = MediaQuery.of(context).platformBrightness;
+
+// Keyboard visibility
+final viewInsets = MediaQuery.of(context).viewInsets;
+final isKeyboardOpen = viewInsets.bottom > 0;
+```
+
+## LayoutBuilder
+Rebuilds based on parent constraints — perfect for responsive layouts.
+
+```dart
+LayoutBuilder(
+  builder: (context, constraints) {
+    if (constraints.maxWidth < 600) {
+      return _buildMobileLayout();
+    } else if (constraints.maxWidth < 900) {
+      return _buildTabletLayout();
+    } else {
+      return _buildDesktopLayout();
+    }
+  },
+)
+```
+
+## OrientationBuilder
+Rebuilds when device rotates.
+
+```dart
+OrientationBuilder(
+  builder: (context, orientation) {
+    return GridView.count(
+      crossAxisCount: orientation == Orientation.portrait ? 2 : 4,
+      children: [...],
+    );
+  },
+)
+```
+
+## Combined Responsive Widget
+```dart
+class ResponsiveLayout extends StatelessWidget {
+  final Widget mobile;
+  final Widget? tablet;
+  final Widget? desktop;
+
+  const ResponsiveLayout({
+    super.key,
+    required this.mobile,
+    this.tablet,
+    this.desktop,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth >= 1200 && desktop != null) {
+          return desktop!;
+        }
+        if (constraints.maxWidth >= 600 && tablet != null) {
+          return tablet!;
+        }
+        return mobile;
+      },
+    );
+  }
+}
+
+// Usage
+ResponsiveLayout(
+  mobile: const MobileHome(),
+  tablet: const TabletHome(),
+  desktop: const DesktopHome(),
+)
+```
+
+---
+
+# 9. flutter_screenutil & Responsive Frameworks
+
+## flutter_screenutil (Most Popular)
+Design on a standard screen size (e.g., 375x812 iPhone X) and scale everywhere.
+
+```yaml
+dependencies:
+  flutter_screenutil: ^5.9.3
+```
+
+```dart
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ScreenUtilInit(
+      designSize: const Size(375, 812), // Base design size
+      minTextAdapt: true,
+      splitScreenMode: true,
+      builder: (context, child) {
+        return MaterialApp(
+          title: 'Responsive App',
+          home: child,
+        );
+      },
+      child: const HomeScreen(),
+    );
+  }
+}
+
+// Usage in widgets
+Container(
+  width: 200.w,  // 200 logical pixels scaled
+  height: 100.h,
+  padding: EdgeInsets.all(16.r), // Radius-aware
+  child: Text('Hello', style: TextStyle(fontSize: 16.sp)),
+)
+```
+
+## responsive_builder (Alternative)
+```yaml
+dependencies:
+  responsive_builder: ^0.7.1
+```
+
+```dart
+ScreenTypeLayout(
+  mobile: MobileWidget(),
+  tablet: TabletWidget(),
+  desktop: DesktopWidget(),
+)
+```
+
+## Fractionally Sized Widgets (Built-in)
+```dart
+FractionallySizedBox(
+  widthFactor: 0.8, // 80% of parent width
+  child: MyWidget(),
+)
+
+AspectRatio(
+  aspectRatio: 16 / 9,
+  child: VideoPlayer(),
+)
+
+Expanded(
+  flex: 2, // Takes 2/3 of remaining space
+  child: Sidebar(),
+)
+```
+
+---
+
+# 10. Platform Adaptive UI
+
+## Platform-Specific Widgets
+```dart
+import 'dart:io' show Platform;
+import 'package:flutter/cupertino.dart';
+
+// Adaptive button
+Widget adaptiveButton({required String text, required VoidCallback onPressed}) {
+  if (Platform.isIOS) {
+    return CupertinoButton(
+      color: Colors.indigo,
+      onPressed: onPressed,
+      child: Text(text),
+    );
+  }
+  return ElevatedButton(onPressed: onPressed, child: Text(text));
+}
+
+// Adaptive dialog
+Future<bool?> showAdaptiveDialog(BuildContext context) {
+  if (Platform.isIOS) {
+    return showCupertinoDialog(
+      context: context,
+      builder: (_) => CupertinoAlertDialog(
+        title: const Text('Confirm'),
+        actions: [
+          CupertinoDialogAction(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          CupertinoDialogAction(onPressed: () => Navigator.pop(context, true), child: const Text('OK')),
+        ],
+      ),
+    );
+  }
+  return showDialog(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text('Confirm'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('OK')),
+      ],
+    ),
+  );
+}
+```
+
+## Using flutter_platform_widgets
+```yaml
+dependencies:
+  flutter_platform_widgets: ^7.0.1
+```
+
+```dart
+PlatformElevatedButton(
+  onPressed: () {},
+  child: const Text('Adaptive Button'),
+)
+
+PlatformScaffold(
+  appBar: PlatformAppBar(title: const Text('Adaptive')),
+  body: const Center(child: Text('Hello')),
+)
+```
+
+---
+
+# 11. Hands-On Project: Themed News Reader App
+
+## Project Overview
+Build a beautiful, responsive news reader app featuring:
+- Light & Dark theme toggle
+- Custom Google Fonts (Poppins + Inter)
+- Responsive grid layout (2 cols mobile, 3 cols tablet)
+- Cached network images
+- SVG icons
+- Adaptive cards with Material 3 design
+
+## Complete Code
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:provider/provider.dart';
+
+void main() {
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => ThemeProvider(),
+      child: const NewsApp(),
+    ),
+  );
+}
+
+// ============ THEME PROVIDER ============
+class ThemeProvider extends ChangeNotifier {
+  ThemeMode _themeMode = ThemeMode.system;
+
+  ThemeMode get themeMode => _themeMode;
+  bool get isDarkMode => _themeMode == ThemeMode.dark;
+
+  void toggleTheme(bool isDark) {
+    _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
+    notifyListeners();
+  }
+}
+
+// ============ APP ============
+class NewsApp extends StatelessWidget {
+  const NewsApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
+
+    return MaterialApp(
+      title: 'DailyNews',
+      debugShowCheckedModeBanner: false,
+      themeMode: themeProvider.themeMode,
+      theme: _buildLightTheme(),
+      darkTheme: _buildDarkTheme(),
+      home: const HomeScreen(),
+    );
+  }
+
+  ThemeData _buildLightTheme() {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.light,
+      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2563EB)),
+      scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+      textTheme: GoogleFonts.interTextTheme(),
+      appBarTheme: AppBarTheme(
+        centerTitle: true,
+        elevation: 0,
+        backgroundColor: const Color(0xFFF8FAFC),
+        foregroundColor: const Color(0xFF1E293B),
+        titleTextStyle: GoogleFonts.poppins(
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          color: const Color(0xFF1E293B),
+        ),
+      ),
+      cardTheme: CardTheme(
+        color: Colors.white,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: const Color(0xFFEBF5FF),
+        labelStyle: GoogleFonts.inter(
+          color: const Color(0xFF2563EB),
+          fontWeight: FontWeight.w500,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: Color(0xFF2563EB),
+        unselectedItemColor: Color(0xFF94A3B8),
+        elevation: 8,
+      ),
+    );
+  }
+
+  ThemeData _buildDarkTheme() {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color(0xFF3B82F6),
+        brightness: Brightness.dark,
+      ),
+      scaffoldBackgroundColor: const Color(0xFF0F172A),
+      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
+      appBarTheme: AppBarTheme(
+        centerTitle: true,
+        elevation: 0,
+        backgroundColor: const Color(0xFF0F172A),
+        foregroundColor: Colors.white,
+        titleTextStyle: GoogleFonts.poppins(
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          color: Colors.white,
+        ),
+      ),
+      cardTheme: CardTheme(
+        color: const Color(0xFF1E293B),
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: const Color(0xFF1E3A5F),
+        labelStyle: GoogleFonts.inter(
+          color: const Color(0xFF60A5FA),
+          fontWeight: FontWeight.w500,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: Color(0xFF0F172A),
+        selectedItemColor: Color(0xFF60A5FA),
+        unselectedItemColor: Color(0xFF64748B),
+        elevation: 8,
+      ),
+    );
+  }
+}
+
+// ============ MOCK DATA ============
+class NewsArticle {
+  final String id;
+  final String title;
+  final String excerpt;
+  final String imageUrl;
+  final String category;
+  final String author;
+  final String date;
+  final int readTime;
+
+  NewsArticle({
+    required this.id,
+    required this.title,
+    required this.excerpt,
+    required this.imageUrl,
+    required this.category,
+    required this.author,
+    required this.date,
+    required this.readTime,
+  });
+}
+
+final List<NewsArticle> mockArticles = [
+  NewsArticle(
+    id: '1',
+    title: 'Flutter 4.0 Announced: What's New in 2026',
+    excerpt: 'Google unveils major performance improvements and new rendering engine capabilities for Flutter developers worldwide.',
+    imageUrl: 'https://picsum.photos/seed/flutter1/400/250',
+    category: 'Technology',
+    author: 'Sarah Chen',
+    date: '2 hours ago',
+    readTime: 5,
+  ),
+  NewsArticle(
+    id: '2',
+    title: 'The Future of AI in Mobile Development',
+    excerpt: 'How artificial intelligence is reshaping the way we build and test mobile applications in the modern era.',
+    imageUrl: 'https://picsum.photos/seed/ai2/400/250',
+    category: 'AI',
+    author: 'James Wilson',
+    date: '4 hours ago',
+    readTime: 8,
+  ),
+  NewsArticle(
+    id: '3',
+    title: 'Sustainable Tech: Green Data Centers',
+    excerpt: 'Leading tech companies are investing billions in carbon-neutral infrastructure and renewable energy solutions.',
+    imageUrl: 'https://picsum.photos/seed/green3/400/250',
+    category: 'Environment',
+    author: 'Maria Garcia',
+    date: '6 hours ago',
+    readTime: 6,
+  ),
+  NewsArticle(
+    id: '4',
+    title: 'Remote Work Trends in 2026',
+    excerpt: 'The hybrid workplace model continues to evolve with new collaboration tools and asynchronous communication.',
+    imageUrl: 'https://picsum.photos/seed/remote4/400/250',
+    category: 'Business',
+    author: 'Alex Kumar',
+    date: '8 hours ago',
+    readTime: 4,
+  ),
+  NewsArticle(
+    id: '5',
+    title: 'SpaceX Mars Mission Update',
+    excerpt: 'Latest developments in the ambitious plan to establish the first human settlement on Mars by 2030.',
+    imageUrl: 'https://picsum.photos/seed/space5/400/250',
+    category: 'Science',
+    author: 'Dr. Emily Park',
+    date: '12 hours ago',
+    readTime: 10,
+  ),
+  NewsArticle(
+    id: '6',
+    title: 'Healthy Eating: Mediterranean Diet',
+    excerpt: 'New research confirms the Mediterranean diet as the most sustainable and heart-healthy eating pattern.',
+    imageUrl: 'https://picsum.photos/seed/food6/400/250',
+    category: 'Health',
+    author: 'Dr. Robert Lee',
+    date: '1 day ago',
+    readTime: 7,
+  ),
+];
+
+// ============ HOME SCREEN ============
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _currentIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('DailyNews', style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
+        actions: [
+          IconButton(
+            icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
+            onPressed: () {
+              final provider = context.read<ThemeProvider>();
+              provider.toggleTheme(!provider.isDarkMode);
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: _currentIndex == 0 ? const NewsFeed() : const ProfileScreen(),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.newspaper_outlined), activeIcon: Icon(Icons.newspaper), label: 'News'),
+          BottomNavigationBarItem(icon: Icon(Icons.person_outline), activeIcon: Icon(Icons.person), label: 'Profile'),
+        ],
+      ),
+    );
+  }
+}
+
+// ============ NEWS FEED ============
+class NewsFeed extends StatelessWidget {
+  const NewsFeed({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final crossAxisCount = constraints.maxWidth > 900 ? 3 : (constraints.maxWidth > 600 ? 2 : 1);
+
+        return CustomScrollView(
+          slivers: [
+            // Categories
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: SizedBox(
+                  height: 40,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    children: ['All', 'Technology', 'AI', 'Science', 'Health', 'Business']
+                        .map((cat) => Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: Chip(
+                                label: Text(cat),
+                                padding: EdgeInsets.zero,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ))
+                        .toList(),
+                  ),
+                ),
+              ),
+            ),
+
+            // Featured Article (first item, full width)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: FeaturedCard(article: mockArticles.first),
+              ),
+            ),
+
+            // Section header
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+                child: Text(
+                  'Latest Stories',
+                  style: GoogleFonts.poppins(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+
+            // Article Grid
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverGrid(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  childAspectRatio: 0.85,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final article = mockArticles[index + 1];
+                    return ArticleCard(article: article);
+                  },
+                  childCount: mockArticles.length - 1,
+                ),
+              ),
+            ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 32)),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// ============ FEATURED CARD ============
+class FeaturedCard extends StatelessWidget {
+  final NewsArticle article;
+  const FeaturedCard({super.key, required this.article});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CachedNetworkImage(
+            imageUrl: article.imageUrl,
+            height: 200,
+            width: double.infinity,
+            fit: BoxFit.cover,
+            placeholder: (context, url) => Container(
+              height: 200,
+              color: colorScheme.surfaceContainerHighest,
+              child: const Center(child: CircularProgressIndicator()),
+            ),
+            errorWidget: (context, url, error) => Container(
+              height: 200,
+              color: colorScheme.surfaceContainerHighest,
+              child: const Icon(Icons.broken_image, size: 50),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Chip(
+                  label: Text(article.category),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  article.title,
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    height: 1.3,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  article.excerpt,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    CircleAvatar(radius: 14, backgroundColor: colorScheme.primaryContainer, child: Text(article.author[0])),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        article.author,
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    Icon(Icons.access_time, size: 14, color: colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 4),
+                    Text('${article.readTime} min', style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============ ARTICLE CARD ============
+class ArticleCard extends StatelessWidget {
+  final NewsArticle article;
+  const ArticleCard({super.key, required this.article});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {},
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 3,
+              child: CachedNetworkImage(
+                imageUrl: article.imageUrl,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => Container(color: colorScheme.surfaceContainerHighest),
+                errorWidget: (_, __, ___) => Container(
+                  color: colorScheme.surfaceContainerHighest,
+                  child: const Icon(Icons.broken_image),
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 4,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      article.category.toUpperCase(),
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: colorScheme.primary,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      article.title,
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const Spacer(),
+                    Row(
+                      children: [
+                        Icon(Icons.access_time, size: 12, color: colorScheme.onSurfaceVariant),
+                        const SizedBox(width: 4),
+                        Text(article.date, style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============ PROFILE SCREEN ============
+class ProfileScreen extends StatelessWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          CircleAvatar(
+            radius: 50,
+            backgroundColor: colorScheme.primaryContainer,
+            child: Icon(Icons.person, size: 50, color: colorScheme.primary),
+          ),
+          const SizedBox(height: 16),
+          Text('John Doe', style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.w600)),
+          Text('john@dailynews.com', style: TextStyle(color: colorScheme.onSurfaceVariant)),
+          const SizedBox(height: 32),
+          _buildSettingsTile(
+            context,
+            icon: isDark ? Icons.light_mode : Icons.dark_mode,
+            title: 'Dark Mode',
+            trailing: Switch(
+              value: isDark,
+              onChanged: (value) => context.read<ThemeProvider>().toggleTheme(value),
+            ),
+          ),
+          _buildSettingsTile(context, icon: Icons.notifications_outlined, title: 'Notifications', trailing: const Icon(Icons.chevron_right)),
+          _buildSettingsTile(context, icon: Icons.bookmark_outline, title: 'Saved Articles', trailing: const Icon(Icons.chevron_right)),
+          _buildSettingsTile(context, icon: Icons.language, title: 'Language', trailing: const Icon(Icons.chevron_right)),
+          _buildSettingsTile(context, icon: Icons.help_outline, title: 'Help & Support', trailing: const Icon(Icons.chevron_right)),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () {},
+              icon: const Icon(Icons.logout),
+              label: const Text('Sign Out'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsTile(BuildContext context, {required IconData icon, required String title, required Widget trailing}) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
+        title: Text(title),
+        trailing: trailing,
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 12. Common Mistakes & How to Avoid Them
+
+## Mistake 1: Hardcoding Colors Everywhere
+```dart
+// WRONG — Impossible to maintain
+Container(color: Colors.blue)
+Text('Hello', style: TextStyle(color: Colors.black87))
+
+// CORRECT — Use theme
+Container(color: Theme.of(context).colorScheme.primary)
+Text('Hello', style: TextStyle(color: Theme.of(context).colorScheme.onSurface))
+```
+
+## Mistake 2: Not Using SafeArea
+```dart
+// WRONG — Content hidden by notch/status bar
+Scaffold(body: Column(children: [...]))
+
+// CORRECT
+Scaffold(
+  body: SafeArea(child: Column(children: [...])),
+)
+```
+
+## Mistake 3: Fixed Pixel Sizes for Everything
+```dart
+// WRONG — Breaks on tablets
+Container(width: 350, height: 200)
+Text('Title', style: TextStyle(fontSize: 24))
+
+// CORRECT — Use MediaQuery or responsive units
+Container(width: MediaQuery.of(context).size.width * 0.9)
+Text('Title', style: TextStyle(fontSize: MediaQuery.of(context).size.width * 0.06))
+```
+
+## Mistake 4: Forgetting to Add Assets in pubspec.yaml
+```yaml
+# WRONG — Images won't load
+# (missing assets section)
+
+# CORRECT
+flutter:
+  assets:
+    - assets/images/
+    - assets/icons/
+```
+
+## Mistake 5: Loading Large Images Without Caching
+```dart
+// WRONG — Reloads every time, wastes bandwidth
+Image.network('https://example.com/large_image.jpg')
+
+// CORRECT — Cache for performance
+CachedNetworkImage(imageUrl: 'https://example.com/large_image.jpg')
+```
+
+## Mistake 6: Not Testing Text Scale Factor
+```dart
+// WRONG — Text overflows when user increases font size
+Text('Long text here that might overflow on large accessibility fonts')
+
+// CORRECT — Wrap in Flexible or use auto-size text
+Flexible(child: Text('Long text here...'))
+```
+
+## Mistake 7: Theme Not Updating Across App
+```dart
+// WRONG — setState only rebuilds current widget
+setState(() => isDark = !isDark);
+
+// CORRECT — Use Provider, Riverpod, or InheritedWidget
+context.read<ThemeProvider>().toggleTheme(value);
+```
+
+---
+
+# 13. Day 10 Checklist
+
+Use this checklist to verify mastery:
+- [ ] Understands ThemeData and ColorScheme
+- [ ] Can create light and dark themes
+- [ ] Can toggle themes dynamically with Provider
+- [ ] Knows Material 3 text scale (display, headline, title, body, label)
+- [ ] Can apply custom fonts (Google Fonts and local TTF)
+- [ ] Can load and display asset images
+- [ ] Can load and cache network images (cached_network_image)
+- [ ] Can display SVG icons (flutter_svg)
+- [ ] Understands MediaQuery for screen dimensions
+- [ ] Can use LayoutBuilder for responsive breakpoints
+- [ ] Can use OrientationBuilder for portrait/landscape
+- [ ] Can implement responsive grids (1 col mobile, 2 col tablet, 3 col desktop)
+- [ ] Knows flutter_screenutil for design-size scaling
+- [ ] Can create platform-adaptive UI (Material vs Cupertino)
+- [ ] Built the Themed News Reader App with all features
+- [ ] App supports light/dark mode toggle
+- [ ] App uses custom fonts (Poppins + Inter)
+- [ ] App has responsive article grid layout
+- [ ] App uses cached network images with placeholders
+- [ ] Pushed the project to GitHub
+
+---
+
+# Key Takeaways (Memorize These!)
+
+1. **Always use `ColorScheme.fromSeed`** for Material 3 theming — one seed color generates the entire palette.
+2. **Never hardcode colors** — use `Theme.of(context).colorScheme` for light/dark compatibility.
+3. **Use `LayoutBuilder`** for responsive layouts, not just `MediaQuery` — it responds to parent constraints.
+4. **Cache network images** with `cached_network_image` — essential for performance and offline viewing.
+5. **Add assets to `pubspec.yaml`** — Flutter cannot access files not declared there.
+6. **Use `SafeArea`** on every screen — handles notches, status bars, and home indicators.
+7. **Test with text scaling** at 1.3x and 2.0x — many users need larger text.
+8. **Use `flutter_screenutil`** when your designer gives you fixed-size mockups — scales perfectly.
+9. **Separate light and dark themes** as complete `ThemeData` objects — don't just invert colors.
+10. **Use `Provider` or `Riverpod`** for theme state — `setState` won't propagate across the app.
+
+---
+
+# Extra Practice (Do These Tonight!)
+
+1. **Portfolio App:** Build a personal portfolio with light/dark mode, custom fonts, and responsive grid layout for projects.
+2. **Recipe App:** Create a recipe app with category chips, responsive card grid, and hero image transitions.
+3. **Weather Dashboard:** Design a weather app that adapts layout between phone (vertical) and tablet (side-by-side).
+4. **E-commerce Redesign:** Take the Day 9 e-commerce app and add full theming, dark mode, and responsive product grids.
+5. **Settings Screen:** Build a comprehensive settings screen with theme toggle, font size slider, notification toggles, and language selector.
+
+---
+
+**Congratulations!** You've completed Day 10. You now know how to build beautiful, themed, and responsive Flutter apps that look professional on any device. These skills separate beginner apps from production-quality ones.
+
+**Next Up → Day 11: State Management — setState & InheritedWidget**
+
+---
+
+*Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*
+*Day 10: Theming, Assets & Responsive Design — Complete Deep Dive*
+
 
 
 
