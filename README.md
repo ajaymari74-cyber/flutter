@@ -9915,6 +9915,1721 @@ Use this checklist to verify mastery:
 
 **Next Up → Day 7: Layouts & Constraints**
 
+# 📘 Day 7: Layouts & Constraints — Complete Deep Dive
+> **Goal:** Master Flutter's layout system and scrolling widgets.
+> *This guide covers constraints, scrolling, lists, grids, and page views with visual explanations and hands-on projects.*
+
+---
+
+## Table of Contents
+1. [Flutter's Layout System Explained](#1-flutters-layout-system-explained)
+2. [Box Constraints: Tight vs Loose](#2-box-constraints-tight-vs-loose)
+3. [Constraint Widgets Deep Dive](#3-constraint-widgets-deep-dive)
+4. [Scrolling Fundamentals](#4-scrolling-fundamentals)
+5. [ListView Complete Guide](#5-listview-complete-guide)
+6. [GridView Complete Guide](#6-gridview-complete-guide)
+7. [PageView & TabBarView](#7-pageview--tabbarview)
+8. [Slivers Introduction](#8-slivers-introduction)
+9. [Hands-On Project: Photo Gallery App](#9-hands-on-project-photo-gallery-app)
+10. [Common Mistakes & How to Avoid Them](#10-common-mistakes--how-to-avoid-them)
+11. [Day 7 Checklist](#11-day-7-checklist)
+
+---
+
+## 1. Flutter's Layout System Explained
+
+### How Flutter Layout Works
+
+Flutter uses a **single-pass, constraint-based layout system**. It works in two phases:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              Flutter Layout Two-Phase System                │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  PHASE 1: WALK DOWN (Constraints)                           │
+│  ────────────────────────────────                           │
+│  Parent tells child: "You must be between 100px and 300px"  │
+│                                                             │
+│       Parent (constraints: 0-400px)                         │
+│            │                                                │
+│            ▼                                                │
+│       Child (receives: 0-400px)                             │
+│            │                                                │
+│            ▼                                                │
+│       Grandchild (receives: 0-400px)                        │
+│                                                             │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  PHASE 2: WALK UP (Sizes)                                   │
+│  ─────────────────────────                                  │
+│  Child tells parent: "I choose to be 200px"                 │
+│                                                             │
+│       Parent (final size: 400px) ◄──┐                       │
+│            ▲                        │                       │
+│            │                        │                       │
+│       Child (chooses: 200px) ──────┘                       │
+│            ▲                                                │
+│            │                                                │
+│       Grandchild (chooses: 200px)                          │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### The Golden Rule of Flutter Layout
+
+> **"Constraints go down. Sizes go up. Parent sets position."**
+
+| Phase | Direction | What Happens |
+|-------|-----------|-------------|
+| **Constraints** | Top → Down | Parent passes max/min width/height to child |
+| **Sizing** | Bottom → Up | Child chooses its size within constraints |
+| **Positioning** | Top → Down | Parent positions child based on alignment |
+
+### Constraint Types
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              BoxConstraint Types                            │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  TIGHT CONSTRAINTS (exact size)                            │
+│  ┌─────────────────┐                                        │
+│  │  minW = maxW    │  → Child MUST be exactly this size    │
+│  │  minH = maxH    │                                        │
+│  └─────────────────┘                                        │
+│  Example: Container(width: 100, height: 100)               │
+│                                                             │
+│  LOOSE CONSTRAINTS (any size up to max)                    │
+│  ┌─────────────────┐                                        │
+│  │  minW = 0       │  → Child can be any size 0 to max     │
+│  │  maxW = 400     │                                        │
+│  │  minH = 0       │                                        │
+│  │  maxH = 800     │                                        │
+│  └─────────────────┘                                        │
+│  Example: Center, ListView, Column                         │
+│                                                             │
+│  UNBOUNDED CONSTRAINTS (infinite)                          │
+│  ┌─────────────────┐                                        │
+│  │  maxW = ∞       │  → Child can be ANY width             │
+│  │  maxH = ∞       │                                        │
+│  └─────────────────┘                                        │
+│  Example: Row's main axis, ListView scroll direction        │
+│                                                             │
+│  ZERO CONSTRAINTS                                          │
+│  ┌─────────────────┐                                        │
+│  │  minW = 0       │  → Child decides everything           │
+│  │  maxW = 0       │                                        │
+│  └─────────────────┘                                        │
+│  Example: OverflowBox                                      │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 2. Box Constraints: Tight vs Loose
+
+### Understanding Constraints with Code
+
+```dart
+import 'package:flutter/material.dart';
+
+void main() {
+  runApp(const ConstraintsDemoApp());
+}
+
+class ConstraintsDemoApp extends StatelessWidget {
+  const ConstraintsDemoApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        appBar: AppBar(title: const Text('Constraints Demo')),
+        body: const ConstraintsDemoScreen(),
+      ),
+    );
+  }
+}
+
+class ConstraintsDemoScreen extends StatelessWidget {
+  const ConstraintsDemoScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSection('1. Tight Constraints (Exact Size)'),
+          Container(
+            color: Colors.red.shade100,
+            width: 200,
+            height: 100,
+            child: const Center(child: Text('Exactly 200x100')),
+          ),
+
+          _buildSection('2. Loose Constraints (Max Only)'),
+          Container(
+            color: Colors.blue.shade100,
+            width: double.infinity,
+            height: 100,
+            child: Container(
+              color: Colors.blue,
+              width: 150,  // Child chooses its own size
+              height: 50,
+              child: const Center(
+                child: Text('I chose 150x50', style: TextStyle(color: Colors.white)),
+              ),
+            ),
+          ),
+
+          _buildSection('3. Unbounded Width (Row)'),
+          Container(
+            color: Colors.green.shade100,
+            height: 100,
+            child: Row(
+              children: [
+                Container(width: 80, height: 80, color: Colors.green),
+                Container(width: 80, height: 80, color: Colors.green.shade700),
+                Container(width: 80, height: 80, color: Colors.green.shade900),
+              ],
+            ),
+          ),
+
+          _buildSection('4. Bounded by Parent (Expanded)'),
+          Container(
+            color: Colors.orange.shade100,
+            height: 100,
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Container(color: Colors.orange, child: const Center(child: Text('2/3'))),
+                ),
+                Expanded(
+                  flex: 1,
+                  child: Container(color: Colors.orange.shade800, child: const Center(child: Text('1/3'))),
+                ),
+              ],
+            ),
+          ),
+
+          _buildSection('5. Infinite Height (Column in List)'),
+          Container(
+            color: Colors.purple.shade100,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(height: 50, color: Colors.purple, child: const Center(child: Text('Item 1', style: TextStyle(color: Colors.white)))),
+                Container(height: 50, color: Colors.purple.shade700, child: const Center(child: Text('Item 2', style: TextStyle(color: Colors.white)))),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSection(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 24, bottom: 8),
+      child: Text(
+        title,
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+}
+```
+
+### The "RenderBox was not laid out" Error
+
+```dart
+// ❌ WRONG — Column inside Column with unbounded height
+Column(
+  children: [
+    Column(  // Inner Column wants infinite height!
+      children: [Text('A'), Text('B')],
+    ),
+  ],
+)
+
+// ✅ CORRECT — Use mainAxisSize: MainAxisSize.min
+Column(
+  children: [
+    Column(
+      mainAxisSize: MainAxisSize.min,  // Only take needed space
+      children: [Text('A'), Text('B')],
+    ),
+  ],
+)
+
+// ✅ CORRECT — Wrap in Expanded
+Column(
+  children: [
+    Expanded(  // Takes remaining space
+      child: Column(
+        children: [Text('A'), Text('B')],
+      ),
+    ),
+  ],
+)
+```
+
+---
+
+## 3. Constraint Widgets Deep Dive
+
+### 3.1 ConstrainedBox
+
+```dart
+ConstrainedBox(
+  constraints: const BoxConstraints(
+    minWidth: 100,
+    maxWidth: 300,
+    minHeight: 50,
+    maxHeight: 200,
+  ),
+  child: Container(
+    color: Colors.blue,
+    // This child will be constrained by the parent
+    // If it tries to be 400px wide, it will be clamped to 300px
+  ),
+)
+```
+
+### 3.2 SizedBox
+
+```dart
+// Fixed size
+SizedBox(
+  width: 200,
+  height: 100,
+  child: Container(color: Colors.red),
+)
+
+// Just width
+SizedBox(width: 50, child: Divider())
+
+// Just height (common for spacing)
+SizedBox(height: 16)
+
+// Expand to fill parent
+SizedBox.expand(child: Container(color: Colors.green))
+
+// Shrink to fit child
+SizedBox.shrink(child: Container(color: Colors.yellow))
+
+// Fraction of parent size
+FractionallySizedBox(
+  widthFactor: 0.5,   // 50% of parent width
+  heightFactor: 0.3,  // 30% of parent height
+  child: Container(color: Colors.purple),
+)
+```
+
+### 3.3 AspectRatio
+
+```dart
+// Forces child to maintain a specific aspect ratio
+AspectRatio(
+  aspectRatio: 16 / 9,  // width / height
+  child: Container(
+    color: Colors.blue,
+    child: const Center(child: Text('16:9')),
+  ),
+)
+
+// Common ratios:
+// 16/9 → Widescreen video
+// 4/3  → Standard photo
+// 1/1  → Square (Instagram)
+// 9/16 → Portrait video (TikTok)
+
+// In a GridView:
+GridView.builder(
+  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+    crossAxisCount: 2,
+    childAspectRatio: 3 / 4,  // Portrait cards
+  ),
+  // ...
+)
+```
+
+### 3.4 LimitedBox
+
+```dart
+// Only applies limits when parent gives UNBOUNDED constraints
+LimitedBox(
+  maxWidth: 100,
+  maxHeight: 100,
+  child: Container(color: Colors.red),
+)
+// In bounded parent: child can be any size
+// In unbounded parent: child max is 100x100
+```
+
+### 3.5 OverflowBox & SizedOverflowBox
+
+```dart
+// Allows child to overflow parent's bounds
+OverflowBox(
+  minWidth: 0,
+  maxWidth: double.infinity,
+  minHeight: 0,
+  maxHeight: double.infinity,
+  child: Container(
+    width: 300,
+    height: 300,
+    color: Colors.red.withOpacity(0.5),
+  ),
+)
+// Child will be 300x300 even if parent is smaller!
+
+// SizedOverflowBox: parent has fixed size, child can overflow
+SizedOverflowBox(
+  size: const Size(100, 100),
+  child: Container(
+    width: 150,
+    height: 150,
+    color: Colors.blue.withOpacity(0.5),
+  ),
+)
+```
+
+### 3.6 FittedBox
+
+```dart
+// Scales child to fit within parent
+FittedBox(
+  fit: BoxFit.contain,  // See image fit options below
+  child: Container(
+    width: 300,
+    height: 200,
+    color: Colors.red,
+    child: const Text('Scaled to fit'),
+  ),
+)
+
+// BoxFit options:
+// contain  → Fit within bounds, maintain aspect ratio (letterbox)
+// cover    → Fill bounds, maintain aspect ratio (crop)
+// fill     → Fill bounds, distort aspect ratio (stretch)
+// fitWidth → Match width, scale height proportionally
+// fitHeight→ Match height, scale width proportionally
+// none     → No scaling, clip if too big
+// scaleDown→ Like contain but never scale up
+```
+
+### 3.7 LayoutBuilder
+
+```dart
+// Build different layouts based on parent constraints
+LayoutBuilder(
+  builder: (context, constraints) {
+    if (constraints.maxWidth > 600) {
+      // Tablet/Desktop layout
+      return Row(
+        children: [
+          Expanded(flex: 1, child: SideMenu()),
+          Expanded(flex: 3, child: MainContent()),
+        ],
+      );
+    } else {
+      // Mobile layout
+      return Column(
+        children: [
+          MainContent(),
+          BottomNav(),
+        ],
+      );
+    }
+  },
+)
+```
+
+### 3.8 MediaQuery
+
+```dart
+Widget build(BuildContext context) {
+  final mediaQuery = MediaQuery.of(context);
+  final size = mediaQuery.size;
+  final padding = mediaQuery.padding;
+  final orientation = mediaQuery.orientation;
+
+  return Container(
+    width: size.width * 0.8,  // 80% of screen width
+    height: size.height * 0.5, // 50% of screen height
+    padding: EdgeInsets.only(
+      top: padding.top,      // Avoid notch/status bar
+      bottom: padding.bottom, // Avoid home indicator
+    ),
+    child: orientation == Orientation.portrait
+      ? PortraitLayout()
+      : LandscapeLayout(),
+  );
+}
+```
+
+---
+
+## 4. Scrolling Fundamentals
+
+### 4.1 Why Scrolling is Special
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Without ScrollView:          With ScrollView:              │
+│  ──────────────────           ───────────────               │
+│                                                             │
+│  ┌─────────┐                 ┌─────────┐                    │
+│  │ A       │                 │ A       │ ◄── Visible       │
+│  │ B       │                 │ B       │                   │
+│  │ C       │                 │ C       │                   │
+│  │ D       │                 │ D       │                   │
+│  │ E       │                 │ E       │                   │
+│  │ F       │                 │ F       │                   │
+│  │ G       │ ◄── Overflow!  │ G       │ ◄── Scroll down   │
+│  │ H       │    (CRASH!)    │ H       │    to see         │
+│  │ I       │                 │ I       │                   │
+│  └─────────┘                 └─────────┘                   │
+│  Content too big             Content scrolls smoothly       │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 4.2 Scroll Physics
+
+```dart
+// Different scroll behaviors
+SingleChildScrollView(
+  physics: const BouncingScrollPhysics(),  // iOS-style bounce (default on iOS)
+  child: Column(children: [...]),
+)
+
+SingleChildScrollView(
+  physics: const ClampingScrollPhysics(),  // Android-style clamp (default on Android)
+  child: Column(children: [...]),
+)
+
+SingleChildScrollView(
+  physics: const NeverScrollableScrollPhysics(),  // Disable scrolling
+  child: Column(children: [...]),
+)
+
+SingleChildScrollView(
+  physics: const AlwaysScrollableScrollPhysics(),  // Always scrollable
+  child: Column(children: [...]),
+)
+```
+
+### 4.3 ScrollController
+
+```dart
+class _ScrollDemoState extends State<ScrollDemo> {
+  final ScrollController _controller = ScrollController();
+  bool _showFab = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() {
+      // Show FAB when scrolled past 200px
+      setState(() {
+        _showFab = _controller.offset > 200;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();  // Always dispose!
+    super.dispose();
+  }
+
+  void _scrollToTop() {
+    _controller.animateTo(
+      0,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: ListView.builder(
+        controller: _controller,
+        itemCount: 100,
+        itemBuilder: (context, index) => ListTile(title: Text('Item $index')),
+      ),
+      floatingActionButton: _showFab
+        ? FloatingActionButton(
+            onPressed: _scrollToTop,
+            child: const Icon(Icons.arrow_upward),
+          )
+        : null,
+    );
+  }
+}
+```
+
+---
+
+## 5. ListView Complete Guide
+
+### 5.1 ListView (Static, Small Lists)
+
+```dart
+ListView(
+  padding: const EdgeInsets.all(16),
+  scrollDirection: Axis.vertical,  // vertical or horizontal
+  reverse: false,                  // Start from bottom?
+  physics: const BouncingScrollPhysics(),
+  children: const [
+    ListTile(leading: Icon(Icons.home), title: Text('Home')),
+    ListTile(leading: Icon(Icons.settings), title: Text('Settings')),
+    ListTile(leading: Icon(Icons.person), title: Text('Profile')),
+    // ... more items
+  ],
+)
+```
+
+### 5.2 ListView.builder (Large/Dynamic Lists) ⭐
+
+```dart
+ListView.builder(
+  itemCount: 1000,  // Can be huge! Only builds visible items.
+  padding: const EdgeInsets.all(16),
+  itemBuilder: (context, index) {
+    return ListTile(
+      leading: CircleAvatar(child: Text('$index')),
+      title: Text('Item $index'),
+      subtitle: Text('Subtitle for item $index'),
+      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+      onTap: () {
+        print('Tapped item $index');
+      },
+    );
+  },
+)
+```
+
+**Why `ListView.builder` is better for large lists:**
+- Only builds widgets that are **visible on screen**
+- Destroys widgets that scroll **off screen** (memory efficient)
+- Can handle **millions of items** without lag
+
+```
+Screen shows items 5-15:
+┌─────────────────┐
+│ Item 5  ◄── Built
+│ Item 6  ◄── Built
+│ Item 7  ◄── Built
+│ ...     ◄── Built
+│ Item 15 ◄── Built
+│ Item 16 ◄── NOT built yet
+└─────────────────┘
+Items 0-4 were destroyed when they scrolled off
+```
+
+### 5.3 ListView.separated (With Dividers) ⭐
+
+```dart
+ListView.separated(
+  itemCount: 50,
+  itemBuilder: (context, index) {
+    return ListTile(
+      leading: const Icon(Icons.image),
+      title: Text('Photo ${index + 1}'),
+      subtitle: Text('Taken on ${DateTime.now().subtract(Duration(days: index)).toString().substring(0, 10)}'),
+    );
+  },
+  separatorBuilder: (context, index) {
+    return const Divider(
+      height: 1,
+      thickness: 1,
+      indent: 56,  // Align with ListTile text
+      endIndent: 16,
+    );
+  },
+)
+```
+
+### 5.4 Horizontal ListView
+
+```dart
+SizedBox(
+  height: 120,  // Must constrain height!
+  child: ListView.builder(
+    scrollDirection: Axis.horizontal,
+    itemCount: 20,
+    itemBuilder: (context, index) {
+      return Container(
+        width: 100,
+        margin: const EdgeInsets.only(right: 12),
+        decoration: BoxDecoration(
+          color: Colors.primaries[index % Colors.primaries.length],
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Center(
+          child: Text(
+            'Card $index',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+        ),
+      );
+    },
+  ),
+)
+```
+
+### 5.5 ListView with Different Item Types
+
+```dart
+ListView.builder(
+  itemCount: items.length,
+  itemBuilder: (context, index) {
+    final item = items[index];
+
+    // Different widgets for different types
+    if (item is HeaderItem) {
+      return _buildHeader(item);
+    } else if (item is MessageItem) {
+      return _buildMessage(item);
+    } else if (item is AdItem) {
+      return _buildAd(item);
+    }
+    return const SizedBox.shrink();
+  },
+)
+```
+
+### 5.6 Pull-to-Refresh (RefreshIndicator)
+
+```dart
+RefreshIndicator(
+  onRefresh: () async {
+    // Fetch new data
+    await Future.delayed(const Duration(seconds: 2));
+    setState(() {
+      items = fetchNewItems();
+    });
+  },
+  child: ListView.builder(
+    itemCount: items.length,
+    itemBuilder: (context, index) => ListTile(title: Text(items[index])),
+  ),
+)
+```
+
+---
+
+## 6. GridView Complete Guide
+
+### 6.1 GridView.count (Fixed Columns)
+
+```dart
+GridView.count(
+  crossAxisCount: 2,  // 2 columns
+  mainAxisSpacing: 16,   // Vertical gap
+  crossAxisSpacing: 16,  // Horizontal gap
+  padding: const EdgeInsets.all(16),
+  childAspectRatio: 3 / 4,  // Width / Height
+  children: List.generate(
+    20,
+    (index) => Container(
+      decoration: BoxDecoration(
+        color: Colors.primaries[index % Colors.primaries.length],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Center(
+        child: Text(
+          'Item $index',
+          style: const TextStyle(color: Colors.white, fontSize: 18),
+        ),
+      ),
+    ),
+  ),
+)
+```
+
+### 6.2 GridView.builder (Large/Dynamic Grids) ⭐
+
+```dart
+GridView.builder(
+  padding: const EdgeInsets.all(16),
+  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+    crossAxisCount: 2,
+    mainAxisSpacing: 16,
+    crossAxisSpacing: 16,
+    childAspectRatio: 3 / 4,
+  ),
+  itemCount: 1000,  // Can be huge!
+  itemBuilder: (context, index) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Container(
+              color: Colors.primaries[index % Colors.primaries.length],
+              child: const Icon(Icons.image, size: 48, color: Colors.white54),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Item $index', style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text('\$${(index + 1) * 10}', style: TextStyle(color: Colors.green.shade700)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  },
+)
+```
+
+### 6.3 GridView with Max Cross-Axis Extent
+
+```dart
+// Automatically adjusts columns based on item width
+GridView.builder(
+  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+    maxCrossAxisExtent: 150,  // Each item max 150px wide
+    mainAxisSpacing: 16,
+    crossAxisSpacing: 16,
+    childAspectRatio: 1,  // Square items
+  ),
+  itemCount: 50,
+  itemBuilder: (context, index) {
+    return Container(
+      color: Colors.primaries[index % Colors.primaries.length],
+      child: Center(child: Text('$index')),
+    );
+  },
+)
+
+// Result:
+// On narrow screen (320px): 2 columns (150px each + gap)
+// On medium screen (400px): 2 columns
+// On wide screen (600px): 4 columns
+```
+
+### 6.4 Staggered Grid (Using flutter_staggered_grid_view package)
+
+```dart
+// Add to pubspec.yaml: flutter_staggered_grid_view: ^0.7.0
+
+MasonryGridView.count(
+  crossAxisCount: 2,
+  mainAxisSpacing: 16,
+  crossAxisSpacing: 16,
+  itemCount: 20,
+  itemBuilder: (context, index) {
+    // Different heights create staggered effect
+    final height = 100 + (index % 5) * 50.0;
+    return Container(
+      height: height,
+      decoration: BoxDecoration(
+        color: Colors.primaries[index % Colors.primaries.length],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Center(child: Text('Item $index')),
+    );
+  },
+)
+```
+
+---
+
+## 7. PageView & TabBarView
+
+### 7.1 PageView
+
+```dart
+class PageViewDemo extends StatefulWidget {
+  const PageViewDemo({super.key});
+
+  @override
+  State<PageViewDemo> createState() => _PageViewDemoState();
+}
+
+class _PageViewDemoState extends State<PageViewDemo> {
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('PageView Demo')),
+      body: Column(
+        children: [
+          // Page indicator
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(3, (index) {
+              return Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 16),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _currentPage == index ? Colors.blue : Colors.grey,
+                ),
+              );
+            }),
+          ),
+
+          // PageView
+          Expanded(
+            child: PageView(
+              controller: _pageController,
+              onPageChanged: (index) {
+                setState(() => _currentPage = index);
+              },
+              // physics: const BouncingScrollPhysics(),
+              // scrollDirection: Axis.vertical,  // Can be vertical too!
+              children: const [
+                PageContent(color: Colors.red, title: 'Page 1'),
+                PageContent(color: Colors.green, title: 'Page 2'),
+                PageContent(color: Colors.blue, title: 'Page 3'),
+              ],
+            ),
+          ),
+
+          // Navigation buttons
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              ElevatedButton(
+                onPressed: () {
+                  _pageController.previousPage(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                  );
+                },
+                child: const Text('Previous'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  _pageController.nextPage(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                  );
+                },
+                child: const Text('Next'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+}
+
+class PageContent extends StatelessWidget {
+  final Color color;
+  final String title;
+  const PageContent({super.key, required this.color, required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: color.withOpacity(0.2),
+      margin: const EdgeInsets.all(16),
+      child: Center(
+        child: Text(
+          title,
+          style: TextStyle(fontSize: 32, color: color, fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
+  }
+}
+```
+
+### 7.2 PageView.builder (Dynamic Pages)
+
+```dart
+PageView.builder(
+  itemCount: 10,
+  itemBuilder: (context, index) {
+    return Container(
+      color: Colors.primaries[index % Colors.primaries.length].withOpacity(0.2),
+      child: Center(child: Text('Page $index', style: const TextStyle(fontSize: 32))),
+    );
+  },
+)
+```
+
+### 7.3 TabBar + TabBarView
+
+```dart
+class TabBarDemo extends StatelessWidget {
+  const TabBarDemo({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 3,  // Number of tabs
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('TabBar Demo'),
+          bottom: const TabBar(
+            tabs: [
+              Tab(icon: Icon(Icons.home), text: 'Home'),
+              Tab(icon: Icon(Icons.favorite), text: 'Favorites'),
+              Tab(icon: Icon(Icons.settings), text: 'Settings'),
+            ],
+            indicatorColor: Colors.white,
+            indicatorWeight: 3,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+          ),
+        ),
+        body: const TabBarView(
+          children: [
+            HomeTab(),
+            FavoritesTab(),
+            SettingsTab(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class HomeTab extends StatelessWidget {
+  const HomeTab({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      itemCount: 20,
+      itemBuilder: (context, index) => ListTile(title: Text('Home Item $index')),
+    );
+  }
+}
+
+class FavoritesTab extends StatelessWidget {
+  const FavoritesTab({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return const Center(child: Text('Favorites', style: TextStyle(fontSize: 24)));
+  }
+}
+
+class SettingsTab extends StatelessWidget {
+  const SettingsTab({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      children: const [
+        ListTile(leading: Icon(Icons.person), title: Text('Account')),
+        ListTile(leading: Icon(Icons.notifications), title: Text('Notifications')),
+        ListTile(leading: Icon(Icons.security), title: Text('Privacy')),
+        ListTile(leading: Icon(Icons.help), title: Text('Help')),
+      ],
+    );
+  }
+}
+```
+
+### 7.4 Bottom Navigation Bar with PageView
+
+```dart
+class BottomNavWithPageView extends StatefulWidget {
+  const BottomNavWithPageView({super.key});
+
+  @override
+  State<BottomNavWithPageView> createState() => _BottomNavWithPageViewState();
+}
+
+class _BottomNavWithPageViewState extends State<BottomNavWithPageView> {
+  final PageController _pageController = PageController();
+  int _currentIndex = 0;
+
+  final _pages = const [
+    HomePage(),
+    SearchPage(),
+    ProfilePage(),
+  ];
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (index) => setState(() => _currentIndex = index),
+        children: _pages,
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) {
+          _pageController.animateToPage(
+            index,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        },
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+        ],
+      ),
+    );
+  }
+}
+```
+
+---
+
+## 8. Slivers Introduction
+
+### 8.1 What are Slivers?
+
+Slivers are scrollable areas that can **scroll in special ways** — collapsing headers, parallax effects, pinned items.
+
+```dart
+CustomScrollView(
+  slivers: [
+    // Collapsing app bar
+    SliverAppBar(
+      expandedHeight: 200,
+      flexibleSpace: FlexibleSpaceBar(
+        title: const Text('Gallery'),
+        background: Image.asset('assets/header.jpg', fit: BoxFit.cover),
+      ),
+      pinned: true,  // Stays visible when collapsed
+      floating: true, // Appears when scrolling up
+    ),
+
+    // Grid in scroll view
+    SliverGrid(
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+      ),
+      delegate: SliverChildBuilderDelegate(
+        (context, index) => Container(color: Colors.primaries[index % 18]),
+        childCount: 20,
+      ),
+    ),
+
+    // List in scroll view
+    SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) => ListTile(title: Text('Item $index')),
+        childCount: 50,
+      ),
+    ),
+  ],
+)
+```
+
+### 8.2 Common Sliver Widgets
+
+```dart
+CustomScrollView(
+  slivers: [
+    // Fixed header
+    SliverToBoxAdapter(
+      child: Container(
+        height: 100,
+        color: Colors.blue,
+        child: const Center(child: Text('Header', style: TextStyle(color: Colors.white))),
+      ),
+    ),
+
+    // Pinned header
+    SliverPersistentHeader(
+      pinned: true,
+      delegate: _SliverHeaderDelegate(),
+    ),
+
+    // Padding around sliver
+    SliverPadding(
+      padding: const EdgeInsets.all(16),
+      sliver: SliverList(...),
+    ),
+
+    // Fill remaining space
+    SliverFillRemaining(
+      child: Center(child: Text('Footer')),
+    ),
+  ],
+)
+```
+
+---
+
+## 9. Hands-On Project: Photo Gallery App
+
+```dart
+import 'package:flutter/material.dart';
+
+void main() {
+  runApp(const PhotoGalleryApp());
+}
+
+class PhotoGalleryApp extends StatelessWidget {
+  const PhotoGalleryApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+        useMaterial3: true,
+      ),
+      home: const GalleryHomePage(),
+    );
+  }
+}
+
+class GalleryHomePage extends StatefulWidget {
+  const GalleryHomePage({super.key});
+
+  @override
+  State<GalleryHomePage> createState() => _GalleryHomePageState();
+}
+
+class _GalleryHomePageState extends State<GalleryHomePage> {
+  int _selectedIndex = 0;
+  final PageController _pageController = PageController();
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Photo Gallery'),
+        actions: [
+          IconButton(icon: const Icon(Icons.search), onPressed: () {}),
+          IconButton(icon: const Icon(Icons.more_vert), onPressed: () {}),
+        ],
+      ),
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (index) => setState(() => _selectedIndex = index),
+        children: const [
+          AllPhotosTab(),
+          AlbumsTab(),
+          FavoritesTab(),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (index) {
+          _pageController.jumpToPage(index);
+        },
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.photo_library), label: 'All'),
+          NavigationDestination(icon: Icon(Icons.folder), label: 'Albums'),
+          NavigationDestination(icon: Icon(Icons.favorite), label: 'Favorites'),
+        ],
+      ),
+    );
+  }
+}
+
+// Tab 1: All Photos (Grid View)
+class AllPhotosTab extends StatelessWidget {
+  const AllPhotosTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomScrollView(
+      slivers: [
+        // Horizontal featured scroll
+        SliverToBoxAdapter(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text('Featured', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              ),
+              SizedBox(
+                height: 180,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: 10,
+                  itemBuilder: (context, index) {
+                    return Container(
+                      width: 280,
+                      margin: const EdgeInsets.only(right: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.primaries[index % Colors.primaries.length],
+                        borderRadius: BorderRadius.circular(16),
+                        image: const DecorationImage(
+                          image: NetworkImage('https://picsum.photos/280/180'),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          gradient: LinearGradient(
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                            colors: [Colors.black.withOpacity(0.7), Colors.transparent],
+                          ),
+                        ),
+                        padding: const EdgeInsets.all(16),
+                        alignment: Alignment.bottomLeft,
+                        child: Text(
+                          'Photo ${index + 1}',
+                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Grid section header
+        const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16, 24, 16, 12),
+            child: Text('All Photos', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          ),
+        ),
+
+        // Photo grid
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              childAspectRatio: 1,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    color: Colors.grey.shade300,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.network(
+                          'https://picsum.photos/200/200?random=$index',
+                          fit: BoxFit.cover,
+                        ),
+                        if (index % 5 == 0)
+                          Positioned(
+                            top: 4,
+                            right: 4,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.favorite, size: 12, color: Colors.white),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+              childCount: 30,
+            ),
+          ),
+        ),
+
+        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+      ],
+    );
+  }
+}
+
+// Tab 2: Albums (List View)
+class AlbumsTab extends StatelessWidget {
+  const AlbumsTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final albums = [
+      ('Vacation 2024', 45, Colors.blue),
+      ('Family', 128, Colors.green),
+      ('Work', 32, Colors.orange),
+      ('Nature', 67, Colors.teal),
+      ('Food', 23, Colors.red),
+      ('Selfies', 89, Colors.purple),
+    ];
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: albums.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final (name, count, color) = albums[index];
+        return Container(
+          height: 100,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withOpacity(0.3)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
+                ),
+                child: const Icon(Icons.folder, color: Colors.white, size: 40),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text('$count photos', style: TextStyle(color: Colors.grey.shade600)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.grey),
+              const SizedBox(width: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// Tab 3: Favorites (Staggered/Detailed List)
+class FavoritesTab extends StatelessWidget {
+  const FavoritesTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: 15,
+      itemBuilder: (context, index) {
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Image.network(
+                  'https://picsum.photos/400/225?random=${index + 100}',
+                  fit: BoxFit.cover,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Icon(Icons.favorite, color: Colors.red),
+                    const SizedBox(width: 8),
+                    Text('Favorite Photo ${index + 1}'),
+                    const Spacer(),
+                    Text(
+                      '${DateTime.now().subtract(Duration(days: index)).toString().substring(0, 10)}',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+```
+
+---
+
+## 10. Common Mistakes & How to Avoid Them
+
+### Mistake 1: Unbounded Height in Column
+```dart
+// ❌ WRONG
+Column(
+  children: [
+    ListView(  // ListView wants infinite height!
+      children: [...],
+    ),
+  ],
+)
+
+// ✅ CORRECT — Wrap in Expanded
+Column(
+  children: [
+    Expanded(
+      child: ListView(children: [...]),
+    ),
+  ],
+)
+
+// ✅ CORRECT — Use shrinkWrap
+Column(
+  children: [
+    ListView(
+      shrinkWrap: true,  // Only take needed space
+      children: [...],
+    ),
+  ],
+)
+```
+
+### Mistake 2: Horizontal ListView Without Height
+```dart
+// ❌ WRONG
+ListView(
+  scrollDirection: Axis.horizontal,
+  children: [...],  // No height constraint = crash!
+)
+
+// ✅ CORRECT — Wrap in SizedBox
+SizedBox(
+  height: 120,
+  child: ListView(
+    scrollDirection: Axis.horizontal,
+    children: [...],
+  ),
+)
+```
+
+### Mistake 3: Not Using builder for Large Lists
+```dart
+// ❌ WRONG — Builds ALL items immediately
+ListView(
+  children: List.generate(10000, (i) => ListTile(title: Text('$i'))),
+)
+
+// ✅ CORRECT — Only builds visible items
+ListView.builder(
+  itemCount: 10000,
+  itemBuilder: (context, i) => ListTile(title: Text('$i')),
+)
+```
+
+### Mistake 4: Forgetting to Dispose ScrollController
+```dart
+// ❌ WRONG — Memory leak!
+class MyWidget extends StatefulWidget {
+  final controller = ScrollController();  // Created but never disposed!
+  // ...
+}
+
+// ✅ CORRECT
+class _MyWidgetState extends State<MyWidget> {
+  final _controller = ScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();  // Always dispose!
+    super.dispose();
+  }
+}
+```
+
+### Mistake 5: Nested Scrolling Conflicts
+```dart
+// ❌ WRONG — Nested ListViews both try to scroll
+ListView(
+  children: [
+    ListView(  // Inner ListView won't scroll!
+      shrinkWrap: true,
+      children: [...],
+    ),
+  ],
+)
+
+// ✅ CORRECT — Use physics: NeverScrollableScrollPhysics
+ListView(
+  children: [
+    ListView(
+      physics: const NeverScrollableScrollPhysics(),
+      shrinkWrap: true,
+      children: [...],
+    ),
+  ],
+)
+```
+
+### Mistake 6: GridView Without Proper Aspect Ratio
+```dart
+// ❌ WRONG — Items overflow or look weird
+GridView.count(
+  crossAxisCount: 2,
+  children: [...],  // No aspect ratio specified
+)
+
+// ✅ CORRECT — Specify aspect ratio
+GridView.count(
+  crossAxisCount: 2,
+  childAspectRatio: 3 / 4,  // Portrait cards
+  children: [...],
+)
+```
+
+### Mistake 7: Using SingleChildScrollView with Column for Long Lists
+```dart
+// ❌ WRONG — Builds all items at once
+SingleChildScrollView(
+  child: Column(
+    children: List.generate(1000, (i) => ListTile(title: Text('$i'))),
+  ),
+)
+
+// ✅ CORRECT — Use ListView.builder
+ListView.builder(
+  itemCount: 1000,
+  itemBuilder: (context, i) => ListTile(title: Text('$i')),
+)
+```
+
+### Mistake 8: PageView Without Expanded in Column
+```dart
+// ❌ WRONG — PageView needs bounded size
+Column(
+  children: [
+    PageView(  // Wants infinite height!
+      children: [...],
+    ),
+  ],
+)
+
+// ✅ CORRECT — Wrap in Expanded
+Column(
+  children: [
+    Expanded(
+      child: PageView(children: [...]),
+    ),
+  ],
+)
+```
+
+---
+
+## 11. Day 7 Checklist
+
+Use this checklist to verify mastery:
+
+- [ ] Understands Flutter's two-phase layout system (constraints down, sizes up)
+- [ ] Can explain tight vs loose vs unbounded constraints
+- [ ] Can use ConstrainedBox to limit child size
+- [ ] Can use SizedBox for fixed dimensions and spacing
+- [ ] Can use AspectRatio to maintain proportions
+- [ ] Can use FittedBox to scale children
+- [ ] Can use LayoutBuilder for responsive layouts
+- [ ] Can use MediaQuery to access screen dimensions
+- [ ] Understands scroll physics (Bouncing, Clamping, NeverScrollable)
+- [ ] Can use ScrollController to listen and control scroll position
+- [ ] Can implement pull-to-refresh with RefreshIndicator
+- [ ] Can build efficient lists with ListView.builder
+- [ ] Can add separators with ListView.separated
+- [ ] Can build horizontal scrolling lists
+- [ ] Can build grids with GridView.count and GridView.builder
+- [ ] Can use SliverGridDelegateWithMaxCrossAxisExtent for responsive grids
+- [ ] Can build page-based UIs with PageView
+- [ ] Can implement TabBar + TabBarView
+- [ ] Can combine BottomNavigationBar with PageView
+- [ ] Understands basic slivers (SliverAppBar, SliverList, SliverGrid)
+- [ ] Built the Photo Gallery App with 3 tabs (Grid, Albums, Favorites)
+- [ ] Can identify and fix common layout errors (unbounded height, overflow)
+- [ ] Pushed the project to GitHub
+
+---
+
+## 🧠 Key Takeaways (Memorize These!)
+
+1. **"Constraints go down, sizes go up, parent sets position."** This is the golden rule of Flutter layout.
+
+2. **Tight constraints = exact size.** Loose constraints = any size up to max. Unbounded = infinite.
+
+3. **Use `ListView.builder` for large lists.** It only builds visible items and destroys off-screen ones.
+
+4. **Use `ListView.separated` for lists with dividers.** Cleaner than manually adding Dividers.
+
+5. **Horizontal ListViews MUST have a bounded height.** Wrap them in SizedBox.
+
+6. **GridView needs `childAspectRatio`.** Without it, items look wrong or overflow.
+
+7. **Always dispose ScrollControllers and PageControllers.** They cause memory leaks.
+
+8. **Use `Expanded` or `shrinkWrap: true` when putting scrollable inside Column.** Otherwise you get unbounded height errors.
+
+9. **CustomScrollView + Slivers** create advanced scrolling effects like collapsing headers and parallax.
+
+10. **PageView + BottomNavigationBar** is the standard pattern for multi-screen apps with swipe navigation.
+
+---
+
+## 📚 Extra Practice (Do These Tonight!)
+
+1. **E-Commerce Product Grid:** Build a product grid with 2 columns, cards with image, title, price, and rating. Add a horizontal "Featured" scroll at the top.
+
+2. **Chat Interface:** Build a chat screen with ListView.builder showing messages. Alternate left/right alignment for sender/receiver. Add a sticky date header.
+
+3. **Settings Screen:** Build a settings page with sections (Account, Notifications, Privacy). Use ListView with different item types (headers, toggles, navigation items).
+
+4. **Onboarding Flow:** Create a 3-page onboarding using PageView with dot indicators, skip button, and "Get Started" button on the last page.
+
+5. **Photo Timeline:** Build a vertical scrolling timeline with year headers (sticky) and photo grids under each year using CustomScrollView with slivers.
+
+---
+
+> 🎉 **Congratulations!** You've completed Day 7. You now understand Flutter's constraint-based layout system, can build efficient scrolling lists and grids, and can create page-based navigation. These are the core skills for building any scrollable Flutter app.
+
+**Next Up → Day 8: Input, Forms & Validation**
+
+
 
 
 
