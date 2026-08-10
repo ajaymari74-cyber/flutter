@@ -11630,6 +11630,1585 @@ Use this checklist to verify mastery:
 **Next Up → Day 8: Input, Forms & Validation**
 
 
+# 📘 Day 8: Input, Forms & Validation — Complete Deep Dive
+> **Goal:** Handle user input professionally with TextField, forms, validation, and keyboard management.
+> *This guide covers every input widget, controller, validator pattern, and a complete registration form project.*
+
+---
+
+## Table of Contents
+1. [Why Forms Matter in Flutter](#1-why-forms-matter-in-flutter)
+2. [TextField vs TextFormField](#2-textfield-vs-textformfield)
+3. [TextEditingController Deep Dive](#3-texteditingcontroller-deep-dive)
+4. [InputDecoration Mastery](#4-inputdecoration-mastery)
+5. [FocusNode & Keyboard Management](#5-focusnode--keyboard-management)
+6. [The Form Widget & GlobalKey<FormState>](#6-the-form-widget--globalkeyformstate)
+7. [Validation Logic](#7-validation-logic)
+8. [Keyboard Types & Actions](#8-keyboard-types--actions)
+9. [Advanced Input Features](#9-advanced-input-features)
+10. [Hands-On Project: Registration Form](#10-hands-on-project-registration-form)
+11. [Common Mistakes & How to Avoid Them](#11-common-mistakes--how-to-avoid-them)
+12. [Day 8 Checklist](#12-day-8-checklist)
+
+---
+
+## 1. Why Forms Matter in Flutter
+
+### Forms Are Everywhere
+Every app collects user input:
+- 🔐 Login / Signup screens
+- 📝 Profile editing
+- 💳 Payment details
+- 🔍 Search bars
+- 💬 Chat input
+- ⚙️ Settings
+
+### The Input Challenge
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Input handling is MORE than just a text box:               │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ✓ Capture text as user types                               │
+│  ✓ Validate input (email format, password strength)         │
+│  ✓ Show error messages                                      │
+│  ✓ Manage focus (next field, done button)                   │
+│  ✓ Handle keyboard (types, actions, dismissal)              │
+│  ✓ Format input (phone numbers, credit cards)               │
+│  ✓ Show/hide password                                       │
+│  ✓ Submit form with validation                              │
+│  ✓ Clear/reset fields                                       │
+│  ✓ Accessibility (labels, hints)                            │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 2. TextField vs TextFormField
+
+### TextField — Standalone Input
+
+```dart
+// Basic TextField — good for simple inputs
+TextField(
+  decoration: const InputDecoration(
+    labelText: 'Username',
+    hintText: 'Enter your username',
+  ),
+)
+
+// TextField with controller
+TextField(
+  controller: _usernameController,
+  decoration: const InputDecoration(
+    labelText: 'Username',
+  ),
+  onChanged: (value) {
+    print('User typed: $value');
+  },
+  onSubmitted: (value) {
+    print('User submitted: $value');
+  },
+)
+```
+
+**When to use TextField:**
+- Simple one-off inputs (search bar, chat input)
+- Custom validation logic
+- Inputs outside of a form
+
+### TextFormField — Form-Aware Input ⭐
+
+```dart
+// TextFormField — integrates with Form widget
+TextFormField(
+  decoration: const InputDecoration(
+    labelText: 'Email',
+  ),
+  validator: (value) {
+    if (value == null || value.isEmpty) {
+      return 'Please enter your email';
+    }
+    if (!value.contains('@')) {
+      return 'Please enter a valid email';
+    }
+    return null;  // Valid!
+  },
+  onSaved: (value) {
+    _email = value;  // Save when form is submitted
+  },
+)
+```
+
+**When to use TextFormField:**
+- Multiple related inputs (registration, login)
+- Built-in validation with `validator`
+- Form-wide operations (validate all, save all, reset)
+
+### Comparison Table
+
+| Feature | TextField | TextFormField |
+|---------|-----------|---------------|
+| **Standalone** | ✅ Yes | ✅ Yes |
+| **Form integration** | ❌ Manual | ✅ Built-in |
+| **validator** | ❌ No | ✅ Yes |
+| **onSaved** | ❌ No | ✅ Yes |
+| **Controller** | ✅ Yes | ✅ Yes |
+| **Best for** | Simple inputs | Forms with validation |
+
+---
+
+## 3. TextEditingController Deep Dive
+
+### What is a Controller?
+
+A `TextEditingController` is the **brain** of a text field. It:
+- Reads the current text
+- Sets text programmatically
+- Listens to text changes
+- Controls selection/cursor
+
+```dart
+class _MyFormState extends State<MyForm> {
+  // Create controllers
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+
+  @override
+  void dispose() {
+    // ALWAYS dispose controllers!
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        TextField(controller: _nameController),
+        ElevatedButton(
+          onPressed: () {
+            // Read text
+            print('Name: ${_nameController.text}');
+
+            // Set text
+            _emailController.text = 'user@example.com';
+
+            // Clear text
+            _passwordController.clear();
+          },
+          child: const Text('Process'),
+        ),
+      ],
+    );
+  }
+}
+```
+
+### Controller Methods & Properties
+
+```dart
+final controller = TextEditingController();
+
+// Properties
+controller.text = 'Hello';        // Set text
+String current = controller.text; // Get text
+
+// Selection (cursor position)
+controller.selection = TextSelection(
+  baseOffset: 0,
+  extentOffset: controller.text.length,
+);  // Select all text
+
+// Move cursor to end
+controller.selection = TextSelection.collapsed(
+  offset: controller.text.length,
+);
+
+// Methods
+controller.clear();               // Empty the field
+controller.text = '';             // Same as clear()
+
+// Listener
+controller.addListener(() {
+  print('Text changed: ${controller.text}');
+});
+
+// Remove listener (in dispose)
+controller.removeListener(myListener);
+```
+
+### Initial Value Pattern
+
+```dart
+// ❌ WRONG — Don't use both initialValue and controller
+TextFormField(
+  initialValue: 'Kimi',           // ❌ Conflict!
+  controller: _nameController,    // ❌ Don't use both!
+)
+
+// ✅ CORRECT — Use controller for initial value
+@override
+void initState() {
+  super.initState();
+  _nameController = TextEditingController(text: 'Kimi');
+}
+
+// ✅ CORRECT — Use initialValue without controller
+TextFormField(
+  initialValue: 'Kimi',  // OK when no controller needed
+)
+```
+
+---
+
+## 4. InputDecoration Mastery
+
+### Complete InputDecoration
+
+```dart
+TextField(
+  decoration: InputDecoration(
+    // Label
+    labelText: 'Email Address',
+    labelStyle: TextStyle(color: Colors.grey.shade600),
+    floatingLabelStyle: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+
+    // Hint
+    hintText: 'example@email.com',
+    hintStyle: TextStyle(color: Colors.grey.shade400),
+
+    // Helper text (below field)
+    helperText: 'We will never share your email',
+    helperStyle: TextStyle(fontSize: 12),
+
+    // Error text (shown when validation fails)
+    errorText: null,  // Set by validator
+    errorStyle: TextStyle(color: Colors.red.shade700),
+    errorMaxLines: 2,
+
+    // Prefix (inside field, before text)
+    prefixIcon: const Icon(Icons.email),
+    prefixText: '+91 ',
+    prefixStyle: TextStyle(color: Colors.grey.shade700),
+
+    // Suffix (inside field, after text)
+    suffixIcon: IconButton(
+      icon: const Icon(Icons.clear),
+      onPressed: () => _controller.clear(),
+    ),
+    suffixText: '@gmail.com',
+
+    // Counter (character count)
+    counterText: '0/100',
+    counterStyle: TextStyle(fontSize: 12),
+
+    // Border styles
+    border: OutlineInputBorder(           // Default border
+      borderRadius: BorderRadius.circular(12),
+    ),
+    enabledBorder: OutlineInputBorder(     // When NOT focused
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: Colors.grey.shade300),
+    ),
+    focusedBorder: OutlineInputBorder(     // When focused
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Colors.blue, width: 2),
+    ),
+    errorBorder: OutlineInputBorder(       // When has error
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Colors.red),
+    ),
+    focusedErrorBorder: OutlineInputBorder( // Focused + error
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Colors.red, width: 2),
+    ),
+    disabledBorder: OutlineInputBorder(    // When disabled
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: Colors.grey.shade200),
+    ),
+
+    // Fill
+    filled: true,
+    fillColor: Colors.grey.shade50,
+
+    // Content padding
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+
+    // Constraints
+    constraints: const BoxConstraints(maxWidth: 400),
+
+    // Visual density
+    isDense: false,  // true = more compact
+
+    // Align label
+    alignLabelWithHint: true,
+
+    // Floating label behavior
+    floatingLabelBehavior: FloatingLabelBehavior.auto,  // auto, always, never
+  ),
+)
+```
+
+### Border Styles Visual Guide
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              Input Border Styles                            │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  UnderlineInputBorder (default for TextField)              │
+│  ───────────────────────────────────────────                │
+│  ┌─────────────────────┐                                    │
+│  │  Label              │  ← No border, just underline       │
+│  └─────────────────────┘                                    │
+│       ───────────                                           │
+│                                                             │
+│  OutlineInputBorder (default for TextFormField)            │
+│  ───────────────────────────────────────────────            │
+│  ┌─────────────────────┐                                    │
+│  │  Label              │  ← Full border around field        │
+│  └─────────────────────┘                                    │
+│                                                             │
+│  InputBorder.none                                          │
+│  ─────────────────                                         │
+│  ┌─────────────────────┐                                    │
+│  │  Label              │  ← No border at all               │
+│  └─────────────────────┘                                    │
+│                                                             │
+│  Rounded with filled background                            │
+│  ───────────────────────────────                           │
+│  ┌─────────────────────┐                                    │
+│  │  Label              │  ← Border + background color       │
+│  └─────────────────────┘                                    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Beautiful Input Styles
+
+```dart
+// Style 1: Modern Outline
+InputDecoration(
+  labelText: 'Username',
+  border: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(12),
+    borderSide: BorderSide.none,
+  ),
+  filled: true,
+  fillColor: Colors.grey.shade100,
+  prefixIcon: const Icon(Icons.person_outline),
+)
+
+// Style 2: Underline with Icon
+InputDecoration(
+  labelText: 'Email',
+  prefixIcon: const Icon(Icons.email_outlined),
+  border: const UnderlineInputBorder(),
+  focusedBorder: const UnderlineInputBorder(
+    borderSide: BorderSide(color: Colors.blue, width: 2),
+  ),
+)
+
+// Style 3: No Border (Clean)
+InputDecoration(
+  hintText: 'Search...',
+  prefixIcon: const Icon(Icons.search),
+  border: InputBorder.none,
+  filled: true,
+  fillColor: Colors.grey.shade100,
+  contentPadding: const EdgeInsets.all(16),
+)
+
+// Style 4: Rounded with Shadow (Card-like)
+InputDecoration(
+  labelText: 'Password',
+  border: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(30),
+    borderSide: BorderSide.none,
+  ),
+  filled: true,
+  fillColor: Colors.white,
+  contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+)
+```
+
+---
+
+## 5. FocusNode & Keyboard Management
+
+### What is Focus?
+
+Focus determines **which widget receives keyboard input**. Only one widget can have focus at a time.
+
+```dart
+class _FocusDemoState extends State<FocusDemo> {
+  final _nameFocus = FocusNode();
+  final _emailFocus = FocusNode();
+  final _passwordFocus = FocusNode();
+
+  @override
+  void dispose() {
+    _nameFocus.dispose();
+    _emailFocus.dispose();
+    _passwordFocus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        TextField(
+          focusNode: _nameFocus,
+          textInputAction: TextInputAction.next,
+          onSubmitted: (_) {
+            // Move focus to next field
+            FocusScope.of(context).requestFocus(_emailFocus);
+          },
+        ),
+        TextField(
+          focusNode: _emailFocus,
+          textInputAction: TextInputAction.next,
+          onSubmitted: (_) {
+            FocusScope.of(context).requestFocus(_passwordFocus);
+          },
+        ),
+        TextField(
+          focusNode: _passwordFocus,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) {
+            _submitForm();
+          },
+        ),
+      ],
+    );
+  }
+
+  void _submitForm() {
+    // Dismiss keyboard
+    FocusScope.of(context).unfocus();
+    // Process form...
+  }
+}
+```
+
+### FocusNode Methods
+
+```dart
+final focusNode = FocusNode();
+
+// Check if focused
+bool isFocused = focusNode.hasFocus;
+
+// Request focus (show keyboard)
+focusNode.requestFocus();
+
+// Unfocus (hide keyboard)
+focusNode.unfocus();
+
+// Using FocusScope
+FocusScope.of(context).requestFocus(nextFocusNode);  // Move to next
+FocusScope.of(context).unfocus();                     // Hide keyboard
+FocusScope.of(context).previousFocus();               // Move to previous
+
+// Listener
+focusNode.addListener(() {
+  if (focusNode.hasFocus) {
+    print('Field is now focused');
+  } else {
+    print('Field lost focus');
+  }
+});
+```
+
+### Dismissing Keyboard on Tap Outside
+
+```dart
+class _MyPageState extends State<MyPage> {
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Form')),
+        body: const SingleChildScrollView(
+          padding: EdgeInsets.all(16),
+          child: MyForm(),
+        ),
+      ),
+    );
+  }
+}
+```
+
+---
+
+## 6. The Form Widget & GlobalKey<FormState>
+
+### The Form Widget
+
+`Form` is a container that groups multiple `TextFormField`s and provides form-wide operations.
+
+```dart
+class _RegistrationFormState extends State<RegistrationForm> {
+  // GlobalKey gives you access to FormState
+  final _formKey = GlobalKey<FormState>();
+
+  @override
+  Widget build(BuildContext context) {
+    return Form(
+      key: _formKey,  // Connect the key
+      child: Column(
+        children: [
+          TextFormField(
+            decoration: const InputDecoration(labelText: 'Name'),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Name is required';
+              }
+              return null;
+            },
+          ),
+          TextFormField(
+            decoration: const InputDecoration(labelText: 'Email'),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Email is required';
+              }
+              return null;
+            },
+          ),
+          ElevatedButton(
+            onPressed: () {
+              // Validate ALL fields
+              if (_formKey.currentState!.validate()) {
+                // All fields valid!
+                _formKey.currentState!.save();  // Call onSaved on all fields
+                // Process data...
+              }
+            },
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+```
+
+### FormState Methods
+
+```dart
+final formKey = GlobalKey<FormState>();
+
+// Validate all fields (calls each validator)
+bool isValid = formKey.currentState!.validate();
+// Returns true if ALL validators return null
+
+// Save all fields (calls each onSaved)
+formKey.currentState!.save();
+
+// Reset all fields to initial values
+formKey.currentState!.reset();
+
+// Check if any field has been edited
+bool isDirty = formKey.currentState!.isDirty;
+```
+
+### Form with AutovalidateMode
+
+```dart
+Form(
+  key: _formKey,
+  autovalidateMode: AutovalidateMode.onUserInteraction,
+  // Options:
+  // disabled          — Never auto-validate (default)
+  // always            — Validate on every keystroke
+  // onUserInteraction — Validate after user interacts
+  child: Column(
+    children: [
+      TextFormField(
+        validator: (value) => value!.isEmpty ? 'Required' : null,
+      ),
+    ],
+  ),
+)
+```
+
+---
+
+## 7. Validation Logic
+
+### Basic Validation Patterns
+
+```dart
+// Required field
+validator: (value) {
+  if (value == null || value.trim().isEmpty) {
+    return 'This field is required';
+  }
+  return null;
+}
+
+// Minimum length
+validator: (value) {
+  if (value == null || value.length < 6) {
+    return 'Must be at least 6 characters';
+  }
+  return null;
+}
+
+// Maximum length
+validator: (value) {
+  if (value != null && value.length > 100) {
+    return 'Must be less than 100 characters';
+  }
+  return null;
+}
+
+// Email validation
+validator: (value) {
+  if (value == null || value.isEmpty) {
+    return 'Email is required';
+  }
+  final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+');
+  if (!emailRegex.hasMatch(value)) {
+    return 'Please enter a valid email';
+  }
+  return null;
+}
+
+// Phone validation
+validator: (value) {
+  if (value == null || value.isEmpty) {
+    return 'Phone is required';
+  }
+  final phoneRegex = RegExp(r'^\+?[0-9]{10,15}$');
+  if (!phoneRegex.hasMatch(value.replaceAll(RegExp(r'\s'), ''))) {
+    return 'Please enter a valid phone number';
+  }
+  return null;
+}
+
+// Password strength
+validator: (value) {
+  if (value == null || value.isEmpty) {
+    return 'Password is required';
+  }
+  if (value.length < 8) {
+    return 'Must be at least 8 characters';
+  }
+  if (!value.contains(RegExp(r'[A-Z]'))) {
+    return 'Must contain at least one uppercase letter';
+  }
+  if (!value.contains(RegExp(r'[0-9]'))) {
+    return 'Must contain at least one number';
+  }
+  if (!value.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'))) {
+    return 'Must contain at least one special character';
+  }
+  return null;
+}
+
+// Confirm password
+TextFormField(
+  controller: _confirmPasswordController,
+  validator: (value) {
+    if (value != _passwordController.text) {
+      return 'Passwords do not match';
+    }
+    return null;
+  },
+)
+```
+
+### Reusable Validator Functions
+
+```dart
+// validators.dart
+class Validators {
+  static String? required(String? value, [String fieldName = 'This field']) {
+    if (value == null || value.trim().isEmpty) {
+      return '$fieldName is required';
+    }
+    return null;
+  }
+
+  static String? email(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Email is required';
+    }
+    final regex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+    if (!regex.hasMatch(value)) {
+      return 'Please enter a valid email';
+    }
+    return null;
+  }
+
+  static String? minLength(String? value, int min, [String fieldName = '']) {
+    if (value == null || value.length < min) {
+      return '$fieldName must be at least $min characters';
+    }
+    return null;
+  }
+
+  static String? phone(String? value) {
+    if (value == null || value.isEmpty) return 'Phone is required';
+    final cleaned = value.replaceAll(RegExp(r'\D'), '');
+    if (cleaned.length < 10 || cleaned.length > 15) {
+      return 'Please enter a valid phone number';
+    }
+    return null;
+  }
+
+  static String? match(String? value, String? other, String fieldName) {
+    if (value != other) {
+      return '$fieldName does not match';
+    }
+    return null;
+  }
+}
+
+// Usage
+TextFormField(
+  validator: Validators.email,
+)
+
+TextFormField(
+  validator: (value) => Validators.minLength(value, 6, 'Password'),
+)
+```
+
+---
+
+## 8. Keyboard Types & Actions
+
+### TextInputType
+
+```dart
+TextField(
+  keyboardType: TextInputType.text,        // Default alphanumeric
+)
+
+TextField(
+  keyboardType: TextInputType.emailAddress, // Shows @ and . on keyboard
+)
+
+TextField(
+  keyboardType: TextInputType.number,       // Numeric keyboard
+)
+
+TextField(
+  keyboardType: TextInputType.phone,        // Phone keypad
+)
+
+TextField(
+  keyboardType: TextInputType.multiline,    // Multi-line with return key
+  maxLines: 5,
+)
+
+TextField(
+  keyboardType: TextInputType.url,          // Shows .com, /, etc.
+)
+
+TextField(
+  keyboardType: TextInputType.visiblePassword, // Shows all characters
+)
+
+TextField(
+  keyboardType: const TextInputType.numberWithOptions(
+    decimal: true,
+    signed: true,
+  ),  // Numbers with decimal and minus sign
+)
+```
+
+### TextInputAction
+
+```dart
+TextField(
+  textInputAction: TextInputAction.next,     // Shows "Next" button
+  onSubmitted: (_) => FocusScope.of(context).nextFocus(),
+)
+
+TextField(
+  textInputAction: TextInputAction.done,     // Shows "Done" button
+  onSubmitted: (_) => FocusScope.of(context).unfocus(),
+)
+
+TextField(
+  textInputAction: TextInputAction.search,   // Shows search icon
+  onSubmitted: (value) => performSearch(value),
+)
+
+TextField(
+  textInputAction: TextInputAction.send,     // Shows "Send" button
+)
+
+// All options:
+// done, next, previous, continueAction, send, search, go, route
+```
+
+### TextCapitalization
+
+```dart
+TextField(
+  textCapitalization: TextCapitalization.words,     // Each Word Capitalized
+)
+
+TextField(
+  textCapitalization: TextCapitalization.sentences, // First word of sentence
+)
+
+TextField(
+  textCapitalization: TextCapitalization.characters, // ALL CAPS
+)
+
+TextField(
+  textCapitalization: TextCapitalization.none,       // No auto-capitalization
+)
+```
+
+---
+
+## 9. Advanced Input Features
+
+### Password Visibility Toggle
+
+```dart
+class _PasswordFieldState extends State<PasswordField> {
+  bool _obscureText = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      obscureText: _obscureText,  // Hide/show text
+      decoration: InputDecoration(
+        labelText: 'Password',
+        prefixIcon: const Icon(Icons.lock_outline),
+        suffixIcon: IconButton(
+          icon: Icon(
+            _obscureText ? Icons.visibility_off : Icons.visibility,
+          ),
+          onPressed: () {
+            setState(() {
+              _obscureText = !_obscureText;
+            });
+          },
+        ),
+      ),
+    );
+  }
+}
+```
+
+### Input Formatters
+
+```dart
+import 'package:flutter/services.dart';
+
+TextField(
+  inputFormatters: [
+    // Only allow digits
+    FilteringTextInputFormatter.digitsOnly,
+
+    // Allow only letters
+    FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z]')),
+
+    // Deny spaces
+    FilteringTextInputFormatter.deny(RegExp(r'\s')),
+
+    // Length limit
+    LengthLimitingTextInputFormatter(10),
+
+    // Uppercase all input
+    TextInputFormatter.withFunction((oldValue, newValue) {
+      return newValue.copyWith(text: newValue.text.toUpperCase());
+    }),
+  ],
+)
+```
+
+### Credit Card Formatter
+
+```dart
+class CardNumberFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    var text = newValue.text.replaceAll(RegExp(r'\D'), '');
+    var buffer = StringBuffer();
+
+    for (int i = 0; i < text.length; i++) {
+      if (i > 0 && i % 4 == 0) buffer.write(' ');
+      buffer.write(text[i]);
+    }
+
+    return TextEditingValue(
+      text: buffer.toString(),
+      selection: TextSelection.collapsed(offset: buffer.length),
+    );
+  }
+}
+
+// Usage
+TextField(
+  keyboardType: TextInputType.number,
+  inputFormatters: [
+    CardNumberFormatter(),
+    LengthLimitingTextInputFormatter(19),  // 16 digits + 3 spaces
+  ],
+)
+// User types: 1234567890123456
+// Displays:   1234 5678 9012 3456
+```
+
+### Phone Number Formatter
+
+```dart
+class PhoneFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    var digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    if (digits.length > 10) digits = digits.substring(0, 10);
+
+    var buffer = StringBuffer();
+    if (digits.length >= 5) {
+      buffer.write('${digits.substring(0, 5)}-${digits.substring(5)}');
+    } else {
+      buffer.write(digits);
+    }
+
+    return TextEditingValue(
+      text: buffer.toString(),
+      selection: TextSelection.collapsed(offset: buffer.length),
+    );
+  }
+}
+```
+
+---
+
+## 10. Hands-On Project: Registration Form
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+void main() {
+  runApp(const RegistrationApp());
+}
+
+class RegistrationApp extends StatelessWidget {
+  const RegistrationApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+        useMaterial3: true,
+        inputDecorationTheme: InputDecorationTheme(
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          filled: true,
+          fillColor: Colors.grey.shade50,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        ),
+      ),
+      home: const RegistrationScreen(),
+    );
+  }
+}
+
+class RegistrationScreen extends StatefulWidget {
+  const RegistrationScreen({super.key});
+
+  @override
+  State<RegistrationScreen> createState() => _RegistrationScreenState();
+}
+
+class _RegistrationScreenState extends State<RegistrationScreen> {
+  final _formKey = GlobalKey<FormState>();
+
+  // Controllers
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+
+  // Focus nodes
+  final _nameFocus = FocusNode();
+  final _emailFocus = FocusNode();
+  final _phoneFocus = FocusNode();
+  final _passwordFocus = FocusNode();
+  final _confirmPasswordFocus = FocusNode();
+
+  // State
+  bool _obscurePassword = true;
+  bool _obscureConfirm = true;
+  bool _isLoading = false;
+  bool _agreeToTerms = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    _nameFocus.dispose();
+    _emailFocus.dispose();
+    _phoneFocus.dispose();
+    _passwordFocus.dispose();
+    _confirmPasswordFocus.dispose();
+    super.dispose();
+  }
+
+  void _submitForm() {
+    // Dismiss keyboard
+    FocusScope.of(context).unfocus();
+
+    // Validate form
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    if (!_agreeToTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please agree to the terms')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    // Simulate API call
+    Future.delayed(const Duration(seconds: 2), () {
+      setState(() => _isLoading = false);
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          icon: const Icon(Icons.check_circle, color: Colors.green, size: 48),
+          title: const Text('Success!'),
+          content: Text('Welcome, ${_nameController.text}! Your account has been created.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Create Account'),
+          centerTitle: true,
+        ),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Form(
+              key: _formKey,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Header
+                  const Icon(Icons.person_add, size: 64, color: Colors.indigo),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Join Us Today',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Create your account to get started',
+                    style: TextStyle(color: Colors.grey.shade600),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Name field
+                  TextFormField(
+                    controller: _nameController,
+                    focusNode: _nameFocus,
+                    textInputAction: TextInputAction.next,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(
+                      labelText: 'Full Name',
+                      prefixIcon: Icon(Icons.person_outline),
+                      hintText: 'John Doe',
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Please enter your name';
+                      }
+                      if (value.trim().length < 2) {
+                        return 'Name must be at least 2 characters';
+                      }
+                      return null;
+                    },
+                    onFieldSubmitted: (_) {
+                      FocusScope.of(context).requestFocus(_emailFocus);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Email field
+                  TextFormField(
+                    controller: _emailController,
+                    focusNode: _emailFocus,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Email Address',
+                      prefixIcon: Icon(Icons.email_outlined),
+                      hintText: 'john@example.com',
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your email';
+                      }
+                      final regex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+                      if (!regex.hasMatch(value)) {
+                        return 'Please enter a valid email';
+                      }
+                      return null;
+                    },
+                    onFieldSubmitted: (_) {
+                      FocusScope.of(context).requestFocus(_phoneFocus);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Phone field
+                  TextFormField(
+                    controller: _phoneController,
+                    focusNode: _phoneFocus,
+                    keyboardType: TextInputType.phone,
+                    textInputAction: TextInputAction.next,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(10),
+                    ],
+                    decoration: const InputDecoration(
+                      labelText: 'Phone Number',
+                      prefixIcon: Icon(Icons.phone_outlined),
+                      prefixText: '+91 ',
+                      hintText: '9876543210',
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your phone number';
+                      }
+                      if (value.length != 10) {
+                        return 'Phone number must be 10 digits';
+                      }
+                      return null;
+                    },
+                    onFieldSubmitted: (_) {
+                      FocusScope.of(context).requestFocus(_passwordFocus);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Password field
+                  TextFormField(
+                    controller: _passwordController,
+                    focusNode: _passwordFocus,
+                    obscureText: _obscurePassword,
+                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                        ),
+                        onPressed: () {
+                          setState(() => _obscurePassword = !_obscurePassword);
+                        },
+                      ),
+                      helperText: 'Min 8 chars, 1 uppercase, 1 number',
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter a password';
+                      }
+                      if (value.length < 8) {
+                        return 'Password must be at least 8 characters';
+                      }
+                      if (!value.contains(RegExp(r'[A-Z]'))) {
+                        return 'Must contain at least one uppercase letter';
+                      }
+                      if (!value.contains(RegExp(r'[0-9]'))) {
+                        return 'Must contain at least one number';
+                      }
+                      return null;
+                    },
+                    onFieldSubmitted: (_) {
+                      FocusScope.of(context).requestFocus(_confirmPasswordFocus);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Confirm password field
+                  TextFormField(
+                    controller: _confirmPasswordController,
+                    focusNode: _confirmPasswordFocus,
+                    obscureText: _obscureConfirm,
+                    textInputAction: TextInputAction.done,
+                    decoration: InputDecoration(
+                      labelText: 'Confirm Password',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscureConfirm ? Icons.visibility_off : Icons.visibility,
+                        ),
+                        onPressed: () {
+                          setState(() => _obscureConfirm = !_obscureConfirm);
+                        },
+                      ),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please confirm your password';
+                      }
+                      if (value != _passwordController.text) {
+                        return 'Passwords do not match';
+                      }
+                      return null;
+                    },
+                    onFieldSubmitted: (_) => _submitForm(),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Terms checkbox
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: _agreeToTerms,
+                        onChanged: (value) {
+                          setState(() => _agreeToTerms = value ?? false);
+                        },
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() => _agreeToTerms = !_agreeToTerms);
+                          },
+                          child: RichText(
+                            text: TextSpan(
+                              style: TextStyle(color: Colors.grey.shade700),
+                              children: [
+                                const TextSpan(text: 'I agree to the '),
+                                TextSpan(
+                                  text: 'Terms of Service',
+                                  style: const TextStyle(
+                                    color: Colors.indigo,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  recognizer: TapGestureRecognizer()
+                                    ..onTap = () {
+                                      print('Open terms');
+                                    },
+                                ),
+                                const TextSpan(text: ' and '),
+                                TextSpan(
+                                  text: 'Privacy Policy',
+                                  style: const TextStyle(
+                                    color: Colors.indigo,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Submit button
+                  SizedBox(
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _submitForm,
+                      style: ElevatedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: _isLoading
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text(
+                            'Create Account',
+                            style: TextStyle(fontSize: 16),
+                          ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Login link
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text('Already have an account?', style: TextStyle(color: Colors.grey.shade600)),
+                      TextButton(
+                        onPressed: () {},
+                        child: const Text('Sign In'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+```
+
+---
+
+## 11. Common Mistakes & How to Avoid Them
+
+### Mistake 1: Not Disposing Controllers
+```dart
+// ❌ WRONG — Memory leak!
+class MyWidget extends StatefulWidget {
+  final controller = TextEditingController();  // Never disposed!
+}
+
+// ✅ CORRECT
+class _MyWidgetState extends State<MyWidget> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+}
+```
+
+### Mistake 2: Using Both initialValue and Controller
+```dart
+// ❌ WRONG — Conflict!
+TextFormField(
+  initialValue: 'Kimi',
+  controller: _controller,
+)
+
+// ✅ CORRECT
+TextEditingController(text: 'Kimi');
+// OR
+TextFormField(initialValue: 'Kimi');  // Without controller
+```
+
+### Mistake 3: Forgetting Form Key
+```dart
+// ❌ WRONG — Can't validate or save
+Form(
+  child: Column(...),
+)
+
+// ✅ CORRECT
+final _formKey = GlobalKey<FormState>();
+
+Form(
+  key: _formKey,
+  child: Column(...),
+)
+```
+
+### Mistake 4: Not Dismissing Keyboard Before Validation
+```dart
+// ❌ WRONG — Keyboard covers error messages
+void _submit() {
+  _formKey.currentState!.validate();
+}
+
+// ✅ CORRECT
+void _submit() {
+  FocusScope.of(context).unfocus();  // Hide keyboard first
+  _formKey.currentState!.validate();
+}
+```
+
+### Mistake 5: Missing FocusNode Disposal
+```dart
+// ❌ WRONG
+final _focusNode = FocusNode();
+// Never disposed!
+
+// ✅ CORRECT
+@override
+void dispose() {
+  _focusNode.dispose();
+  super.dispose();
+}
+```
+
+### Mistake 6: Validating Without Trimming
+```dart
+// ❌ WRONG — "   " passes validation
+validator: (value) {
+  if (value == null || value.isEmpty) {
+    return 'Required';
+  }
+}
+
+// ✅ CORRECT — Trim whitespace
+validator: (value) {
+  if (value == null || value.trim().isEmpty) {
+    return 'Required';
+  }
+}
+```
+
+### Mistake 7: Not Wrapping Form in Scrollable
+```dart
+// ❌ WRONG — Keyboard covers bottom fields
+Scaffold(
+  body: Form(child: Column(children: [...])),
+)
+
+// ✅ CORRECT
+Scaffold(
+  body: SingleChildScrollView(
+    child: Form(child: Column(children: [...])),
+  ),
+)
+```
+
+### Mistake 8: Using setState in onChanged for Every Keystroke
+```dart
+// ❌ WRONG — Rebuilds entire form on every keystroke
+TextField(
+  onChanged: (value) {
+    setState(() { _text = value; });  // Expensive!
+  },
+)
+
+// ✅ CORRECT — Use controller or debounce
+TextField(
+  controller: _controller,  // No setState needed!
+)
+
+// ✅ For search, debounce input
+TextField(
+  onChanged: (value) {
+    _debounce?.cancel();
+    _debounce = Timer(Duration(milliseconds: 500), () {
+      setState(() { _searchText = value; });
+    });
+  },
+)
+```
+
+---
+
+## 12. Day 8 Checklist
+
+Use this checklist to verify mastery:
+
+- [ ] Understands difference between TextField and TextFormField
+- [ ] Can create and use TextEditingController
+- [ ] Knows all controller methods: text, selection, clear, dispose
+- [ ] Can style inputs with InputDecoration (label, hint, prefix, suffix, border)
+- [ ] Can create different border styles (outline, underline, none)
+- [ ] Can use FocusNode to manage focus between fields
+- [ ] Can dismiss keyboard with FocusScope.of(context).unfocus()
+- [ ] Can create and use Form widget with GlobalKey<FormState>
+- [ ] Can validate all fields with formKey.currentState!.validate()
+- [ ] Can save all fields with formKey.currentState!.save()
+- [ ] Can reset form with formKey.currentState!.reset()
+- [ ] Can write validators for: required, email, phone, min length, password match
+- [ ] Can create reusable validator functions
+- [ ] Can use autovalidateMode (disabled, always, onUserInteraction)
+- [ ] Knows keyboard types: text, email, number, phone, multiline, url
+- [ ] Knows textInputAction: next, done, search, send
+- [ ] Can implement password visibility toggle
+- [ ] Can use input formatters (digits only, length limit, custom)
+- [ ] Can format input (credit card, phone number)
+- [ ] Built the Registration Form with all fields
+- [ ] Form includes: name, email, phone, password, confirm password
+- [ ] Form has proper validation, focus management, and loading state
+- [ ] Can dismiss keyboard by tapping outside
+- [ ] Pushed the project to GitHub
+
+---
+
+## 🧠 Key Takeaways (Memorize These!)
+
+1. **Use TextFormField for forms, TextField for standalone inputs.** TextFormField integrates with Form widget.
+
+2. **Always dispose controllers and focus nodes.** They cause memory leaks if not disposed.
+
+3. **Never use both initialValue and controller.** Use controller with initial text instead.
+
+4. **GlobalKey<FormState> gives you form-wide control.** validate(), save(), reset() all fields at once.
+
+5. **Trim user input before validating.** "   " should not pass a "required" check.
+
+6. **Wrap forms in SingleChildScrollView.** Otherwise the keyboard covers bottom fields.
+
+7. **Use FocusScope to manage focus flow.** nextFocus() for Next button, unfocus() for Done.
+
+8. **InputFormatters are powerful.** Use them for digits-only, length limits, and custom formatting.
+
+9. **AutovalidateMode.onUserInteraction** is the sweet spot — validates after user touches the field.
+
+10. **Dismiss keyboard before showing dialogs or validating.** FocusScope.of(context).unfocus() first.
+
+---
+
+## 📚 Extra Practice (Do These Tonight!)
+
+1. **Login Screen:** Build a login form with email, password, "Remember me" checkbox, and "Forgot password" link. Include proper validation.
+
+2. **Profile Edit Form:** Create a profile editing form with avatar upload placeholder, name, bio (multiline), birthday (date picker), and gender (dropdown).
+
+3. **Payment Form:** Build a credit card form with card number (formatted), expiry date, CVV, and cardholder name. Use input formatters.
+
+4. **Search Bar with Filters:** Create a search input with dropdown filters (category, price range, sort order) and a search button.
+
+5. **Multi-Step Form:** Build a 3-step registration wizard (Personal Info → Account Details → Review) using PageView with form validation per step.
+
+---
+
+> 🎉 **Congratulations!** You've completed Day 8. You now know how to build professional forms with validation, focus management, keyboard handling, and input formatting. These skills are essential for every real-world Flutter app.
+
+**Next Up → Day 9: Navigation & Routing**
 
 
 
