@@ -21920,6 +21920,1961 @@ Use this checklist to verify mastery:
 *Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*
 *Day 14: State Management — BLoC Pattern — Complete Deep Dive*
 
+# Day 15: Local Data Persistence
+## Complete Deep Dive
+
+**Goal:** Master every local data persistence technique in Flutter — from simple key-value storage to full SQL databases and lightning-fast NoSQL. Build an offline-first Notes App with categories, search, CRUD operations, and automatic sync architecture.
+
+---
+
+# Table of Contents
+1. Why Local Persistence Matters
+2. Choosing the Right Storage Solution
+3. SharedPreferences — Simple Key-Value Storage
+4. path_provider — File System Access
+5. sqflite — SQLite Database
+6. Hive — Lightning-Fast NoSQL
+7. drift (formerly moor) — Type-Safe SQLite
+8. Secure Storage with flutter_secure_storage
+9. Architecture: Offline-First Pattern
+10. Hands-On Project: Notes Pro App
+11. Common Mistakes & How to Avoid Them
+12. Day 15 Checklist
+
+---
+
+# 1. Why Local Persistence Matters
+
+## The Offline-First Mindset
+In 2026, users expect apps to work **flawlessly without internet**. Local persistence is not optional — it's mandatory for production-grade apps.
+
+## Real-World Scenarios
+| Scenario | Storage Solution | Why |
+|---|---|---|
+| Remember login state | SharedPreferences | Simple boolean/string |
+| Cache API responses | Hive | Fast read/write, structured data |
+| User-generated content (notes, tasks) | sqflite / drift | Relational data, queries, search |
+| Store JWT tokens | flutter_secure_storage | Encrypted, OS Keychain |
+| Large files (images, PDFs) | path_provider + File IO | File system storage |
+| Complex relational data | drift | Type-safe SQL, migrations |
+
+---
+
+# 2. Choosing the Right Storage Solution
+
+## Comparison Matrix (2026 Edition)
+| Feature | SharedPreferences | sqflite | Hive | drift | Secure Storage |
+|---|---|---|---|---|---|
+| **Data Type** | Primitive only | Structured (SQL) | Structured (NoSQL) | Structured (Type-Safe SQL) | String only |
+| **Speed** | Fast | Medium | **Fastest** | Medium | Slow (encryption) |
+| **Complex Queries** | No | Yes SQL | No (basic) | Yes Type-safe SQL | No |
+| **Relations** | No | Yes Foreign Keys | No | Yes Relations | No |
+| **Encryption** | No | Manual | No | No | Yes Built-in |
+| **Type Safety** | No | No | Partial | Yes Full | No |
+| **Migrations** | N/A | Manual SQL | Automatic | Generated | N/A |
+| **Best For** | Settings, flags | Complex relational data | Simple objects, caching | Enterprise apps | Tokens, passwords |
+
+## Decision Tree
+- Simple settings (theme, onboarding flag)? -> SharedPreferences
+- JWT, API keys, passwords? -> flutter_secure_storage
+- Simple objects, cache, config? -> Hive
+- Complex relational data, search, joins? -> drift (type-safe) or sqflite (manual)
+- Large files (images, PDFs)? -> path_provider + dart:io File
+
+---
+
+# 3. SharedPreferences — Simple Key-Value Storage
+
+## Package Setup
+```yaml
+dependencies:
+  shared_preferences: ^2.2.3
+```
+
+## Complete Implementation
+```dart
+import 'package:shared_preferences/shared_preferences.dart';
+
+class SharedPrefsService {
+  static SharedPreferences? _prefs;
+
+  static Future<void> init() async {
+    _prefs = await SharedPreferences.getInstance();
+  }
+
+  static Future<bool> setString(String key, String value) async =>
+      await _prefs!.setString(key, value);
+  static String? getString(String key) => _prefs!.getString(key);
+
+  static Future<bool> setInt(String key, int value) async =>
+      await _prefs!.setInt(key, value);
+  static int? getInt(String key) => _prefs!.getInt(key);
+
+  static Future<bool> setBool(String key, bool value) async =>
+      await _prefs!.setBool(key, value);
+  static bool getBool(String key, {bool defaultValue = false}) =>
+      _prefs!.getBool(key) ?? defaultValue;
+
+  static Future<bool> setDouble(String key, double value) async =>
+      await _prefs!.setDouble(key, value);
+  static double? getDouble(String key) => _prefs!.getDouble(key);
+
+  static Future<bool> setStringList(String key, List<String> value) async =>
+      await _prefs!.setStringList(key, value);
+  static List<String>? getStringList(String key) => _prefs!.getStringList(key);
+
+  static Future<bool> remove(String key) async => await _prefs!.remove(key);
+  static Future<bool> clear() async => await _prefs!.clear();
+  static bool containsKey(String key) => _prefs!.containsKey(key);
+}
+```
+
+## Practical Usage: Theme & Onboarding
+```dart
+class AppSettings {
+  static const String _themeKey = 'app_theme';
+  static const String _onboardingKey = 'onboarding_complete';
+
+  static Future<void> setThemeMode(ThemeMode mode) async {
+    await SharedPrefsService.setString(_themeKey, mode.name);
+  }
+
+  static ThemeMode getThemeMode() {
+    final themeName = SharedPrefsService.getString(_themeKey);
+    return ThemeMode.values.firstWhere(
+      (e) => e.name == themeName,
+      orElse: () => ThemeMode.system,
+    );
+  }
+
+  static Future<void> setOnboardingComplete(bool value) async {
+    await SharedPrefsService.setBool(_onboardingKey, value);
+  }
+
+  static bool isOnboardingComplete() {
+    return SharedPrefsService.getBool(_onboardingKey);
+  }
+}
+```
+
+## Storing Complex Objects (JSON Serialization)
+```dart
+import 'dart:convert';
+
+class UserSettings {
+  final String language;
+  final bool notificationsEnabled;
+  final double fontSize;
+
+  UserSettings({this.language = 'en', this.notificationsEnabled = true, this.fontSize = 14.0});
+
+  Map<String, dynamic> toJson() => {
+    'language': language,
+    'notificationsEnabled': notificationsEnabled,
+    'fontSize': fontSize,
+  };
+
+  factory UserSettings.fromJson(Map<String, dynamic> json) => UserSettings(
+    language: json['language'] ?? 'en',
+    notificationsEnabled: json['notificationsEnabled'] ?? true,
+    fontSize: json['fontSize'] ?? 14.0,
+  );
+}
+
+// Save
+final settings = UserSettings(language: 'es', fontSize: 16.0);
+await SharedPrefsService.setString('user_settings', jsonEncode(settings.toJson()));
+
+// Read
+final jsonString = SharedPrefsService.getString('user_settings');
+if (jsonString != null) {
+  final settings = UserSettings.fromJson(jsonDecode(jsonString));
+}
+```
+
+---
+
+# 4. path_provider — File System Access
+
+## Package Setup
+```yaml
+dependencies:
+  path_provider: ^2.1.3
+```
+
+## Directory Types
+| Method | Path | Use Case | Persistent? |
+|---|---|---|---|
+| getApplicationDocumentsDirectory() | /data/data/<pkg>/app_flutter | User-generated files | Yes |
+| getApplicationSupportDirectory() | Platform-specific support dir | App support files | Yes |
+| getTemporaryDirectory() | /data/data/<pkg>/cache | Temporary files | No |
+| getExternalStorageDirectory() | /storage/emulated/0/... | Large files, media | Yes (Android) |
+| getDownloadsDirectory() | System Downloads folder | Export files | Yes |
+
+## Complete File Operations
+```dart
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
+
+class FileStorageService {
+  static Future<Directory> get _docsDir async =>
+      await getApplicationDocumentsDirectory();
+
+  static Future<File> writeTextFile(String fileName, String content) async {
+    final dir = await _docsDir;
+    return File(path.join(dir.path, fileName)).writeAsString(content);
+  }
+
+  static Future<String?> readTextFile(String fileName) async {
+    try {
+      final dir = await _docsDir;
+      return await File(path.join(dir.path, fileName)).readAsString();
+    } catch (e) { return null; }
+  }
+
+  static Future<File> writeBinaryFile(String fileName, List<int> bytes) async {
+    final dir = await _docsDir;
+    return File(path.join(dir.path, fileName)).writeAsBytes(bytes);
+  }
+
+  static Future<List<int>?> readBinaryFile(String fileName) async {
+    try {
+      final dir = await _docsDir;
+      return await File(path.join(dir.path, fileName)).readAsBytes();
+    } catch (e) { return null; }
+  }
+
+  static Future<bool> deleteFile(String fileName) async {
+    try {
+      final dir = await _docsDir;
+      await File(path.join(dir.path, fileName)).delete();
+      return true;
+    } catch (e) { return false; }
+  }
+
+  static Future<List<FileSystemEntity>> listFiles() async {
+    final dir = await _docsDir;
+    return dir.listSync();
+  }
+
+  static Future<bool> exists(String fileName) async {
+    final dir = await _docsDir;
+    return File(path.join(dir.path, fileName)).exists();
+  }
+}
+```
+
+## Export Notes to File Example
+```dart
+class NoteExporter {
+  static Future<String> exportNotesToFile(List<Note> notes) async {
+    final buffer = StringBuffer();
+    buffer.writeln('=== My Notes Export ===');
+    buffer.writeln('Exported: ${DateTime.now()}');
+    buffer.writeln('');
+
+    for (final note in notes) {
+      buffer.writeln('--- ${note.title} ---');
+      buffer.writeln('Category: ${note.category}');
+      buffer.writeln(note.content);
+      buffer.writeln('');
+    }
+
+    final fileName = 'notes_export_${DateTime.now().millisecondsSinceEpoch}.txt';
+    await FileStorageService.writeTextFile(fileName, buffer.toString());
+    return fileName;
+  }
+}
+```
+
+---
+
+# 5. sqflite — SQLite Database
+
+## Package Setup
+```yaml
+dependencies:
+  sqflite: ^2.3.3+1
+  path: ^1.9.0
+```
+
+## Database Helper (Singleton Pattern)
+```dart
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart';
+
+class DatabaseHelper {
+  static final DatabaseHelper _instance = DatabaseHelper._internal();
+  factory DatabaseHelper() => _instance;
+  DatabaseHelper._internal();
+
+  static Database? _database;
+
+  Future<Database> get database async {
+    _database ??= await _initDatabase();
+    return _database!;
+  }
+
+  Future<Database> _initDatabase() async {
+    final dbPath = await getDatabasesPath();
+    final path = join(dbPath, 'notes_pro.db');
+
+    return await openDatabase(
+      path,
+      version: 2,
+      onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
+      onDowngrade: onDatabaseDowngradeDelete,
+    );
+  }
+
+  Future<void> _onCreate(Database db, int version) async {
+    await db.execute('''
+      CREATE TABLE categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        color INTEGER NOT NULL DEFAULT 0xFF2196F3,
+        created_at TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        category_id INTEGER,
+        is_pinned INTEGER NOT NULL DEFAULT 0,
+        is_archived INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+      )
+    ''');
+
+    // Seed default categories
+    await db.insert('categories', {
+      'name': 'Personal', 'color': 0xFF2196F3,
+      'created_at': DateTime.now().toIso8601String(),
+    });
+    await db.insert('categories', {
+      'name': 'Work', 'color': 0xFF4CAF50,
+      'created_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE notes ADD COLUMN tags TEXT');
+    }
+  }
+
+  // CRUD: Categories
+  Future<int> insertCategory(Map<String, dynamic> category) async {
+    final db = await database;
+    return await db.insert('categories', category);
+  }
+
+  Future<List<Map<String, dynamic>>> getCategories() async {
+    final db = await database;
+    return await db.query('categories', orderBy: 'name ASC');
+  }
+
+  // CRUD: Notes
+  Future<int> insertNote(Map<String, dynamic> note) async {
+    final db = await database;
+    return await db.insert('notes', note);
+  }
+
+  Future<List<Map<String, dynamic>>> getNotes({
+    int? categoryId,
+    bool includeArchived = false,
+    String? searchQuery,
+    String orderBy = 'updated_at DESC',
+  }) async {
+    final db = await database;
+    String whereClause = '';
+    List<dynamic> whereArgs = [];
+
+    if (!includeArchived) whereClause = 'is_archived = 0';
+    if (categoryId != null) {
+      whereClause = whereClause.isEmpty
+          ? 'category_id = ?'
+          : '$whereClause AND category_id = ?';
+      whereArgs.add(categoryId);
+    }
+    if (searchQuery != null && searchQuery.isNotEmpty) {
+      whereClause = whereClause.isEmpty
+          ? '(title LIKE ? OR content LIKE ?)'
+          : '$whereClause AND (title LIKE ? OR content LIKE ?)';
+      whereArgs.addAll(['%$searchQuery%', '%$searchQuery%']);
+    }
+
+    return await db.query(
+      'notes',
+      where: whereClause.isEmpty ? null : whereClause,
+      whereArgs: whereArgs.isEmpty ? null : whereArgs,
+      orderBy: orderBy,
+    );
+  }
+
+  Future<int> updateNote(int id, Map<String, dynamic> note) async {
+    final db = await database;
+    return await db.update('notes', note, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> deleteNote(int id) async {
+    final db = await database;
+    return await db.delete('notes', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> archiveNote(int id, bool archive) async {
+    final db = await database;
+    return await db.update(
+      'notes',
+      {'is_archived': archive ? 1 : 0, 'updated_at': DateTime.now().toIso8601String()},
+      where: 'id = ?', whereArgs: [id],
+    );
+  }
+
+  // Advanced Queries
+  Future<List<Map<String, dynamic>>> getNotesWithCategories() async {
+    final db = await database;
+    return await db.rawQuery('''
+      SELECT notes.*, categories.name as category_name
+      FROM notes
+      LEFT JOIN categories ON notes.category_id = categories.id
+      WHERE notes.is_archived = 0
+      ORDER BY notes.is_pinned DESC, notes.updated_at DESC
+    ''');
+  }
+
+  Future<void> close() async {
+    final db = await database;
+    await db.close();
+    _database = null;
+  }
+}
+```
+
+---
+
+# 6. Hive — Lightning-Fast NoSQL
+
+## Why Hive?
+- **Fastest** local database in Flutter (written in pure Dart)
+- **Zero boilerplate** — no SQL, no migrations
+- **Type adapters** — store any Dart object directly
+- **Encrypted boxes** — built-in AES-256 encryption
+- **Lazy boxes** — load data on-demand for huge datasets
+
+## Package Setup
+```yaml
+dependencies:
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+dev_dependencies:
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.9
+```
+
+## Initialize Hive
+```dart
+import 'package:hive_flutter/hive_flutter.dart';
+
+void main() async {
+  await Hive.initFlutter();
+  Hive.registerAdapter(NoteAdapter());
+  Hive.registerAdapter(CategoryAdapter());
+  runApp(const MyApp());
+}
+```
+
+## Model with Type Adapter (Code Generation)
+```dart
+import 'package:hive/hive.dart';
+
+part 'note_model.g.dart'; // Generated by build_runner
+
+@HiveType(typeId: 0)
+class Note extends HiveObject {
+  @HiveField(0) String id;
+  @HiveField(1) String title;
+  @HiveField(2) String content;
+  @HiveField(3) String category;
+  @HiveField(4) int colorValue;
+  @HiveField(5) bool isPinned;
+  @HiveField(6) bool isArchived;
+  @HiveField(7) DateTime createdAt;
+  @HiveField(8) DateTime updatedAt;
+
+  Note({
+    required this.id,
+    required this.title,
+    this.content = '',
+    this.category = 'Personal',
+    this.colorValue = 0xFF2196F3,
+    this.isPinned = false,
+    this.isArchived = false,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  Note copyWith({
+    String? title, String? content, String? category,
+    int? colorValue, bool? isPinned, bool? isArchived, DateTime? updatedAt,
+  }) {
+    return Note(
+      id: id,
+      title: title ?? this.title,
+      content: content ?? this.content,
+      category: category ?? this.category,
+      colorValue: colorValue ?? this.colorValue,
+      isPinned: isPinned ?? this.isPinned,
+      isArchived: isArchived ?? this.isArchived,
+      createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+}
+```
+
+## Run Code Generation
+```bash
+dart run build_runner build
+```
+
+## Hive Service Layer
+```dart
+class HiveNoteService {
+  static const String _notesBoxName = 'notes';
+  static const String _categoriesBoxName = 'categories';
+
+  late Box<Note> _notesBox;
+  late Box<AppCategory> _categoriesBox;
+
+  Future<void> init() async {
+    _notesBox = await Hive.openBox<Note>(_notesBoxName);
+    _categoriesBox = await Hive.openBox<AppCategory>(_categoriesBoxName);
+
+    if (_categoriesBox.isEmpty) {
+      await _categoriesBox.putAll({
+        'personal': AppCategory(id: 'personal', name: 'Personal', colorValue: 0xFF2196F3),
+        'work': AppCategory(id: 'work', name: 'Work', colorValue: 0xFF4CAF50),
+        'ideas': AppCategory(id: 'ideas', name: 'Ideas', colorValue: 0xFFFF9800),
+      });
+    }
+  }
+
+  Future<void> addNote(Note note) async => await _notesBox.put(note.id, note);
+  Note? getNote(String id) => _notesBox.get(id);
+  Future<void> updateNote(Note note) async => await _notesBox.put(note.id, note);
+  Future<void> deleteNote(String id) async => await _notesBox.delete(id);
+
+  List<Note> getAllNotes() {
+    return _notesBox.values.where((n) => !n.isArchived).toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  }
+
+  List<Note> searchNotes(String query) {
+    final lower = query.toLowerCase();
+    return _notesBox.values
+        .where((n) => !n.isArchived &&
+            (n.title.toLowerCase().contains(lower) ||
+             n.content.toLowerCase().contains(lower)))
+        .toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  }
+
+  int get noteCount => _notesBox.values.where((n) => !n.isArchived).length;
+  List<AppCategory> getAllCategories() => _categoriesBox.values.toList();
+
+  // Encrypted Box
+  Future<Box<dynamic>> openEncryptedBox(String name) async {
+    final secureKey = Hive.generateSecureKey();
+    return await Hive.openBox(name, encryptionCipher: HiveAesCipher(secureKey));
+  }
+
+  // Lazy Box
+  Future<LazyBox<Note>> openLazyBox() async {
+    return await Hive.openLazyBox<Note>('lazy_notes');
+  }
+}
+```
+
+---
+
+# 7. drift (formerly moor) — Type-Safe SQLite
+
+## Why drift?
+- **Compile-time SQL safety** — catch query errors before running
+- **Auto-generated code** — no manual SQL string writing
+- **Migrations handled** — version control for your schema
+- **Reactive queries** — auto-refresh when data changes
+
+## Package Setup
+```yaml
+dependencies:
+  drift: ^2.18.0
+  sqlite3_flutter_libs: ^0.5.20
+
+dev_dependencies:
+  drift_dev: ^2.18.0
+  build_runner: ^2.4.9
+```
+
+## Database Definition
+```dart
+import 'package:drift/drift.dart';
+import 'package:drift_flutter/drift_flutter.dart';
+
+part 'app_database.g.dart';
+
+class Categories extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text().withLength(min: 1, max: 50)();
+  IntColumn get color => integer()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+class Notes extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get title => text().withLength(min: 1, max: 200)();
+  TextColumn get content => text().nullable()();
+  IntColumn get categoryId => integer().nullable().references(Categories, #id)();
+  BoolColumn get isPinned => boolean().withDefault(const Constant(false))();
+  BoolColumn get isArchived => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+@DriftDatabase(tables: [Categories, Notes])
+class AppDatabase extends _$AppDatabase {
+  AppDatabase() : super(_openConnection());
+
+  @override
+  int get schemaVersion => 1;
+
+  static QueryExecutor _openConnection() {
+    return driftDatabase(name: 'notes_drift_db', native: const DriftNativeOptions());
+  }
+
+  Future<List<Category>> getAllCategories() => select(categories).get();
+  Future<int> insertCategory(CategoriesCompanion category) => into(categories).insert(category);
+  Future<bool> updateCategory(Category category) => update(categories).replace(category);
+  Future<int> deleteCategory(int id) => (delete(categories)..where((c) => c.id.equals(id))).go();
+
+  Future<List<Note>> getAllNotes() =>
+      (select(notes)..where((n) => n.isArchived.equals(false))).get();
+
+  Stream<List<Note>> watchAllNotes() =>
+      (select(notes)..where((n) => n.isArchived.equals(false))).watch();
+
+  Future<List<Note>> searchNotes(String query) {
+    final lowerQuery = Variable('%${query.toLowerCase()}%');
+    return (select(notes)
+          ..where((n) => n.isArchived.equals(false) &
+              (n.title.lower().like(lowerQuery) | n.content.lower().like(lowerQuery))))
+        .get();
+  }
+
+  Future<int> insertNote(NotesCompanion note) => into(notes).insert(note);
+  Future<bool> updateNote(Note note) => update(notes).replace(note);
+  Future<int> deleteNote(int id) => (delete(notes)..where((n) => n.id.equals(id))).go();
+
+  Future<List<NoteWithCategory>> getNotesWithCategories() async {
+    final query = select(notes).join([
+      leftOuterJoin(categories, categories.id.equalsExp(notes.categoryId)),
+    ]);
+    return query.map((row) => NoteWithCategory(
+      note: row.readTable(notes),
+      category: row.readTableOrNull(categories),
+    )).get();
+  }
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (Migrator m) async {
+      await m.createAll();
+      await into(categories).insert(CategoriesCompanion.insert(name: 'Personal', color: const Value(0xFF2196F3)));
+      await into(categories).insert(CategoriesCompanion.insert(name: 'Work', color: const Value(0xFF4CAF50)));
+    },
+  );
+}
+
+class NoteWithCategory {
+  final Note note;
+  final Category? category;
+  NoteWithCategory({required this.note, this.category});
+}
+```
+
+## Run Code Generation
+```bash
+dart run build_runner build
+```
+
+---
+
+# 8. Secure Storage with flutter_secure_storage
+
+## Package Setup
+```yaml
+dependencies:
+  flutter_secure_storage: ^9.2.2
+```
+
+## Complete Implementation
+```dart
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+class SecureStorageService {
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(
+      encryptedSharedPreferences: true,
+      keyCipherAlgorithm: KeyCipherAlgorithm.RSA_ECB_PKCS1Padding,
+      storageCipherAlgorithm: StorageCipherAlgorithm.AES_GCM_NoPadding,
+    ),
+    iOptions: IOSOptions(
+      accountName: 'flutter_secure_storage_service',
+      accessibility: KeychainAccessibility.first_unlock,
+    ),
+  );
+
+  // Token Management
+  static Future<void> setAuthToken(String token) async {
+    await _storage.write(key: 'auth_token', value: token);
+  }
+
+  static Future<String?> getAuthToken() async {
+    return await _storage.read(key: 'auth_token');
+  }
+
+  static Future<void> deleteAuthToken() async {
+    await _storage.delete(key: 'auth_token');
+  }
+
+  // Refresh Token
+  static Future<void> setRefreshToken(String token) async {
+    await _storage.write(key: 'refresh_token', value: token);
+  }
+
+  static Future<String?> getRefreshToken() async {
+    return await _storage.read(key: 'refresh_token');
+  }
+
+  // API Keys
+  static Future<void> setApiKey(String key, String value) async {
+    await _storage.write(key: 'api_key_$key', value: value);
+  }
+
+  static Future<String?> getApiKey(String key) async {
+    return await _storage.read(key: 'api_key_$key');
+  }
+
+  // Clear All
+  static Future<void> clearAll() async {
+    await _storage.deleteAll();
+  }
+
+  // Check if key exists
+  static Future<bool> containsKey(String key) async {
+    return await _storage.containsKey(key: key);
+  }
+}
+```
+
+---
+
+# 9. Architecture: Offline-First Pattern
+
+## The Sync Architecture
+```
+UI Layer <---- BLoC/Riverpod <---- Repository Pattern
+                                      |
+                    +-----------------+-----------------+
+                    |                 |                 |
+                    v                 v                 v
+              Local DB          Sync Queue         Remote API
+            (Hive/sqflite)    (Pending changes)   (Firebase/REST)
+```
+
+## Repository Pattern Implementation
+```dart
+abstract class NoteRepository {
+  Future<List<Note>> getNotes();
+  Future<void> saveNote(Note note);
+  Future<void> deleteNote(String id);
+  Future<void> syncWithRemote();
+}
+
+class LocalNoteRepository implements NoteRepository {
+  final HiveNoteService _localService;
+  final NoteApiService _apiService;
+
+  LocalNoteRepository(this._localService, this._apiService);
+
+  @override
+  Future<List<Note>> getNotes() async {
+    // Always read from local first (offline-first)
+    return _localService.getAllNotes();
+  }
+
+  @override
+  Future<void> saveNote(Note note) async {
+    // 1. Save locally immediately
+    await _localService.addNote(note);
+
+    // 2. Try to sync with remote
+    try {
+      await _apiService.saveNote(note);
+    } catch (e) {
+      // 3. Queue for later sync
+      await _queueForSync(note.id, SyncAction.update);
+    }
+  }
+
+  @override
+  Future<void> deleteNote(String id) async {
+    await _localService.deleteNote(id);
+    try {
+      await _apiService.deleteNote(id);
+    } catch (e) {
+      await _queueForSync(id, SyncAction.delete);
+    }
+  }
+
+  Future<void> _queueForSync(String noteId, SyncAction action) async {
+    final pendingBox = await Hive.openBox('pending_sync');
+    await pendingBox.put(noteId, {
+      'action': action.name,
+      'timestamp': DateTime.now().toIso8601String()
+    });
+  }
+
+  @override
+  Future<void> syncWithRemote() async {
+    final pendingBox = await Hive.openBox('pending_sync');
+    final pending = pendingBox.toMap();
+
+    for (final entry in pending.entries) {
+      try {
+        final note = _localService.getNote(entry.key);
+        if (note != null) {
+          await _apiService.saveNote(note);
+          await pendingBox.delete(entry.key);
+        }
+      } catch (e) {
+        // Keep in queue for next sync attempt
+      }
+    }
+  }
+}
+
+enum SyncAction { create, update, delete }
+```
+
+---
+
+# 10. Hands-On Project: Notes Pro App
+
+## Project Overview
+Build a complete **Notes Pro** app with:
+- **Hive** for lightning-fast note storage
+- **Categories** with custom colors
+- **Full-text search** across titles and content
+- **Pin, archive, delete** with swipe actions
+- **Dark/Light theme** persistence via SharedPreferences
+- **Export notes** to text file via path_provider
+- **Beautiful UI** with Material 3 design
+
+## Complete Code
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
+import 'package:intl/intl.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Hive.initFlutter();
+  Hive.registerAdapter(NoteAdapter());
+  Hive.registerAdapter(AppCategoryAdapter());
+  await SharedPrefsService.init();
+  runApp(const NotesProApp());
+}
+
+// ============ HIVE TYPE ADAPTERS ============
+class NoteAdapter extends TypeAdapter<Note> {
+  @override final int typeId = 0;
+
+  @override
+  Note read(BinaryReader reader) {
+    return Note(
+      id: reader.readString(),
+      title: reader.readString(),
+      content: reader.readString(),
+      category: reader.readString(),
+      colorValue: reader.readInt(),
+      isPinned: reader.readBool(),
+      isArchived: reader.readBool(),
+      createdAt: DateTime.parse(reader.readString()),
+      updatedAt: DateTime.parse(reader.readString()),
+    );
+  }
+
+  @override
+  void write(BinaryWriter writer, Note obj) {
+    writer.writeString(obj.id);
+    writer.writeString(obj.title);
+    writer.writeString(obj.content);
+    writer.writeString(obj.category);
+    writer.writeInt(obj.colorValue);
+    writer.writeBool(obj.isPinned);
+    writer.writeBool(obj.isArchived);
+    writer.writeString(obj.createdAt.toIso8601String());
+    writer.writeString(obj.updatedAt.toIso8601String());
+  }
+}
+
+class AppCategoryAdapter extends TypeAdapter<AppCategory> {
+  @override final int typeId = 1;
+
+  @override
+  AppCategory read(BinaryReader reader) {
+    return AppCategory(
+      id: reader.readString(),
+      name: reader.readString(),
+      colorValue: reader.readInt(),
+    );
+  }
+
+  @override
+  void write(BinaryWriter writer, AppCategory obj) {
+    writer.writeString(obj.id);
+    writer.writeString(obj.name);
+    writer.writeInt(obj.colorValue);
+  }
+}
+
+// ============ MODELS ============
+class Note {
+  String id;
+  String title;
+  String content;
+  String category;
+  int colorValue;
+  bool isPinned;
+  bool isArchived;
+  DateTime createdAt;
+  DateTime updatedAt;
+
+  Note({
+    required this.id,
+    required this.title,
+    this.content = '',
+    this.category = 'Personal',
+    this.colorValue = 0xFF2196F3,
+    this.isPinned = false,
+    this.isArchived = false,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  Note copyWith({
+    String? title, String? content, String? category,
+    int? colorValue, bool? isPinned, bool? isArchived, DateTime? updatedAt,
+  }) {
+    return Note(
+      id: id,
+      title: title ?? this.title,
+      content: content ?? this.content,
+      category: category ?? this.category,
+      colorValue: colorValue ?? this.colorValue,
+      isPinned: isPinned ?? this.isPinned,
+      isArchived: isArchived ?? this.isArchived,
+      createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+}
+
+class AppCategory {
+  final String id;
+  final String name;
+  final int colorValue;
+  AppCategory({required this.id, required this.name, required this.colorValue});
+}
+
+// ============ SHARED PREFERENCES SERVICE ============
+class SharedPrefsService {
+  static SharedPreferences? _prefs;
+  static Future<void> init() async {
+    _prefs = await SharedPreferences.getInstance();
+  }
+  static Future<bool> setString(String key, String value) async =>
+      await _prefs!.setString(key, value);
+  static String? getString(String key) => _prefs!.getString(key);
+  static Future<bool> setBool(String key, bool value) async =>
+      await _prefs!.setBool(key, value);
+  static bool getBool(String key, {bool defaultValue = false}) =>
+      _prefs!.getBool(key) ?? defaultValue;
+}
+
+// ============ HIVE SERVICE ============
+class NotesHiveService {
+  static const String _notesBoxName = 'notes_box';
+  static const String _categoriesBoxName = 'categories_box';
+
+  late Box<Note> _notesBox;
+  late Box<AppCategory> _categoriesBox;
+
+  Future<void> init() async {
+    _notesBox = await Hive.openBox<Note>(_notesBoxName);
+    _categoriesBox = await Hive.openBox<AppCategory>(_categoriesBoxName);
+
+    if (_categoriesBox.isEmpty) {
+      await _categoriesBox.putAll({
+        'personal': AppCategory(id: 'personal', name: 'Personal', colorValue: 0xFF2196F3),
+        'work': AppCategory(id: 'work', name: 'Work', colorValue: 0xFF4CAF50),
+        'ideas': AppCategory(id: 'ideas', name: 'Ideas', colorValue: 0xFFFF9800),
+        'shopping': AppCategory(id: 'shopping', name: 'Shopping', colorValue: 0xFFE91E63),
+      });
+    }
+  }
+
+  Future<void> addNote(Note note) async => await _notesBox.put(note.id, note);
+  Note? getNote(String id) => _notesBox.get(id);
+  Future<void> updateNote(Note note) async => await _notesBox.put(note.id, note);
+  Future<void> deleteNote(String id) async => await _notesBox.delete(id);
+
+  List<Note> getAllNotes() {
+    return _notesBox.values.where((n) => !n.isArchived).toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  }
+
+  List<Note> getArchivedNotes() {
+    return _notesBox.values.where((n) => n.isArchived).toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  }
+
+  List<Note> getNotesByCategory(String category) {
+    return _notesBox.values
+        .where((n) => n.category == category && !n.isArchived).toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  }
+
+  List<Note> searchNotes(String query) {
+    final lower = query.toLowerCase();
+    return _notesBox.values
+        .where((n) => !n.isArchived &&
+            (n.title.toLowerCase().contains(lower) ||
+             n.content.toLowerCase().contains(lower)))
+        .toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  }
+
+  int get noteCount => _notesBox.values.where((n) => !n.isArchived).length;
+  int get archivedCount => _notesBox.values.where((n) => n.isArchived).length;
+
+  List<AppCategory> getAllCategories() => _categoriesBox.values.toList();
+  Future<void> addCategory(AppCategory cat) async => await _categoriesBox.put(cat.id, cat);
+  Future<void> deleteCategory(String id) async => await _categoriesBox.delete(id);
+}
+
+// ============ APP ============
+class NotesProApp extends StatefulWidget {
+  const NotesProApp({super.key});
+  @override State<NotesProApp> createState() => _NotesProAppState();
+}
+
+class _NotesProAppState extends State<NotesProApp> {
+  final _hiveService = NotesHiveService();
+  bool _isLoading = true;
+  bool _isDarkMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    await _hiveService.init();
+    final savedTheme = SharedPrefsService.getString('app_theme');
+    setState(() {
+      _isDarkMode = savedTheme == 'dark';
+      _isLoading = false;
+    });
+  }
+
+  void _toggleTheme() {
+    setState(() => _isDarkMode = !_isDarkMode);
+    SharedPrefsService.setString('app_theme', _isDarkMode ? 'dark' : 'light');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const MaterialApp(
+        home: Scaffold(body: Center(child: CircularProgressIndicator())),
+      );
+    }
+
+    return MaterialApp(
+      title: 'Notes Pro',
+      debugShowCheckedModeBanner: false,
+      themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+      ),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo, brightness: Brightness.dark),
+      ),
+      home: NotesHomeScreen(
+        hiveService: _hiveService,
+        onThemeToggle: _toggleTheme,
+        isDarkMode: _isDarkMode,
+      ),
+    );
+  }
+}
+
+// ============ HOME SCREEN ============
+class NotesHomeScreen extends StatefulWidget {
+  final NotesHiveService hiveService;
+  final VoidCallback onThemeToggle;
+  final bool isDarkMode;
+
+  const NotesHomeScreen({
+    super.key,
+    required this.hiveService,
+    required this.onThemeToggle,
+    required this.isDarkMode,
+  });
+
+  @override State<NotesHomeScreen> createState() => _NotesHomeScreenState();
+}
+
+class _NotesHomeScreenState extends State<NotesHomeScreen> {
+  final _searchController = TextEditingController();
+  String _selectedCategory = 'All';
+  bool _showArchived = false;
+  List<Note> _notes = [];
+  List<AppCategory> _categories = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  void _loadData() {
+    setState(() {
+      _categories = widget.hiveService.getAllCategories();
+      _refreshNotes();
+    });
+  }
+
+  void _refreshNotes() {
+    if (_showArchived) {
+      _notes = widget.hiveService.getArchivedNotes();
+    } else if (_searchController.text.isNotEmpty) {
+      _notes = widget.hiveService.searchNotes(_searchController.text);
+    } else if (_selectedCategory != 'All') {
+      _notes = widget.hiveService.getNotesByCategory(_selectedCategory);
+    } else {
+      _notes = widget.hiveService.getAllNotes();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Notes Pro'),
+        centerTitle: true,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: Icon(widget.isDarkMode ? Icons.light_mode : Icons.dark_mode),
+            onPressed: widget.onThemeToggle,
+          ),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'archived') {
+                setState(() { _showArchived = !_showArchived; _refreshNotes(); });
+              } else if (value == 'export') { _exportNotes(); }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'archived',
+                child: Row(children: [
+                  Icon(_showArchived ? Icons.note : Icons.archive_outlined),
+                  const SizedBox(width: 8),
+                  Text(_showArchived ? 'Active Notes' : 'Archived'),
+                ]),
+              ),
+              const PopupMenuItem(
+                value: 'export',
+                child: Row(children: [
+                  Icon(Icons.download), SizedBox(width: 8), Text('Export to File'),
+                ]),
+              ),
+            ],
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Search Bar
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search notes...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _refreshNotes());
+                        },
+                      )
+                    : null,
+                filled: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              onChanged: (_) => setState(() => _refreshNotes()),
+            ),
+          ),
+
+          // Category Chips
+          if (!_showArchived && _searchController.text.isEmpty)
+            SizedBox(
+              height: 50,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  _CategoryChip(
+                    label: 'All',
+                    color: colorScheme.primary,
+                    isSelected: _selectedCategory == 'All',
+                    onTap: () => setState(() { _selectedCategory = 'All'; _refreshNotes(); }),
+                  ),
+                  ..._categories.map((cat) => _CategoryChip(
+                    label: cat.name,
+                    color: Color(cat.colorValue),
+                    isSelected: _selectedCategory == cat.name,
+                    onTap: () => setState(() { _selectedCategory = cat.name; _refreshNotes(); }),
+                  )),
+                ],
+              ),
+            ),
+
+          // Stats Bar
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                Text(
+                  '${_notes.length} ${_showArchived ? 'archived' : 'notes'}',
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+                const Spacer(),
+                if (!_showArchived)
+                  Text(
+                    '${widget.hiveService.archivedCount} archived',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  ),
+              ],
+            ),
+          ),
+
+          // Notes List
+          Expanded(
+            child: _notes.isEmpty
+                ? _EmptyState(showArchived: _showArchived)
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _notes.length,
+                    itemBuilder: (context, index) => _NoteCard(
+                      note: _notes[index],
+                      onTap: () => _openNoteEditor(_notes[index]),
+                      onPin: () => _togglePin(_notes[index]),
+                      onArchive: () => _toggleArchive(_notes[index]),
+                      onDelete: () => _deleteNote(_notes[index]),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openNoteEditor(null),
+        icon: const Icon(Icons.add),
+        label: const Text('New Note'),
+      ),
+    );
+  }
+
+  void _openNoteEditor(Note? note) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => NoteEditorScreen(
+          note: note,
+          hiveService: widget.hiveService,
+          categories: _categories,
+        ),
+      ),
+    );
+    if (result == true) _loadData();
+  }
+
+  void _togglePin(Note note) async {
+    final updated = note.copyWith(isPinned: !note.isPinned, updatedAt: DateTime.now());
+    await widget.hiveService.updateNote(updated);
+    _loadData();
+  }
+
+  void _toggleArchive(Note note) async {
+    final updated = note.copyWith(isArchived: !note.isArchived, updatedAt: DateTime.now());
+    await widget.hiveService.updateNote(updated);
+    _loadData();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(note.isArchived ? 'Note restored' : 'Note archived'),
+        action: SnackBarAction(
+          label: 'UNDO',
+          onPressed: () => _toggleArchive(updated),
+        ),
+      ),
+    );
+  }
+
+  void _deleteNote(Note note) async {
+    await widget.hiveService.deleteNote(note.id);
+    _loadData();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Note deleted permanently')),
+    );
+  }
+
+  Future<void> _exportNotes() async {
+    final allNotes = widget.hiveService.getAllNotes();
+    final buffer = StringBuffer();
+    buffer.writeln('=== Notes Pro Export ===');
+    buffer.writeln('Date: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}');
+    buffer.writeln('Total Notes: ${allNotes.length}');
+    buffer.writeln('');
+
+    for (final note in allNotes) {
+      buffer.writeln('--- ${note.title} ---');
+      buffer.writeln('Category: ${note.category}');
+      buffer.writeln('Created: ${DateFormat('yyyy-MM-dd').format(note.createdAt)}');
+      buffer.writeln(note.content);
+      buffer.writeln('');
+    }
+
+    final dir = await getApplicationDocumentsDirectory();
+    final fileName = 'notes_export_${DateTime.now().millisecondsSinceEpoch}.txt';
+    final file = File('${dir.path}/$fileName');
+    await file.writeAsString(buffer.toString());
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Exported to: $fileName')),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+}
+
+// ============ CATEGORY CHIP ============
+class _CategoryChip extends StatelessWidget {
+  final String label;
+  final Color color;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _CategoryChip({
+    required this.label,
+    required this.color,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? color : color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: color.withOpacity(0.3)),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? Colors.white : color,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============ NOTE CARD ============
+class _NoteCard extends StatelessWidget {
+  final Note note;
+  final VoidCallback onTap;
+  final VoidCallback onPin;
+  final VoidCallback onArchive;
+  final VoidCallback onDelete;
+
+  const _NoteCard({
+    required this.note,
+    required this.onTap,
+    required this.onPin,
+    required this.onArchive,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final categoryColor = Color(note.colorValue);
+
+    return Dismissible(
+      key: Key(note.id),
+      direction: DismissDirection.horizontal,
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.startToEnd) {
+          onArchive();
+          return false;
+        }
+        return true;
+      },
+      background: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Colors.orange.shade100,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 20),
+        child: Icon(Icons.archive_outlined, color: Colors.orange.shade700),
+      ),
+      secondaryBackground: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Colors.red.shade100,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        child: Icon(Icons.delete_outline, color: Colors.red.shade700),
+      ),
+      onDismissed: (_) => onDelete(),
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: Colors.grey.shade200),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border(left: BorderSide(color: categoryColor, width: 4)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        note.title,
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (note.isPinned)
+                      Icon(Icons.push_pin, size: 18, color: categoryColor),
+                  ],
+                ),
+                if (note.content.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    note.content,
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: categoryColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        note.category,
+                        style: TextStyle(color: categoryColor, fontSize: 11, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      DateFormat('MMM d').format(note.updatedAt),
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============ EMPTY STATE ============
+class _EmptyState extends StatelessWidget {
+  final bool showArchived;
+  const _EmptyState({required this.showArchived});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            showArchived ? Icons.archive_outlined : Icons.note_add_outlined,
+            size: 80,
+            color: Colors.grey.shade400,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            showArchived ? 'No archived notes' : 'No notes yet',
+            style: TextStyle(fontSize: 18, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            showArchived
+                ? 'Archive notes to see them here'
+                : 'Tap the + button to create your first note',
+            style: TextStyle(color: Colors.grey.shade500),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============ NOTE EDITOR SCREEN ============
+class NoteEditorScreen extends StatefulWidget {
+  final Note? note;
+  final NotesHiveService hiveService;
+  final List<AppCategory> categories;
+
+  const NoteEditorScreen({
+    super.key,
+    this.note,
+    required this.hiveService,
+    required this.categories,
+  });
+
+  @override State<NoteEditorScreen> createState() => _NoteEditorScreenState();
+}
+
+class _NoteEditorScreenState extends State<NoteEditorScreen> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _contentController;
+  late String _selectedCategory;
+  late int _selectedColor;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.note?.title ?? '');
+    _contentController = TextEditingController(text: widget.note?.content ?? '');
+    _selectedCategory = widget.note?.category ?? 'Personal';
+    _selectedColor = widget.note?.colorValue ?? 0xFF2196F3;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEditing = widget.note != null;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(isEditing ? 'Edit Note' : 'New Note'),
+        actions: [
+          if (isEditing)
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text('Delete Note?'),
+                    content: const Text('This action cannot be undone.'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Delete'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  await widget.hiveService.deleteNote(widget.note!.id);
+                  if (mounted) Navigator.pop(context, true);
+                }
+              },
+            ),
+          IconButton(
+            icon: const Icon(Icons.check),
+            onPressed: _saveNote,
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // Title
+            TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(
+                hintText: 'Title',
+                border: InputBorder.none,
+                hintStyle: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              maxLines: 1,
+            ),
+            const SizedBox(height: 8),
+
+            // Category Selector
+            SizedBox(
+              height: 40,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: widget.categories.map((cat) {
+                  final isSelected = _selectedCategory == cat.name;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(cat.name),
+                      selected: isSelected,
+                      onSelected: (_) {
+                        setState(() {
+                          _selectedCategory = cat.name;
+                          _selectedColor = cat.colorValue;
+                        });
+                      },
+                      selectedColor: Color(cat.colorValue),
+                      labelStyle: TextStyle(
+                        color: isSelected ? Colors.white : Color(cat.colorValue),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            const Divider(),
+
+            // Content
+            Expanded(
+              child: TextField(
+                controller: _contentController,
+                decoration: const InputDecoration(
+                  hintText: 'Start typing...',
+                  border: InputBorder.none,
+                ),
+                style: const TextStyle(fontSize: 16, height: 1.5),
+                maxLines: null,
+                expands: true,
+                textAlignVertical: TextAlignVertical.top,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _saveNote() async {
+    if (_titleController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a title')),
+      );
+      return;
+    }
+
+    final now = DateTime.now();
+    if (widget.note != null) {
+      final updated = widget.note!.copyWith(
+        title: _titleController.text.trim(),
+        content: _contentController.text.trim(),
+        category: _selectedCategory,
+        colorValue: _selectedColor,
+        updatedAt: now,
+      );
+      await widget.hiveService.updateNote(updated);
+    } else {
+      final newNote = Note(
+        id: now.millisecondsSinceEpoch.toString(),
+        title: _titleController.text.trim(),
+        content: _contentController.text.trim(),
+        category: _selectedCategory,
+        colorValue: _selectedColor,
+        createdAt: now,
+        updatedAt: now,
+      );
+      await widget.hiveService.addNote(newNote);
+    }
+
+    if (mounted) Navigator.pop(context, true);
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _contentController.dispose();
+    super.dispose();
+  }
+}
+```
+
+---
+
+# 11. Common Mistakes & How to Avoid Them
+
+## Mistake 1: Not Initializing SharedPreferences Before Use
+```dart
+// WRONG - Will crash with NullPointerException
+void main() {
+  runApp(const MyApp()); // SharedPrefs not initialized!
+}
+
+// CORRECT - Initialize in main() before runApp
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await SharedPrefsService.init();
+  runApp(const MyApp());
+}
+```
+
+## Mistake 2: Forgetting to Register Hive Adapters
+```dart
+// WRONG - Adapter not registered
+void main() async {
+  await Hive.initFlutter();
+  // Missing: Hive.registerAdapter(NoteAdapter());
+  await Hive.openBox<Note>('notes'); // CRASH!
+  runApp(const MyApp());
+}
+
+// CORRECT - Register before opening boxes
+void main() async {
+  await Hive.initFlutter();
+  Hive.registerAdapter(NoteAdapter());
+  await Hive.openBox<Note>('notes');
+  runApp(const MyApp());
+}
+```
+
+## Mistake 3: Storing Sensitive Data in SharedPreferences
+```dart
+// WRONG - Not encrypted, easily accessible
+await SharedPrefsService.setString('password', userPassword);
+
+// CORRECT - Use flutter_secure_storage
+await SecureStorageService.setCredentials(email, password);
+```
+
+## Mistake 4: Not Closing Database Connections
+```dart
+// WRONG - Memory leak, potential data corruption
+class DatabaseHelper {
+  Future<Database> get database async {
+    return await openDatabase('app.db'); // Opens new connection every time!
+  }
+}
+
+// CORRECT - Singleton pattern with proper cleanup
+class DatabaseHelper {
+  static Database? _database;
+  Future<Database> get database async {
+    _database ??= await _initDatabase();
+    return _database!;
+  }
+  Future<void> close() async {
+    await _database?.close();
+    _database = null;
+  }
+}
+```
+
+## Mistake 5: Blocking the UI Thread with Heavy DB Operations
+```dart
+// WRONG - Blocks UI, causes jank
+@override
+Widget build(BuildContext context) {
+  final notes = hiveService.getAllNotes(); // Synchronous, blocks UI
+  return ListView(...);
+}
+
+// CORRECT - Use async/await or FutureBuilder
+@override
+Widget build(BuildContext context) {
+  return FutureBuilder(
+    future: hiveService.getAllNotesAsync(),
+    builder: (context, snapshot) {
+      if (snapshot.hasData) return ListView(...);
+      return const CircularProgressIndicator();
+    },
+  );
+}
+```
+
+## Mistake 6: Not Handling Database Migrations in sqflite
+```dart
+// WRONG - Users with old schema will crash
+onUpgrade: (db, oldVersion, newVersion) async {
+  // Empty - no migration logic!
+}
+
+// CORRECT - Version-by-version migration
+onUpgrade: (db, oldVersion, newVersion) async {
+  if (oldVersion < 2) {
+    await db.execute('ALTER TABLE notes ADD COLUMN tags TEXT');
+  }
+  if (oldVersion < 3) {
+    await db.execute('ALTER TABLE notes ADD COLUMN reminder_date TEXT');
+  }
+}
+```
+
+## Mistake 7: Storing Large Objects in SharedPreferences
+```dart
+// WRONG - SharedPreferences has ~1-2MB limit per key
+final largeJson = jsonEncode(hugeListOfObjects);
+await prefs.setString('cache', largeJson); // May fail silently
+
+// CORRECT - Use Hive or sqflite for large data
+await hiveBox.put('cache', hugeListOfObjects);
+```
+
+---
+
+# 12. Day 15 Checklist
+
+Use this checklist to verify mastery:
+- [ ] Understands why local persistence is critical for offline-first apps
+- [ ] Can choose the right storage solution for any scenario
+- [ ] Can set up and use SharedPreferences for simple settings
+- [ ] Can store and retrieve complex objects as JSON in SharedPreferences
+- [ ] Can use path_provider to read/write files to the device
+- [ ] Can export app data to text files
+- [ ] Can create and manage an SQLite database with sqflite
+- [ ] Can write SQL queries for filtering, searching, and joining data
+- [ ] Can handle database migrations when schema changes
+- [ ] Can set up Hive with type adapters and code generation
+- [ ] Can perform CRUD operations with Hive boxes
+- [ ] Can use encrypted Hive boxes for sensitive data
+- [ ] Can set up drift with type-safe SQL tables
+- [ ] Can use flutter_secure_storage for encrypted token storage
+- [ ] Understands the offline-first repository pattern
+- [ ] Built the Notes Pro app with Hive + SharedPreferences + path_provider
+- [ ] App has categories with custom colors
+- [ ] App has full-text search across notes
+- [ ] App supports pin, archive, and delete with swipe actions
+- [ ] App persists theme preference across app restarts
+- [ ] App can export notes to a text file
+- [ ] Pushed the project to GitHub
+
+---
+
+# Key Takeaways (Memorize These!)
+
+1. **SharedPreferences = Settings only** - Never store large data or sensitive info. Best for flags, themes, and small configs.
+2. **Hive = Speed king** - Fastest local DB in Flutter. Perfect for caching, simple objects, and structured data without complex queries.
+3. **sqflite = Full SQL power** - When you need JOINs, complex WHERE clauses, and relational data with foreign keys.
+4. **drift = Type-safe SQL** - The enterprise choice. Compile-time query validation, auto-generated code, and reactive streams.
+5. **flutter_secure_storage = Secrets only** - JWT tokens, API keys, passwords. Uses OS-level encryption (Keychain/Keystore).
+6. **path_provider = File system** - For images, PDFs, exports, and any large binary data.
+7. **Always initialize before runApp()** - SharedPreferences, Hive, and drift all need async initialization.
+8. **Offline-first architecture** - Save locally first, sync to cloud in background. Queue failed syncs for retry.
+9. **Close your databases** - Use singleton pattern and close connections on app termination to prevent corruption.
+10. **Never store passwords in plain text** - Even in local databases. Use secure storage or proper hashing.
+
+---
+
+# Extra Practice (Do These Tonight!)
+
+1. **Todo App with Hive:** Build a todo manager with categories, priorities, due dates, and reminders using Hive. Add dark mode persistence with SharedPreferences.
+2. **Expense Tracker with sqflite:** Create an expense tracker with categories, monthly summaries, and charts. Use SQL queries for aggregation (SUM, GROUP BY).
+3. **Journal App with drift:** Build a daily journal app using drift with reactive queries. Auto-save drafts and support rich text entries.
+4. **Password Manager:** Use flutter_secure_storage + encrypted Hive to build a password manager with biometric authentication.
+5. **Offline News Reader:** Cache API responses in Hive, display cached articles when offline, and sync read status when online.
+
+---
+
+**Congratulations!** You've completed Day 15. You now master every local data persistence technique in Flutter — from simple key-value pairs to full SQL databases and lightning-fast NoSQL. You can build offline-first apps that work flawlessly without internet.
+
+**Next Up -> Day 16: Networking & APIs (http, dio, REST integration)**
+
+---
+
+*Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*
+*Day 15: Local Data Persistence - Complete Deep Dive*
 
 *Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*
 *Day 13: State Management — Riverpod — Complete Deep Dive*
