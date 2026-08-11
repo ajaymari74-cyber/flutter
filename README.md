@@ -20196,6 +20196,1730 @@ Use this checklist to verify mastery:
 **Next Up → Day 14: State Management — BLoC Pattern**
 
 ---
+# Day 14: State Management — BLoC Pattern
+## Complete Deep Dive
+
+**Goal:** Master the Business Logic Component (BLoC) pattern — the industry-standard, predictable, and testable state management architecture used by enterprise Flutter teams worldwide. Understand Events, States, Blocs, Cubits, HydratedBloc, and build a production-grade Authentication Flow & Task Manager.
+
+---
+
+# Table of Contents
+1. Why BLoC Pattern?
+2. BLoC Core Concepts: Events, States & Transitions
+3. flutter_bloc Package Setup
+4. Cubit: The Lightweight BLoC
+5. Bloc: Full Event-Driven Architecture
+6. BlocBuilder, BlocListener, BlocConsumer
+7. Multi-BlocProvider & Dependency Injection
+8. BlocObserver: Global Debugging & Analytics
+9. HydratedBloc: Automatic State Persistence
+10. Architecture Patterns with BLoC
+11. Hands-On Project: Auth Flow & Task Manager
+12. Common Mistakes & How to Avoid Them
+13. Day 14 Checklist
+
+---
+
+# 1. Why BLoC Pattern?
+
+## The Philosophy Behind BLoC
+The BLoC (Business Logic Component) pattern was introduced by Google at Google I/O 2018 as a way to separate business logic from UI — making code **predictable, testable, and reusable**.
+
+```
+UI Layer ──► (Events) ──► BLoC ──► (States) ──► UI Layer
+         Input              Process          Output
+```
+
+## BLoC vs Other State Management Solutions
+| Feature | setState | Provider | Riverpod | BLoC Pattern |
+|---|---|---|---|---|
+| Separation of Concerns | Poor | Good | Excellent | Excellent |
+| Testability | Hard | Medium | Easy | Very Easy |
+| Predictability | Low | Medium | High | Very High |
+| Learning Curve | Easy | Easy | Medium | Medium-Hard |
+| Enterprise Scale | Not suitable | Good | Excellent | Industry Standard |
+| Time-Travel Debugging | No | No | Limited | Yes |
+| State Persistence | Manual | Manual | Manual | Built-in (HydratedBloc) |
+| Code Generation | No | No | @riverpod | @freezed + equatable |
+
+## When to Choose BLoC
+- **Enterprise applications** with complex business rules
+- **Teams** where multiple developers work on the same codebase
+- **Apps requiring audit trails** — every state change is traceable via events
+- **Apps needing state persistence** across app restarts
+- **When testability is critical** — BLoCs are 100% pure Dart, no BuildContext needed
+
+## Mental Model: The Vending Machine
+```
+User Action    = Insert Coin (Event)
+Vending Machine = BLoC (Business Logic)
+Product + Change = State
+```
+Just like a vending machine: you put in a specific input (Event), the machine processes it internally (Business Logic), and gives you a predictable output (State).
+
+---
+
+# 2. BLoC Core Concepts: Events, States & Transitions
+
+## The Three Pillars
+```dart
+// 1. EVENT — What happened (User action, System notification)
+abstract class CounterEvent {}
+class CounterIncrementPressed extends CounterEvent {}
+class CounterDecrementPressed extends CounterEvent {}
+
+// 2. STATE — What the UI should look like
+class CounterState {
+  final int count;
+  final bool isAtMax;
+
+  CounterState({this.count = 0, this.maxCount = 10})
+      : isAtMax = count >= maxCount;
+}
+
+// 3. BLOC — The processor that maps Events to States
+class CounterBloc extends Bloc<CounterEvent, CounterState> {
+  CounterBloc() : super(CounterState()) {
+    on<CounterIncrementPressed>((event, emit) {
+      if (!state.isAtMax) {
+        emit(CounterState(count: state.count + 1));
+      }
+    });
+  }
+}
+```
+
+## Transition Lifecycle
+Every state change in BLoC follows a strict, observable lifecycle:
+
+```
+Event Received
+     │
+     ▼
+Current State ──► Event Handler ──► New State
+     │                                  │
+     ▼                                  ▼
+Transition Logged              UI Rebuilds
+```
+
+## Equatable: Value Equality for States
+Without `Equatable`, BLoC won't know if a state has actually changed.
+
+```dart
+import 'package:equatable/equatable.dart';
+
+class CounterState extends Equatable {
+  final int count;
+  final bool isAtMax;
+
+  const CounterState({this.count = 0, this.isAtMax = false});
+
+  CounterState copyWith({int? count, bool? isAtMax}) {
+    return CounterState(
+      count: count ?? this.count,
+      isAtMax: isAtMax ?? this.isAtMax,
+    );
+  }
+
+  @override
+  List<Object?> get props => [count, isAtMax]; // Equality check fields
+}
+```
+
+## Freezed: Immutable State with Union Types (2026 Recommended)
+```dart
+import 'package:freezed_annotation/freezed_annotation.dart';
+
+part 'auth_state.freezed.dart';
+
+@freezed
+class AuthState with _$AuthState {
+  const factory AuthState.initial() = AuthInitial;
+  const factory AuthState.loading() = AuthLoading;
+  const factory AuthState.authenticated(User user) = Authenticated;
+  const factory AuthState.unauthenticated() = Unauthenticated;
+  const factory AuthState.error(String message) = AuthError;
+}
+```
+
+---
+
+# 3. flutter_bloc Package Setup
+
+## pubspec.yaml
+```yaml
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_bloc: ^8.1.6
+  equatable: ^2.0.5
+  hydrated_bloc: ^9.1.5
+  freezed_annotation: ^2.4.1
+
+dev_dependencies:
+  build_runner: ^2.4.9
+  freezed: ^2.5.2
+  json_serializable: ^6.8.0
+```
+
+## Widget Types
+| Widget | Use When |
+|---|---|
+| `BlocBuilder` | Rebuild UI when state changes |
+| `BlocListener` | Execute side effects (navigation, SnackBar) |
+| `BlocConsumer` | Both rebuild UI AND handle side effects |
+| `BlocProvider` | Provide a BLoC to the widget tree |
+| `MultiBlocProvider` | Provide multiple BLoCs at once |
+| `RepositoryProvider` | Provide repositories (data layer) |
+
+---
+
+# 4. Cubit: The Lightweight BLoC
+
+## What is Cubit?
+Cubit is a simplified version of BLoC. Instead of processing **Events**, you directly call **methods** that emit states.
+
+## Cubit vs Bloc
+| Aspect | Cubit | Bloc |
+|---|---|---|
+| Input | Direct method calls | Events |
+| Use Case | Simple state | Complex business logic |
+| Audit Trail | Limited | Full event history |
+| Testing | Unit test methods | Unit test event handlers |
+| When to Use | Simple counters, toggles | Forms, authentication, complex flows |
+
+## Simple Counter Cubit
+```dart
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:equatable/equatable.dart';
+
+// State
+class CounterState extends Equatable {
+  final int count;
+  const CounterState({this.count = 0});
+
+  CounterState copyWith({int? count}) => CounterState(count: count ?? this.count);
+
+  @override
+  List<Object?> get props => [count];
+}
+
+// Cubit
+class CounterCubit extends Cubit<CounterState> {
+  CounterCubit() : super(const CounterState());
+
+  void increment() => emit(state.copyWith(count: state.count + 1));
+  void decrement() => emit(state.copyWith(count: state.count - 1));
+  void reset() => emit(const CounterState());
+}
+
+// UI
+class CounterScreen extends StatelessWidget {
+  const CounterScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (_) => CounterCubit(),
+      child: const CounterView(),
+    );
+  }
+}
+
+class CounterView extends StatelessWidget {
+  const CounterView({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: BlocBuilder<CounterCubit, CounterState>(
+          builder: (context, state) {
+            return Text('Count: ${state.count}', style: const TextStyle(fontSize: 24));
+          },
+        ),
+      ),
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FloatingActionButton(
+            onPressed: () => context.read<CounterCubit>().increment(),
+            child: const Icon(Icons.add),
+          ),
+          const SizedBox(height: 8),
+          FloatingActionButton(
+            onPressed: () => context.read<CounterCubit>().decrement(),
+            child: const Icon(Icons.remove),
+          ),
+        ],
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 5. Bloc: Full Event-Driven Architecture
+
+## Authentication Bloc (Production Pattern)
+```dart
+// Events
+abstract class AuthEvent extends Equatable {
+  const AuthEvent();
+  @override
+  List<Object?> get props => [];
+}
+
+class AuthLoginRequested extends AuthEvent {
+  final String email;
+  final String password;
+  const AuthLoginRequested({required this.email, required this.password});
+
+  @override
+  List<Object?> get props => [email, password];
+}
+
+class AuthLogoutRequested extends AuthEvent {}
+class AuthCheckRequested extends AuthEvent {}
+
+// States
+abstract class AuthState extends Equatable {
+  const AuthState();
+  @override
+  List<Object?> get props => [];
+}
+
+class AuthInitial extends AuthState {}
+class AuthLoading extends AuthState {}
+class AuthAuthenticated extends AuthState {
+  final User user;
+  const AuthAuthenticated(this.user);
+  @override
+  List<Object?> get props => [user];
+}
+class AuthUnauthenticated extends AuthState {}
+class AuthFailure extends AuthState {
+  final String message;
+  const AuthFailure(this.message);
+  @override
+  List<Object?> get props => [message];
+}
+
+// Bloc
+class AuthBloc extends Bloc<AuthEvent, AuthState> {
+  final AuthRepository authRepository;
+
+  AuthBloc({required this.authRepository}) : super(AuthInitial()) {
+    on<AuthCheckRequested>(_onCheckRequested);
+    on<AuthLoginRequested>(_onLoginRequested);
+    on<AuthLogoutRequested>(_onLogoutRequested);
+  }
+
+  Future<void> _onCheckRequested(
+    AuthCheckRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+    try {
+      final user = await authRepository.getCurrentUser();
+      if (user != null) {
+        emit(AuthAuthenticated(user));
+      } else {
+        emit(AuthUnauthenticated());
+      }
+    } catch (e) {
+      emit(AuthUnauthenticated());
+    }
+  }
+
+  Future<void> _onLoginRequested(
+    AuthLoginRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+    try {
+      final user = await authRepository.login(
+        email: event.email,
+        password: event.password,
+      );
+      emit(AuthAuthenticated(user));
+    } catch (e) {
+      emit(AuthFailure(e.toString()));
+    }
+  }
+
+  Future<void> _onLogoutRequested(
+    AuthLogoutRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+    await authRepository.logout();
+    emit(AuthUnauthenticated());
+  }
+}
+```
+
+## Event Transformers: Debounce, Throttle, Sequential
+```dart
+import 'package:bloc_concurrency/bloc_concurrency.dart';
+
+class SearchBloc extends Bloc<SearchEvent, SearchState> {
+  SearchBloc() : super(SearchInitial()) {
+    on<SearchTextChanged>(
+      _onSearchTextChanged,
+      transformer: debounce(const Duration(milliseconds: 500)),
+    );
+    on<SearchSubmitted>(
+      _onSearchSubmitted,
+      transformer: sequential(), // Process one at a time
+    );
+  }
+}
+```
+
+---
+
+# 6. BlocBuilder, BlocListener, BlocConsumer
+
+## BlocBuilder (Rebuild UI)
+```dart
+BlocBuilder<AuthBloc, AuthState>(
+  buildWhen: (previous, current) {
+    // Optional: Only rebuild when specific state changes
+    return previous.runtimeType != current.runtimeType;
+  },
+  builder: (context, state) {
+    if (state is AuthLoading) {
+      return const CircularProgressIndicator();
+    } else if (state is AuthAuthenticated) {
+      return HomeScreen(user: state.user);
+    } else if (state is AuthFailure) {
+      return ErrorWidget(message: state.message);
+    }
+    return const LoginScreen();
+  },
+)
+```
+
+## BlocListener (Side Effects)
+```dart
+BlocListener<AuthBloc, AuthState>(
+  listenWhen: (previous, current) => current is AuthFailure,
+  listener: (context, state) {
+    if (state is AuthFailure) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(state.message)),
+      );
+    } else if (state is AuthAuthenticated) {
+      Navigator.of(context).pushReplacementNamed('/home');
+    }
+  },
+  child: const LoginForm(),
+)
+```
+
+## BlocConsumer (Builder + Listener Combined)
+```dart
+BlocConsumer<AuthBloc, AuthState>(
+  listenWhen: (previous, current) => current is AuthFailure,
+  listener: (context, state) {
+    if (state is AuthFailure) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(state.message)),
+      );
+    }
+  },
+  builder: (context, state) {
+    if (state is AuthLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return LoginForm(
+      isLoading: state is AuthLoading,
+      onSubmit: (email, password) {
+        context.read<AuthBloc>().add(
+          AuthLoginRequested(email: email, password: password),
+        );
+      },
+    );
+  },
+)
+```
+
+---
+
+# 7. Multi-BlocProvider & Dependency Injection
+
+## Providing Multiple Blocs
+```dart
+class MyApp extends StatelessWidget {
+  final AuthRepository authRepository;
+  final TaskRepository taskRepository;
+
+  const MyApp({
+    super.key,
+    required this.authRepository,
+    required this.taskRepository,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(
+          create: (_) => AuthBloc(authRepository: authRepository)..add(AuthCheckRequested()),
+        ),
+        BlocProvider(
+          create: (_) => TaskBloc(taskRepository: taskRepository),
+        ),
+        BlocProvider(
+          create: (_) => ThemeCubit(),
+        ),
+      ],
+      child: MaterialApp(
+        title: 'Task Manager Pro',
+        home: const AuthWrapper(),
+      ),
+    );
+  }
+}
+```
+
+## RepositoryProvider (Clean Architecture)
+```dart
+MultiRepositoryProvider(
+  providers: [
+    RepositoryProvider(create: (_) => AuthRepository(api: Dio())),
+    RepositoryProvider(create: (_) => TaskRepository(database: Hive.box('tasks'))),
+  ],
+  child: MultiBlocProvider(
+    providers: [
+      BlocProvider(
+        create: (context) => AuthBloc(
+          authRepository: context.read<AuthRepository>(),
+        ),
+      ),
+    ],
+    child: const MyApp(),
+  ),
+)
+```
+
+---
+
+# 8. BlocObserver: Global Debugging & Analytics
+
+## Custom BlocObserver
+```dart
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+class AppBlocObserver extends BlocObserver {
+  @override
+  void onCreate(BlocBase bloc) {
+    super.onCreate(bloc);
+    debugPrint('🟢 Created: ${bloc.runtimeType}');
+  }
+
+  @override
+  void onEvent(Bloc bloc, Object? event) {
+    super.onEvent(bloc, event);
+    debugPrint('📤 Event: ${event.runtimeType} in ${bloc.runtimeType}');
+  }
+
+  @override
+  void onChange(BlocBase bloc, Change change) {
+    super.onChange(bloc, change);
+    debugPrint('🔄 ${bloc.runtimeType}: ${change.currentState.runtimeType} → ${change.nextState.runtimeType}');
+  }
+
+  @override
+  void onTransition(Bloc bloc, Transition transition) {
+    super.onTransition(bloc, transition);
+    debugPrint('⏭️  Transition: ${transition.currentState.runtimeType} → ${transition.nextState.runtimeType}');
+  }
+
+  @override
+  void onError(BlocBase bloc, Object error, StackTrace stackTrace) {
+    super.onError(bloc, error, stackTrace);
+    debugPrint('❌ Error in ${bloc.runtimeType}: $error');
+  }
+
+  @override
+  void onClose(BlocBase bloc) {
+    super.onClose(bloc);
+    debugPrint('🔴 Closed: ${bloc.runtimeType}');
+  }
+}
+```
+
+## Initialize in main.dart
+```dart
+void main() {
+  Bloc.observer = AppBlocObserver();
+  runApp(const MyApp());
+}
+```
+
+## Analytics Integration
+```dart
+@override
+void onTransition(Bloc bloc, Transition transition) {
+  super.onTransition(bloc, transition);
+
+  // Send to Firebase Analytics
+  FirebaseAnalytics.instance.logEvent(
+    name: 'bloc_transition',
+    parameters: {
+      'bloc': bloc.runtimeType.toString(),
+      'from': transition.currentState.runtimeType.toString(),
+      'to': transition.nextState.runtimeType.toString(),
+    },
+  );
+}
+```
+
+---
+
+# 9. HydratedBloc: Automatic State Persistence
+
+## What is HydratedBloc?
+HydratedBloc automatically persists and restores bloc states across app restarts. Perfect for:
+- User authentication sessions
+- Theme preferences
+- Form drafts
+- App settings
+
+## Setup
+```dart
+import 'package:hydrated_bloc/hydrated_bloc.dart';
+import 'package:path_provider/path_provider.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  HydratedBloc.storage = await HydratedStorage.build(
+    storageDirectory: await getApplicationDocumentsDirectory(),
+  );
+
+  Bloc.observer = AppBlocObserver();
+  runApp(const MyApp());
+}
+```
+
+## HydratedCubit Example (Theme Persistence)
+```dart
+class ThemeCubit extends HydratedCubit<ThemeMode> {
+  ThemeCubit() : super(ThemeMode.system);
+
+  void toggleTheme() {
+    emit(state == ThemeMode.light ? ThemeMode.dark : ThemeMode.light);
+  }
+
+  void setTheme(ThemeMode mode) => emit(mode);
+
+  @override
+  ThemeMode? fromJson(Map<String, dynamic> json) {
+    final themeString = json['theme'] as String?;
+    return ThemeMode.values.firstWhere(
+      (e) => e.name == themeString,
+      orElse: () => ThemeMode.system,
+    );
+  }
+
+  @override
+  Map<String, dynamic>? toJson(ThemeMode state) {
+    return {'theme': state.name};
+  }
+}
+```
+
+## HydratedBloc Example (Auth Persistence)
+```dart
+class AuthBloc extends HydratedBloc<AuthEvent, AuthState> {
+  AuthBloc({required this.authRepository}) : super(AuthInitial()) {
+    on<AuthLoginRequested>(_onLoginRequested);
+    on<AuthLogoutRequested>(_onLogoutRequested);
+  }
+
+  @override
+  AuthState? fromJson(Map<String, dynamic> json) {
+    try {
+      final userJson = json['user'] as Map<String, dynamic>?;
+      if (userJson != null) {
+        return AuthAuthenticated(User.fromJson(userJson));
+      }
+      return AuthUnauthenticated();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Map<String, dynamic>? toJson(AuthState state) {
+    if (state is AuthAuthenticated) {
+      return {'user': state.user.toJson()};
+    }
+    return null; // Don't persist unauthenticated state
+  }
+}
+```
+
+---
+
+# 10. Architecture Patterns with BLoC
+
+## Pattern 1: Feature-First Clean Architecture
+```
+lib/
+├── main.dart
+├── app.dart
+├── config/
+│   ├── routes.dart
+│   └── theme.dart
+├── features/
+│   ├── auth/
+│   │   ├── data/
+│   │   │   ├── models/
+│   │   │   │   └── user_model.dart
+│   │   │   └── repositories/
+│   │   │       └── auth_repository_impl.dart
+│   │   ├── domain/
+│   │   │   ├── entities/
+│   │   │   │   └── user.dart
+│   │   │   └── repositories/
+│   │   │       └── auth_repository.dart
+│   │   └── presentation/
+│   │       ├── bloc/
+│   │       │   ├── auth_bloc.dart
+│   │       │   ├── auth_event.dart
+│   │       │   └── auth_state.dart
+│   │       ├── screens/
+│   │       │   ├── login_screen.dart
+│   │       │   └── register_screen.dart
+│   │       └── widgets/
+│   │           └── auth_button.dart
+│   └── tasks/
+│       ├── data/
+│       ├── domain/
+│       └── presentation/
+└── core/
+    ├── errors/
+    ├── usecases/
+    └── utils/
+```
+
+## Pattern 2: BLoC with Use Cases
+```dart
+// Domain Layer
+abstract class LoginUseCase {
+  Future<User> call(String email, String password);
+}
+
+// Data Layer
+class LoginUseCaseImpl implements LoginUseCase {
+  final AuthRepository repository;
+  LoginUseCaseImpl(this.repository);
+
+  @override
+  Future<User> call(String email, String password) {
+    return repository.login(email, password);
+  }
+}
+
+// Presentation Layer
+class AuthBloc extends Bloc<AuthEvent, AuthState> {
+  final LoginUseCase loginUseCase;
+  final LogoutUseCase logoutUseCase;
+
+  AuthBloc({
+    required this.loginUseCase,
+    required this.logoutUseCase,
+  }) : super(AuthInitial()) {
+    on<AuthLoginRequested>(_onLoginRequested);
+  }
+
+  Future<void> _onLoginRequested(
+    AuthLoginRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+    final result = await loginUseCase(event.email, event.password);
+    result.fold(
+      (failure) => emit(AuthFailure(failure.message)),
+      (user) => emit(AuthAuthenticated(user)),
+    );
+  }
+}
+```
+
+---
+
+# 11. Hands-On Project: Auth Flow & Task Manager
+
+## Project Overview
+Build a complete **Task Manager Pro** app using BLoC with:
+- Login/Logout authentication flow
+- Task CRUD operations (Create, Read, Update, Delete)
+- Task filtering (All, Active, Completed)
+- Persistent theme with HydratedCubit
+- Global error handling with BlocListener
+- State restoration with HydratedBloc
+
+## Complete Code
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:equatable/equatable.dart';
+import 'package:hydrated_bloc/hydrated_bloc.dart';
+import 'package:path_provider/path_provider.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  HydratedBloc.storage = await HydratedStorage.build(
+    storageDirectory: await getTemporaryDirectory(),
+  );
+  Bloc.observer = SimpleBlocObserver();
+  runApp(const TaskManagerApp());
+}
+
+// ============ BLOC OBSERVER ============
+class SimpleBlocObserver extends BlocObserver {
+  @override
+  void onChange(BlocBase bloc, Change change) {
+    super.onChange(bloc, change);
+    debugPrint('${bloc.runtimeType} ${change.currentState.runtimeType}→${change.nextState.runtimeType}');
+  }
+}
+
+// ============ MODELS ============
+class Task extends Equatable {
+  final String id;
+  final String title;
+  final String description;
+  final bool isCompleted;
+  final DateTime createdAt;
+
+  const Task({
+    required this.id,
+    required this.title,
+    this.description = '',
+    this.isCompleted = false,
+    required this.createdAt,
+  });
+
+  Task copyWith({
+    String? id,
+    String? title,
+    String? description,
+    bool? isCompleted,
+    DateTime? createdAt,
+  }) {
+    return Task(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      isCompleted: isCompleted ?? this.isCompleted,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  List<Object?> get props => [id, title, description, isCompleted, createdAt];
+}
+
+// ============ AUTH BLOC ============
+abstract class AuthEvent extends Equatable {
+  const AuthEvent();
+  @override
+  List<Object?> get props => [];
+}
+
+class AuthLoginRequested extends AuthEvent {
+  final String email;
+  final String password;
+  const AuthLoginRequested(this.email, this.password);
+  @override
+  List<Object?> get props => [email, password];
+}
+
+class AuthLogoutRequested extends AuthEvent {}
+
+abstract class AuthState extends Equatable {
+  const AuthState();
+  @override
+  List<Object?> get props => [];
+}
+
+class AuthInitial extends AuthState {}
+class AuthLoading extends AuthState {}
+class AuthAuthenticated extends AuthState {
+  final String username;
+  const AuthAuthenticated(this.username);
+  @override
+  List<Object?> get props => [username];
+}
+class AuthUnauthenticated extends AuthState {}
+class AuthError extends AuthState {
+  final String message;
+  const AuthError(this.message);
+  @override
+  List<Object?> get props => [message];
+}
+
+class AuthBloc extends HydratedBloc<AuthEvent, AuthState> {
+  AuthBloc() : super(AuthUnauthenticated()) {
+    on<AuthLoginRequested>(_onLoginRequested);
+    on<AuthLogoutRequested>(_onLogoutRequested);
+  }
+
+  Future<void> _onLoginRequested(
+    AuthLoginRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+    await Future.delayed(const Duration(seconds: 1));
+
+    if (event.email == 'admin@example.com' && event.password == 'password') {
+      emit(const AuthAuthenticated('Admin User'));
+    } else {
+      emit(const AuthError('Invalid credentials. Try admin@example.com / password'));
+    }
+  }
+
+  void _onLogoutRequested(AuthLogoutRequested event, Emitter<AuthState> emit) {
+    emit(AuthUnauthenticated());
+  }
+
+  @override
+  AuthState? fromJson(Map<String, dynamic> json) {
+    final username = json['username'] as String?;
+    if (username != null) return AuthAuthenticated(username);
+    return AuthUnauthenticated();
+  }
+
+  @override
+  Map<String, dynamic>? toJson(AuthState state) {
+    if (state is AuthAuthenticated) return {'username': state.username};
+    return null;
+  }
+}
+
+// ============ TASK BLOC ============
+abstract class TaskEvent extends Equatable {
+  const TaskEvent();
+  @override
+  List<Object?> get props => [];
+}
+
+class TaskAdded extends TaskEvent {
+  final String title;
+  final String description;
+  const TaskAdded(this.title, this.description);
+  @override
+  List<Object?> get props => [title, description];
+}
+
+class TaskToggled extends TaskEvent {
+  final String taskId;
+  const TaskToggled(this.taskId);
+  @override
+  List<Object?> get props => [taskId];
+}
+
+class TaskDeleted extends TaskEvent {
+  final String taskId;
+  const TaskDeleted(this.taskId);
+  @override
+  List<Object?> get props => [taskId];
+}
+
+class TaskFilterChanged extends TaskEvent {
+  final TaskFilter filter;
+  const TaskFilterChanged(this.filter);
+  @override
+  List<Object?> get props => [filter];
+}
+
+enum TaskFilter { all, active, completed }
+
+class TaskState extends Equatable {
+  final List<Task> tasks;
+  final TaskFilter filter;
+
+  const TaskState({this.tasks = const [], this.filter = TaskFilter.all});
+
+  List<Task> get filteredTasks {
+    switch (filter) {
+      case TaskFilter.active:
+        return tasks.where((t) => !t.isCompleted).toList();
+      case TaskFilter.completed:
+        return tasks.where((t) => t.isCompleted).toList();
+      case TaskFilter.all:
+        return tasks;
+    }
+  }
+
+  int get activeCount => tasks.where((t) => !t.isCompleted).length;
+  int get completedCount => tasks.where((t) => t.isCompleted).length;
+
+  TaskState copyWith({List<Task>? tasks, TaskFilter? filter}) {
+    return TaskState(
+      tasks: tasks ?? this.tasks,
+      filter: filter ?? this.filter,
+    );
+  }
+
+  @override
+  List<Object?> get props => [tasks, filter];
+}
+
+class TaskBloc extends HydratedBloc<TaskEvent, TaskState> {
+  TaskBloc() : super(const TaskState()) {
+    on<TaskAdded>(_onTaskAdded);
+    on<TaskToggled>(_onTaskToggled);
+    on<TaskDeleted>(_onTaskDeleted);
+    on<TaskFilterChanged>(_onFilterChanged);
+  }
+
+  void _onTaskAdded(TaskAdded event, Emitter<TaskState> emit) {
+    final task = Task(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: event.title,
+      description: event.description,
+      createdAt: DateTime.now(),
+    );
+    emit(state.copyWith(tasks: [...state.tasks, task]));
+  }
+
+  void _onTaskToggled(TaskToggled event, Emitter<TaskState> emit) {
+    final updatedTasks = state.tasks.map((task) {
+      if (task.id == event.taskId) {
+        return task.copyWith(isCompleted: !task.isCompleted);
+      }
+      return task;
+    }).toList();
+    emit(state.copyWith(tasks: updatedTasks));
+  }
+
+  void _onTaskDeleted(TaskDeleted event, Emitter<TaskState> emit) {
+    final updatedTasks = state.tasks.where((t) => t.id != event.taskId).toList();
+    emit(state.copyWith(tasks: updatedTasks));
+  }
+
+  void _onFilterChanged(TaskFilterChanged event, Emitter<TaskState> emit) {
+    emit(state.copyWith(filter: event.filter));
+  }
+
+  @override
+  TaskState? fromJson(Map<String, dynamic> json) {
+    try {
+      final tasksJson = json['tasks'] as List<dynamic>?;
+      final filterStr = json['filter'] as String? ?? 'all';
+      final tasks = tasksJson?.map((t) => Task(
+        id: t['id'],
+        title: t['title'],
+        description: t['description'] ?? '',
+        isCompleted: t['isCompleted'] ?? false,
+        createdAt: DateTime.parse(t['createdAt']),
+      )).toList() ?? [];
+      return TaskState(
+        tasks: tasks,
+        filter: TaskFilter.values.firstWhere((f) => f.name == filterStr),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Map<String, dynamic>? toJson(TaskState state) {
+    return {
+      'tasks': state.tasks.map((t) => {
+        'id': t.id,
+        'title': t.title,
+        'description': t.description,
+        'isCompleted': t.isCompleted,
+        'createdAt': t.createdAt.toIso8601String(),
+      }).toList(),
+      'filter': state.filter.name,
+    };
+  }
+}
+
+// ============ THEME CUBIT ============
+class ThemeCubit extends HydratedCubit<ThemeMode> {
+  ThemeCubit() : super(ThemeMode.system);
+
+  void toggleTheme() {
+    emit(state == ThemeMode.light ? ThemeMode.dark : ThemeMode.light);
+  }
+
+  @override
+  ThemeMode? fromJson(Map<String, dynamic> json) {
+    final theme = json['theme'] as String?;
+    return ThemeMode.values.firstWhere(
+      (e) => e.name == theme,
+      orElse: () => ThemeMode.system,
+    );
+  }
+
+  @override
+  Map<String, dynamic>? toJson(ThemeMode state) {
+    return {'theme': state.name};
+  }
+}
+
+// ============ APP ============
+class TaskManagerApp extends StatelessWidget {
+  const TaskManagerApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(create: (_) => AuthBloc()),
+        BlocProvider(create: (_) => TaskBloc()),
+        BlocProvider(create: (_) => ThemeCubit()),
+      ],
+      child: BlocBuilder<ThemeCubit, ThemeMode>(
+        builder: (context, themeMode) {
+          return MaterialApp(
+            title: 'Task Manager Pro',
+            debugShowCheckedModeBanner: false,
+            themeMode: themeMode,
+            theme: ThemeData(
+              useMaterial3: true,
+              colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+            ),
+            darkTheme: ThemeData(
+              useMaterial3: true,
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: Colors.indigo,
+                brightness: Brightness.dark,
+              ),
+            ),
+            home: const AuthWrapper(),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ============ AUTH WRAPPER ============
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocConsumer<AuthBloc, AuthState>(
+      listener: (context, state) {
+        if (state is AuthError) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.message),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      },
+      builder: (context, state) {
+        if (state is AuthAuthenticated) {
+          return const TaskHomeScreen();
+        }
+        return const LoginScreen();
+      },
+    );
+  }
+}
+
+// ============ LOGIN SCREEN ============
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _emailController = TextEditingController(text: 'admin@example.com');
+  final _passwordController = TextEditingController(text: 'password');
+  final _formKey = GlobalKey<FormState>();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.task_alt, size: 80, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(height: 24),
+                Text(
+                  'Task Manager Pro',
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Sign in to manage your tasks',
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 32),
+                TextFormField(
+                  controller: _emailController,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    prefixIcon: Icon(Icons.email_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (value) => value?.contains('@') ?? false ? null : 'Enter valid email',
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _passwordController,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    prefixIcon: Icon(Icons.lock_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                  obscureText: true,
+                  validator: (value) => value?.isNotEmpty ?? false ? null : 'Enter password',
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: BlocBuilder<AuthBloc, AuthState>(
+                    builder: (context, state) {
+                      final isLoading = state is AuthLoading;
+                      return FilledButton(
+                        onPressed: isLoading
+                            ? null
+                            : () {
+                                if (_formKey.currentState?.validate() ?? false) {
+                                  context.read<AuthBloc>().add(
+                                    AuthLoginRequested(
+                                      _emailController.text,
+                                      _passwordController.text,
+                                    ),
+                                  );
+                                }
+                              },
+                        child: isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Text('Sign In'),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Hint: admin@example.com / password',
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+}
+
+// ============ TASK HOME SCREEN ============
+class TaskHomeScreen extends StatelessWidget {
+  const TaskHomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final username = (context.read<AuthBloc>().state as AuthAuthenticated).username;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('My Tasks'),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: Icon(
+              context.watch<ThemeCubit>().state == ThemeMode.dark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+            ),
+            onPressed: () => context.read<ThemeCubit>().toggleTheme(),
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () => context.read<AuthBloc>().add(AuthLogoutRequested()),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          _TaskStatsBar(),
+          _TaskFilterChips(),
+          const Expanded(child: _TaskList()),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showAddTaskDialog(context),
+        icon: const Icon(Icons.add),
+        label: const Text('New Task'),
+      ),
+    );
+  }
+
+  void _showAddTaskDialog(BuildContext context) {
+    final titleController = TextEditingController();
+    final descController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Add New Task'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              decoration: const InputDecoration(
+                labelText: 'Title',
+                hintText: 'What needs to be done?',
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: descController,
+              decoration: const InputDecoration(
+                labelText: 'Description (optional)',
+              ),
+              maxLines: 2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (titleController.text.trim().isNotEmpty) {
+                context.read<TaskBloc>().add(
+                  TaskAdded(titleController.text.trim(), descController.text.trim()),
+                );
+                Navigator.pop(dialogContext);
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============ TASK STATS BAR ============
+class _TaskStatsBar extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<TaskBloc, TaskState>(
+      builder: (context, state) {
+        return Container(
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _StatItem(label: 'Total', value: state.tasks.length),
+              _StatItem(label: 'Active', value: state.activeCount),
+              _StatItem(label: 'Done', value: state.completedCount),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _StatItem extends StatelessWidget {
+  final String label;
+  final int value;
+  const _StatItem({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          '$value',
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
+        Text(label, style: TextStyle(color: Colors.grey.shade600)),
+      ],
+    );
+  }
+}
+
+// ============ TASK FILTER CHIPS ============
+class _TaskFilterChips extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<TaskBloc, TaskState>(
+      builder: (context, state) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: TaskFilter.values.map((filter) {
+              final isSelected = state.filter == filter;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  label: Text(filter.name.toUpperCase()),
+                  selected: isSelected,
+                  onSelected: (_) {
+                    context.read<TaskBloc>().add(TaskFilterChanged(filter));
+                  },
+                  selectedColor: Theme.of(context).colorScheme.primary,
+                  labelStyle: TextStyle(
+                    color: isSelected ? Colors.white : null,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ============ TASK LIST ============
+class _TaskList extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<TaskBloc, TaskState>(
+      builder: (context, state) {
+        final tasks = state.filteredTasks;
+
+        if (tasks.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade400),
+                const SizedBox(height: 16),
+                Text(
+                  'No ${state.filter.name} tasks',
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: tasks.length,
+          itemBuilder: (context, index) {
+            final task = tasks[index];
+            return _TaskCard(task: task);
+          },
+        );
+      },
+    );
+  }
+}
+
+// ============ TASK CARD ============
+class _TaskCard extends StatelessWidget {
+  final Task task;
+  const _TaskCard({required this.task});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dismissible(
+      key: Key(task.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: Colors.red.shade100,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 16),
+        child: const Icon(Icons.delete, color: Colors.red),
+      ),
+      onDismissed: (_) {
+        context.read<TaskBloc>().add(TaskDeleted(task.id));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Task deleted'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      },
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 8),
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          leading: Checkbox(
+            value: task.isCompleted,
+            onChanged: (_) {
+              context.read<TaskBloc>().add(TaskToggled(task.id));
+            },
+          ),
+          title: Text(
+            task.title,
+            style: TextStyle(
+              decoration: task.isCompleted ? TextDecoration.lineThrough : null,
+              color: task.isCompleted ? Colors.grey : null,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          subtitle: task.description.isNotEmpty
+              ? Text(
+                  task.description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.grey.shade600),
+                )
+              : null,
+          trailing: Icon(
+            task.isCompleted ? Icons.check_circle : Icons.circle_outlined,
+            color: task.isCompleted ? Colors.green : Colors.grey,
+          ),
+        ),
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 12. Common Mistakes & How to Avoid Them
+
+## Mistake 1: Not Extending Equatable on States
+```dart
+// WRONG — BLoC won't detect state changes
+class CounterState {
+  final int count;
+  CounterState(this.count);
+}
+
+// CORRECT — Proper equality checks
+class CounterState extends Equatable {
+  final int count;
+  const CounterState(this.count);
+  @override
+  List<Object?> get props => [count];
+}
+```
+
+## Mistake 2: Mutating State Directly
+```dart
+// WRONG — Mutating existing state
+class CounterBloc extends Bloc<CounterEvent, CounterState> {
+  void increment() {
+    state.count++; // NEVER mutate state directly!
+    emit(state);
+  }
+}
+
+// CORRECT — Always create new state objects
+void increment() {
+  emit(CounterState(state.count + 1));
+}
+```
+
+## Mistake 3: Using BuildContext in BLoC
+```dart
+// WRONG — BLoC should be pure Dart, no UI dependencies
+class AuthBloc extends Bloc<AuthEvent, AuthState> {
+  void login() {
+    Navigator.push(context, ...); // NEVER do this!
+  }
+}
+
+// CORRECT — Navigation belongs in BlocListener
+BlocListener<AuthBloc, AuthState>(
+  listener: (context, state) {
+    if (state is AuthAuthenticated) {
+      Navigator.pushReplacementNamed(context, '/home');
+    }
+  },
+  child: ...,
+)
+```
+
+## Mistake 4: Not Closing Streams/Controllers
+```dart
+// WRONG — Memory leak
+class MyBloc extends Bloc<MyEvent, MyState> {
+  final stream = someDataStream(); // Never closed!
+}
+
+// CORRECT — Clean up in close()
+class MyBloc extends Bloc<MyEvent, MyState> {
+  StreamSubscription? _subscription;
+
+  MyBloc() {
+    _subscription = someDataStream().listen((data) {
+      add(DataReceived(data));
+    });
+  }
+
+  @override
+  Future<void> close() {
+    _subscription?.cancel();
+    return super.close();
+  }
+}
+```
+
+## Mistake 5: Calling emit After await Without Checking isClosed
+```dart
+// WRONG — Can crash if BLoC is disposed
+Future<void> fetchData() async {
+  emit(LoadingState());
+  final data = await repository.fetch(); // User navigates away...
+  emit(LoadedState(data)); // CRASH: Cannot emit new states after calling close
+}
+
+// CORRECT — Check mounted state
+Future<void> fetchData() async {
+  emit(LoadingState());
+  final data = await repository.fetch();
+  if (!isClosed) {
+    emit(LoadedState(data));
+  }
+}
+```
+
+## Mistake 6: Using context.read Instead of context.watch
+```dart
+// WRONG — Won't rebuild when state changes
+Text('${context.read<CounterCubit>().state.count}')
+
+// CORRECT — Use BlocBuilder or context.watch
+BlocBuilder<CounterCubit, CounterState>(
+  builder: (context, state) => Text('${state.count}'),
+)
+```
+
+## Mistake 7: Not Using HydratedBloc with Sensitive Data
+```dart
+// WRONG — Never persist passwords or tokens in plain text
+@override
+Map<String, dynamic>? toJson(AuthState state) {
+  if (state is AuthAuthenticated) {
+    return {'token': state.token, 'password': state.password}; // SECURITY RISK!
+  }
+  return null;
+}
+
+// CORRECT — Store only non-sensitive data, use secure storage for tokens
+@override
+Map<String, dynamic>? toJson(AuthState state) {
+  if (state is AuthAuthenticated) {
+    return {'userId': state.user.id, 'username': state.user.name};
+  }
+  return null;
+}
+```
+
+---
+
+# 13. Day 14 Checklist
+
+Use this checklist to verify mastery:
+- [ ] Understands why BLoC is the industry standard for enterprise Flutter apps
+- [ ] Can explain the difference between Events, States, and Transitions
+- [ ] Knows when to use Cubit vs Bloc
+- [ ] Can create a Cubit with emit() methods
+- [ ] Can create a Bloc with on<Event>() handlers
+- [ ] Uses Equatable (or Freezed) for proper state equality
+- [ ] Can use BlocBuilder for UI rebuilds
+- [ ] Can use BlocListener for side effects (navigation, SnackBar)
+- [ ] Can use BlocConsumer for combined builder + listener
+- [ ] Can set up MultiBlocProvider for multiple blocs
+- [ ] Can set up RepositoryProvider for dependency injection
+- [ ] Understands BlocObserver for global debugging
+- [ ] Can implement HydratedBloc/HydratedCubit for state persistence
+- [ ] Knows how to use event transformers (debounce, throttle, sequential)
+- [ ] Built the Task Manager Pro app with Auth + Task + Theme blocs
+- [ ] App has login/logout with HydratedBloc persistence
+- [ ] App has full CRUD for tasks with filter support
+- [ ] App has theme persistence across app restarts
+- [ ] App handles loading, error, and success states properly
+- [ ] Pushed the project to GitHub
+
+---
+
+# Key Takeaways (Memorize These!)
+
+1. **BLoC separates business logic from UI** — your BLoC is pure Dart with zero Flutter dependencies, making it 100% testable.
+2. **Cubit for simple, Bloc for complex** — use Cubit for counters and toggles; use Bloc when you need event history, audit trails, or complex business rules.
+3. **Never mutate state** — always create new state objects with `copyWith()` or constructors. BLoC relies on object equality to detect changes.
+4. **Equatable is mandatory** — without `extends Equatable`, BLoC can't tell if a state actually changed, causing missed rebuilds.
+5. **UI logic goes in BlocListener, not in BLoC** — navigation, SnackBars, and dialogs belong in the widget layer. BLoC should only emit states.
+6. **HydratedBloc is magic for persistence** — automatically save and restore state across app kills with just `fromJson()` and `toJson()`.
+7. **BlocObserver gives you superpowers** — see every event, transition, and error globally. Essential for debugging and analytics.
+8. **Always close subscriptions** — if your BLoC listens to streams, cancel subscriptions in the `close()` method to prevent memory leaks.
+9. **Use `buildWhen` to optimize rebuilds** — prevent unnecessary widget rebuilds by comparing previous and current states.
+10. **RepositoryProvider + BlocProvider = Clean DI** — inject repositories at the root, pass them to blocs, and override for testing.
+
+---
+
+# Extra Practice (Do These Tonight!)
+
+1. **Weather App with BLoC:** Convert the Day 13 Weather App to use Bloc pattern. Add location search with debounced events, pull-to-refresh with `RefreshWeather` event, and error retry with `RetryWeather` event.
+2. **E-Commerce Cart:** Build a cart system with `AddToCart`, `RemoveFromCart`, `UpdateQuantity`, and `ApplyCoupon` events. Use HydratedBloc to persist cart across sessions.
+3. **Multi-Step Form Wizard:** Create a 4-step registration form where each step validates before proceeding. Use BlocListener to auto-advance steps and show validation errors.
+4. **Infinite Scroll List:** Implement pagination with `FetchPosts`, `FetchMorePosts`, and `RefreshPosts` events. Use `bloc_concurrency` to handle sequential loading.
+5. **Real-Time Chat:** Use StreamSubscription inside a Bloc to listen to WebSocket messages. Handle connection states (connecting, connected, disconnected, reconnecting) with proper event mapping.
+
+---
+
+**Congratulations!** You've completed Day 14. You now master the BLoC pattern — the enterprise-grade state management solution that powers production Flutter apps at scale. You can build predictable, testable, and maintainable applications with full state traceability and persistence.
+
+**Next Up → Day 15: Local Data Persistence (SharedPreferences, SQLite, Hive)**
+
+---
+
+*Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*
+*Day 14: State Management — BLoC Pattern — Complete Deep Dive*
+
 
 *Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*
 *Day 13: State Management — Riverpod — Complete Deep Dive*
