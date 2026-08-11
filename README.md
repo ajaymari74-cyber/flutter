@@ -17555,3 +17555,1323 @@ Use this checklist to verify mastery:
 
 
 
+# Day 12: State Management — Provider
+## Complete Deep Dive
+
+**Goal:** Master the most popular state management solution in Flutter. Learn ChangeNotifierProvider, Consumer, Selector, MultiProvider, FutureProvider, StreamProvider, and dependency injection. Refactor the Day 11 Todo app with Provider and add categories, priorities, and filters.
+
+---
+
+# Table of Contents
+1. Why Provider Matters
+2. Provider Package Setup
+3. ChangeNotifierProvider Deep Dive
+4. Consumer vs context.watch/read
+5. Selector for Granular Rebuilds
+6. MultiProvider for Multiple Services
+7. FutureProvider & StreamProvider
+8. Dependency Injection with Provider
+9. Provider Patterns & Best Practices
+10. Hands-On Project: Todo App with Provider + Categories
+11. Common Mistakes & How to Avoid Them
+12. Day 12 Checklist
+
+---
+
+# 1. Why Provider Matters
+
+## The Problem with Raw InheritedWidget
+| Issue | Pain Point |
+|---|---|
+| Verbose boilerplate | 50+ lines for a simple data holder |
+| Manual listener management | Easy to forget addListener/removeListener |
+| No built-in dispose | Memory leaks if not handled carefully |
+| Difficult to test | Tightly coupled to widget tree |
+
+## Why Provider Won
+- **Officially recommended** by the Flutter team (2019-2023)
+- **Minimal boilerplate** compared to InheritedWidget
+- **Compile-safe** (no string-based lookups)
+- **Lazy initialization** — creates models only when needed
+- **Automatic disposal** — cleans up when widget is removed
+- **Easy testing** — inject mock models directly
+
+## Provider Architecture
+```
+UI Layer (Widgets)
+    ↑↓
+Provider (Bridge)
+    ↑↓
+Business Logic (ChangeNotifier/Model)
+    ↑↓
+Data Layer (API/Database)
+```
+
+---
+
+# 2. Provider Package Setup
+
+## pubspec.yaml
+```yaml
+dependencies:
+  flutter:
+    sdk: flutter
+  provider: ^6.1.2
+```
+
+## Import
+```dart
+import 'package:provider/provider.dart';
+```
+
+## Provider Types Overview
+| Provider Type | Use Case |
+|---|---|
+| `Provider` | Immutable objects, services, utilities |
+| `ChangeNotifierProvider` | Mutable state with `notifyListeners()` |
+| `ValueListenableProvider` | Wraps ValueNotifier automatically |
+| `FutureProvider` | Async data that resolves once |
+| `StreamProvider` | Continuous async data stream |
+| `MultiProvider` | Combines multiple providers |
+
+---
+
+# 3. ChangeNotifierProvider Deep Dive
+
+## Basic Setup
+```dart
+void main() {
+  runApp(
+    ChangeNotifierProvider(
+      create: (context) => CounterModel(),
+      child: const MyApp(),
+    ),
+  );
+}
+```
+
+## The Model (ChangeNotifier)
+```dart
+class CounterModel extends ChangeNotifier {
+  int _count = 0;
+
+  int get count => _count;
+
+  void increment() {
+    _count++;
+    notifyListeners();
+  }
+
+  void decrement() {
+    _count--;
+    notifyListeners();
+  }
+}
+```
+
+## Reading State in Widgets
+```dart
+class CounterScreen extends StatelessWidget {
+  const CounterScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // Rebuilds when model changes
+    final count = context.watch<CounterModel>().count;
+
+    return Scaffold(
+      body: Center(child: Text('Count: $count')),
+      floatingActionButton: FloatingActionButton(
+        // Read once, no rebuild
+        onPressed: () => context.read<CounterModel>().increment(),
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+```
+
+## context.watch vs context.read vs context.select
+```dart
+// WATCH — Rebuilds widget when ANY property changes
+final model = context.watch<CounterModel>();
+Text('${model.count}');
+
+// READ — One-time read, NEVER rebuilds
+final model = context.read<CounterModel>();
+model.increment();
+
+// SELECT — Rebuilds ONLY when selected property changes
+final count = context.select<CounterModel, int>((m) => m.count);
+Text('$count'); // Only rebuilds if count changes, not if other properties change
+```
+
+## Provider.of (Legacy but still valid)
+```dart
+// Equivalent to context.watch
+final model = Provider.of<CounterModel>(context);
+
+// Equivalent to context.read (listen: false)
+final model = Provider.of<CounterModel>(context, listen: false);
+```
+
+---
+
+# 4. Consumer vs context.watch/read
+
+## Consumer Widget
+Use `Consumer` when you want to limit rebuilds to a specific subtree.
+
+```dart
+class MyScreen extends StatelessWidget {
+  const MyScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Consumer Demo')),
+      // This part doesn't rebuild when CounterModel changes
+      body: Column(
+        children: [
+          const Text('Static header — never rebuilds'),
+          // Only this Consumer rebuilds
+          Consumer<CounterModel>(
+            builder: (context, model, child) {
+              return Text('Count: ${model.count}');
+            },
+          ),
+          const Text('Static footer — never rebuilds'),
+        ],
+      ),
+    );
+  }
+}
+```
+
+## Consumer with child optimization
+```dart
+Consumer<CounterModel>(
+  builder: (context, model, child) {
+    return Column(
+      children: [
+        Text('Count: ${model.count}'), // Rebuilds
+        child!, // Does NOT rebuild — cached!
+      ],
+    );
+  },
+  child: const ExpensiveWidget(), // Built once, passed to builder
+)
+```
+
+## When to Use What?
+| Scenario | Use |
+|---|---|
+| Single value in small widget | `context.watch<T>()` |
+| Action button (no rebuild needed) | `context.read<T>()` |
+| Specific property only | `context.select<T, V>()` |
+| Isolate rebuilds to subtree | `Consumer<T>` |
+| Optimize with static child | `Consumer<T>` with `child` param |
+
+---
+
+# 5. Selector for Granular Rebuilds
+
+## The Problem
+```dart
+class UserModel extends ChangeNotifier {
+  String name = 'Kimi';
+  int age = 25;
+  String email = 'kimi@example.com';
+  // ... 20 more fields
+}
+
+// WRONG — Rebuilds when ANY field changes, even if only using name
+final user = context.watch<UserModel>();
+Text(user.name);
+```
+
+## The Solution: Selector
+```dart
+// Only rebuilds when 'name' changes
+Selector<UserModel, String>(
+  selector: (context, model) => model.name,
+  builder: (context, name, child) {
+    return Text('Name: $name');
+  },
+)
+
+// Only rebuilds when 'age' changes
+Selector<UserModel, int>(
+  selector: (context, model) => model.age,
+  builder: (context, age, child) {
+    return Text('Age: $age');
+  },
+)
+```
+
+## Selector with shouldRebuild
+```dart
+Selector<CartModel, double>(
+  selector: (context, cart) => cart.totalPrice,
+  shouldRebuild: (previous, next) => previous != next,
+  builder: (context, total, child) {
+    return Text('Total: $$total');
+  },
+)
+```
+
+---
+
+# 6. MultiProvider for Multiple Services
+
+## The Problem
+```dart
+// WRONG — Nested providers are ugly and hard to read
+ChangeNotifierProvider(
+  create: (_) => AuthService(),
+  child: ChangeNotifierProvider(
+    create: (_) => CartService(),
+    child: ChangeNotifierProvider(
+      create: (_) => ThemeService(),
+      child: const MyApp(),
+    ),
+  ),
+)
+```
+
+## The Solution: MultiProvider
+```dart
+void main() {
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthService()),
+        ChangeNotifierProvider(create: (_) => CartService()),
+        ChangeNotifierProvider(create: (_) => ThemeService()),
+        Provider(create: (_) => ApiClient()), // Immutable service
+        Provider(create: (_) => AnalyticsService()),
+      ],
+      child: const MyApp(),
+    ),
+  );
+}
+```
+
+## Accessing Multiple Providers
+```dart
+class DashboardScreen extends StatelessWidget {
+  const DashboardScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthService>();
+    final cart = context.watch<CartService>();
+    final theme = context.watch<ThemeService>();
+    final api = context.read<ApiClient>(); // No rebuild needed
+
+    return Scaffold(
+      appBar: AppBar(title: Text('Welcome, ${auth.userName}')),
+      body: Text('Cart: ${cart.itemCount} items'),
+    );
+  }
+}
+```
+
+---
+
+# 7. FutureProvider & StreamProvider
+
+## FutureProvider (One-time async data)
+```dart
+class UserProfileScreen extends StatelessWidget {
+  const UserProfileScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureProvider<User?>(
+      create: (context) => context.read<ApiService>().fetchUser(),
+      initialData: null,
+      child: const UserProfileContent(),
+    );
+  }
+}
+
+class UserProfileContent extends StatelessWidget {
+  const UserProfileContent({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = context.watch<User?>();
+
+    if (user == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return Text('Hello, ${user.name}');
+  }
+}
+```
+
+## StreamProvider (Real-time data)
+```dart
+class ChatScreen extends StatelessWidget {
+  const ChatScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamProvider<List<Message>>(
+      create: (context) => context.read<ChatService>().messageStream(),
+      initialData: const [],
+      child: const ChatList(),
+    );
+  }
+}
+
+class ChatList extends StatelessWidget {
+  const ChatList({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final messages = context.watch<List<Message>>();
+
+    return ListView.builder(
+      itemCount: messages.length,
+      itemBuilder: (context, index) => MessageBubble(message: messages[index]),
+    );
+  }
+}
+```
+
+---
+
+# 8. Dependency Injection with Provider
+
+## Injecting Services into Models
+```dart
+class TodoService extends ChangeNotifier {
+  final ApiClient _api;
+  final AnalyticsService _analytics;
+
+  TodoService({required ApiClient api, required AnalyticsService analytics})
+      : _api = api,
+        _analytics = analytics;
+
+  Future<void> loadTodos() async {
+    _todos = await _api.fetchTodos();
+    notifyListeners();
+  }
+
+  void addTodo(String title) {
+    // ...
+    _analytics.logEvent('todo_added');
+  }
+}
+```
+
+## Wiring Dependencies in MultiProvider
+```dart
+MultiProvider(
+  providers: [
+    Provider(create: (_) => ApiClient(baseUrl: 'https://api.example.com')),
+    Provider(create: (_) => AnalyticsService()),
+    ChangeNotifierProvider(
+      create: (context) => TodoService(
+        api: context.read<ApiClient>(),
+        analytics: context.read<AnalyticsService>(),
+      ),
+    ),
+  ],
+  child: const MyApp(),
+)
+```
+
+## ProxyProvider (Dependent Providers)
+```dart
+MultiProvider(
+  providers: [
+    Provider(create: (_) => AuthToken()),
+    ProxyProvider<AuthToken, ApiClient>(
+      update: (context, token, previous) =>
+          ApiClient(authToken: token),
+    ),
+  ],
+  child: const MyApp(),
+)
+```
+
+---
+
+# 9. Provider Patterns & Best Practices
+
+## Pattern 1: Repository + Service + UI
+```dart
+// Data Layer
+class TodoRepository {
+  Future<List<Todo>> fetchTodos() async { /* API call */ }
+}
+
+// Business Logic Layer
+class TodoService extends ChangeNotifier {
+  final TodoRepository _repository;
+  List<Todo> _todos = [];
+
+  TodoService(this._repository);
+
+  Future<void> load() async {
+    _todos = await _repository.fetchTodos();
+    notifyListeners();
+  }
+}
+
+// UI Layer
+class TodoScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final todos = context.watch<TodoService>().todos;
+    return ListView.builder(/* ... */);
+  }
+}
+```
+
+## Pattern 2: ViewModel per Screen
+```dart
+class LoginViewModel extends ChangeNotifier {
+  bool _isLoading = false;
+  String? _error;
+
+  bool get isLoading => _isLoading;
+  String? get error => _error;
+
+  Future<void> login(String email, String password) async {
+    _setLoading(true);
+    try {
+      await authApi.login(email, password);
+      _error = null;
+    } catch (e) {
+      _error = e.toString();
+    }
+    _setLoading(false);
+  }
+
+  void _setLoading(bool value) {
+    _isLoading = value;
+    notifyListeners();
+  }
+}
+```
+
+## Pattern 3: Global vs Local Providers
+```dart
+// GLOBAL — Available everywhere (place above MaterialApp)
+MultiProvider(
+  providers: [
+    ChangeNotifierProvider(create: (_) => AuthService()),
+    ChangeNotifierProvider(create: (_) => ThemeService()),
+  ],
+  child: MaterialApp(...),
+)
+
+// LOCAL — Only available on specific route
+Navigator.push(
+  context,
+  MaterialPageRoute(
+    builder: (_) => ChangeNotifierProvider(
+      create: (_) => CheckoutViewModel(),
+      child: const CheckoutScreen(),
+    ),
+  ),
+);
+```
+
+---
+
+# 10. Hands-On Project: Todo App with Provider + Categories
+
+## Project Overview
+Refactor the Day 11 Todo app using Provider with:
+- ChangeNotifierProvider for TodoService
+- Categories (Work, Personal, Shopping, Health)
+- Priority levels (Low, Medium, High)
+- Filter by category and priority
+- Sort by date or priority
+- Statistics (total, completed, pending counts)
+
+## Complete Code
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+void main() {
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => TodoService()),
+        ChangeNotifierProvider(create: (_) => FilterService()),
+      ],
+      child: const TaskMasterApp(),
+    ),
+  );
+}
+
+// ============ ENUMS ============
+enum TodoCategory { work, personal, shopping, health }
+enum TodoPriority { low, medium, high }
+
+// ============ MODELS ============
+class Todo {
+  final String id;
+  String title;
+  bool isDone;
+  final TodoCategory category;
+  final TodoPriority priority;
+  final DateTime createdAt;
+
+  Todo({
+    required this.id,
+    required this.title,
+    this.isDone = false,
+    required this.category,
+    required this.priority,
+    required this.createdAt,
+  });
+}
+
+// ============ TODO SERVICE ============
+class TodoService extends ChangeNotifier {
+  final List<Todo> _todos = [
+    Todo(id: '1', title: 'Complete Flutter project', category: TodoCategory.work, priority: TodoPriority.high, createdAt: DateTime.now().subtract(const Duration(days: 1))),
+    Todo(id: '2', title: 'Buy groceries', category: TodoCategory.shopping, priority: TodoPriority.medium, createdAt: DateTime.now().subtract(const Duration(hours: 5))),
+    Todo(id: '3', title: 'Morning jog', category: TodoCategory.health, priority: TodoPriority.low, createdAt: DateTime.now().subtract(const Duration(hours: 2))),
+    Todo(id: '4', title: 'Call mom', category: TodoCategory.personal, priority: TodoPriority.high, createdAt: DateTime.now()),
+  ];
+
+  List<Todo> get todos => List.unmodifiable(_todos);
+
+  List<Todo> getFiltered({
+    TodoCategory? category,
+    TodoPriority? priority,
+    String? searchQuery,
+    bool? showCompleted,
+  }) {
+    return _todos.where((todo) {
+      if (category != null && todo.category != category) return false;
+      if (priority != null && todo.priority != priority) return false;
+      if (searchQuery != null && searchQuery.isNotEmpty) {
+        if (!todo.title.toLowerCase().contains(searchQuery.toLowerCase())) return false;
+      }
+      if (showCompleted == false && todo.isDone) return false;
+      return true;
+    }).toList();
+  }
+
+  int get totalCount => _todos.length;
+  int get completedCount => _todos.where((t) => t.isDone).length;
+  int get pendingCount => _todos.where((t) => !t.isDone).length;
+  int get highPriorityCount => _todos.where((t) => t.priority == TodoPriority.high && !t.isDone).length;
+
+  void addTodo(String title, TodoCategory category, TodoPriority priority) {
+    _todos.add(Todo(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: title,
+      category: category,
+      priority: priority,
+      createdAt: DateTime.now(),
+    ));
+    notifyListeners();
+  }
+
+  void toggleTodo(String id) {
+    final todo = _todos.firstWhere((t) => t.id == id);
+    todo.isDone = !todo.isDone;
+    notifyListeners();
+  }
+
+  void deleteTodo(String id) {
+    _todos.removeWhere((t) => t.id == id);
+    notifyListeners();
+  }
+}
+
+// ============ FILTER SERVICE ============
+class FilterService extends ChangeNotifier {
+  TodoCategory? _selectedCategory;
+  TodoPriority? _selectedPriority;
+  String _searchQuery = '';
+  bool _showCompleted = true;
+
+  TodoCategory? get selectedCategory => _selectedCategory;
+  TodoPriority? get selectedPriority => _selectedPriority;
+  String get searchQuery => _searchQuery;
+  bool get showCompleted => _showCompleted;
+
+  void setCategory(TodoCategory? category) {
+    _selectedCategory = category;
+    notifyListeners();
+  }
+
+  void setPriority(TodoPriority? priority) {
+    _selectedPriority = priority;
+    notifyListeners();
+  }
+
+  void setSearchQuery(String query) {
+    _searchQuery = query;
+    notifyListeners();
+  }
+
+  void toggleShowCompleted() {
+    _showCompleted = !_showCompleted;
+    notifyListeners();
+  }
+
+  void clearFilters() {
+    _selectedCategory = null;
+    _selectedPriority = null;
+    _searchQuery = '';
+    _showCompleted = true;
+    notifyListeners();
+  }
+}
+
+// ============ APP ============
+class TaskMasterApp extends StatelessWidget {
+  const TaskMasterApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'TaskMaster Pro',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+      ),
+      home: const TodoHomeScreen(),
+    );
+  }
+}
+
+// ============ HOME SCREEN ============
+class TodoHomeScreen extends StatelessWidget {
+  const TodoHomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('TaskMaster'),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.filter_list),
+            onPressed: () => _showFilterBottomSheet(context),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          const _StatsBar(),
+          const _SearchBar(),
+          const _CategoryFilterChips(),
+          const _PriorityFilterChips(),
+          Expanded(child: _TodoList()),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showAddTodoDialog(context),
+        icon: const Icon(Icons.add),
+        label: const Text('New Task'),
+      ),
+    );
+  }
+
+  void _showAddTodoDialog(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => const AddTodoBottomSheet(),
+    );
+  }
+
+  void _showFilterBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => const FilterBottomSheet(),
+    );
+  }
+}
+
+// ============ STATS BAR ============
+class _StatsBar extends StatelessWidget {
+  const _StatsBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<TodoService>(
+      builder: (context, service, _) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _StatCard(label: 'Total', value: service.totalCount, color: Colors.blue),
+              _StatCard(label: 'Pending', value: service.pendingCount, color: Colors.orange),
+              _StatCard(label: 'Done', value: service.completedCount, color: Colors.green),
+              _StatCard(label: 'Urgent', value: service.highPriorityCount, color: Colors.red),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final String label;
+  final int value;
+  final Color color;
+
+  const _StatCard({required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            '$value',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(label, style: const TextStyle(fontSize: 12)),
+      ],
+    );
+  }
+}
+
+// ============ SEARCH BAR ============
+class _SearchBar extends StatelessWidget {
+  const _SearchBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: TextField(
+        decoration: InputDecoration(
+          hintText: 'Search tasks...',
+          prefixIcon: const Icon(Icons.search),
+          filled: true,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        ),
+        onChanged: (value) => context.read<FilterService>().setSearchQuery(value),
+      ),
+    );
+  }
+}
+
+// ============ CATEGORY CHIPS ============
+class _CategoryFilterChips extends StatelessWidget {
+  const _CategoryFilterChips();
+
+  @override
+  Widget build(BuildContext context) {
+    final categories = TodoCategory.values;
+
+    return Consumer<FilterService>(
+      builder: (context, filter, _) {
+        return SizedBox(
+          height: 40,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            children: [
+              FilterChip(
+                label: const Text('All'),
+                selected: filter.selectedCategory == null,
+                onSelected: (_) => filter.setCategory(null),
+              ),
+              ...categories.map((cat) => Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: FilterChip(
+                  label: Text(cat.name.toUpperCase()),
+                  selected: filter.selectedCategory == cat,
+                  onSelected: (_) => filter.setCategory(cat),
+                ),
+              )),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ============ PRIORITY CHIPS ============
+class _PriorityFilterChips extends StatelessWidget {
+  const _PriorityFilterChips();
+
+  @override
+  Widget build(BuildContext context) {
+    final priorities = TodoPriority.values;
+
+    return Consumer<FilterService>(
+      builder: (context, filter, _) {
+        return SizedBox(
+          height: 40,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            children: [
+              ChoiceChip(
+                label: const Text('All Priorities'),
+                selected: filter.selectedPriority == null,
+                onSelected: (_) => filter.setPriority(null),
+              ),
+              ...priorities.map((p) => Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: ChoiceChip(
+                  label: Text(p.name),
+                  selected: filter.selectedPriority == p,
+                  onSelected: (_) => filter.setPriority(p),
+                ),
+              )),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ============ TODO LIST ============
+class _TodoList extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Consumer2<TodoService, FilterService>(
+      builder: (context, todoService, filterService, _) {
+        final todos = todoService.getFiltered(
+          category: filterService.selectedCategory,
+          priority: filterService.selectedPriority,
+          searchQuery: filterService.searchQuery,
+          showCompleted: filterService.showCompleted,
+        );
+
+        if (todos.isEmpty) {
+          return const Center(child: Text('No tasks found'));
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: todos.length,
+          itemBuilder: (context, index) {
+            final todo = todos[index];
+            return _TodoCard(todo: todo);
+          },
+        );
+      },
+    );
+  }
+}
+
+// ============ TODO CARD ============
+class _TodoCard extends StatelessWidget {
+  final Todo todo;
+  const _TodoCard({required this.todo});
+
+  Color _getPriorityColor() {
+    switch (todo.priority) {
+      case TodoPriority.high: return Colors.red;
+      case TodoPriority.medium: return Colors.orange;
+      case TodoPriority.low: return Colors.green;
+    }
+  }
+
+  Color _getCategoryColor() {
+    switch (todo.category) {
+      case TodoCategory.work: return Colors.blue;
+      case TodoCategory.personal: return Colors.purple;
+      case TodoCategory.shopping: return Colors.teal;
+      case TodoCategory.health: return Colors.pink;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dismissible(
+      key: Key(todo.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        color: Colors.red,
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      onDismissed: (_) => context.read<TodoService>().deleteTodo(todo.id),
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 10),
+        child: ListTile(
+          leading: Checkbox(
+            value: todo.isDone,
+            onChanged: (_) => context.read<TodoService>().toggleTodo(todo.id),
+          ),
+          title: Text(
+            todo.title,
+            style: TextStyle(
+              decoration: todo.isDone ? TextDecoration.lineThrough : null,
+              color: todo.isDone ? Colors.grey : null,
+            ),
+          ),
+          subtitle: Row(
+            children: [
+              Chip(
+                label: Text(todo.category.name, style: const TextStyle(fontSize: 10)),
+                backgroundColor: _getCategoryColor().withOpacity(0.1),
+                labelStyle: TextStyle(color: _getCategoryColor(), fontSize: 10),
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _getPriorityColor().withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  todo.priority.name,
+                  style: TextStyle(color: _getPriorityColor(), fontSize: 10),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============ ADD TODO BOTTOM SHEET ============
+class AddTodoBottomSheet extends StatefulWidget {
+  const AddTodoBottomSheet({super.key});
+
+  @override
+  State<AddTodoBottomSheet> createState() => _AddTodoBottomSheetState();
+}
+
+class _AddTodoBottomSheetState extends State<AddTodoBottomSheet> {
+  final _controller = TextEditingController();
+  TodoCategory _category = TodoCategory.work;
+  TodoPriority _priority = TodoPriority.medium;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+        left: 16,
+        right: 16,
+        top: 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('New Task', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _controller,
+            decoration: const InputDecoration(
+              hintText: 'What needs to be done?',
+              border: OutlineInputBorder(),
+            ),
+            autofocus: true,
+          ),
+          const SizedBox(height: 16),
+          const Text('Category', style: TextStyle(fontWeight: FontWeight.w600)),
+          Wrap(
+            spacing: 8,
+            children: TodoCategory.values.map((cat) => ChoiceChip(
+              label: Text(cat.name),
+              selected: _category == cat,
+              onSelected: (_) => setState(() => _category = cat),
+            )).toList(),
+          ),
+          const SizedBox(height: 16),
+          const Text('Priority', style: TextStyle(fontWeight: FontWeight.w600)),
+          Wrap(
+            spacing: 8,
+            children: TodoPriority.values.map((p) => ChoiceChip(
+              label: Text(p.name),
+              selected: _priority == p,
+              onSelected: (_) => setState(() => _priority = p),
+            )).toList(),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () {
+              final text = _controller.text.trim();
+              if (text.isNotEmpty) {
+                context.read<TodoService>().addTodo(text, _category, _priority);
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Add Task'),
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+}
+
+// ============ FILTER BOTTOM SHEET ============
+class FilterBottomSheet extends StatelessWidget {
+  const FilterBottomSheet({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<FilterService>(
+      builder: (context, filter, _) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Filters', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              SwitchListTile(
+                title: const Text('Show Completed'),
+                value: filter.showCompleted,
+                onChanged: (_) => filter.toggleShowCompleted(),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () {
+                    filter.clearFilters();
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Clear All Filters'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+```
+
+---
+
+# 11. Common Mistakes & How to Avoid Them
+
+## Mistake 1: Using context.watch in initState / didChangeDependencies
+```dart
+// WRONG — Can't use context.watch in initState
+@override
+void initState() {
+  super.initState();
+  final value = context.watch<MyModel>().value; // CRASH!
+}
+
+// CORRECT — Use context.read or Provider.of with listen: false
+@override
+void initState() {
+  super.initState();
+  final value = context.read<MyModel>().value; // OK
+  // Or schedule after first frame
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    context.read<MyModel>().loadData();
+  });
+}
+```
+
+## Mistake 2: Not Using MultiProvider
+```dart
+// WRONG — Deep nesting, unreadable
+ChangeNotifierProvider(
+  create: (_) => A(),
+  child: ChangeNotifierProvider(
+    create: (_) => B(),
+    child: ChangeNotifierProvider(
+      create: (_) => C(),
+      child: const App(),
+    ),
+  ),
+)
+
+// CORRECT — Flat, readable
+MultiProvider(
+  providers: [
+    ChangeNotifierProvider(create: (_) => A()),
+    ChangeNotifierProvider(create: (_) => B()),
+    ChangeNotifierProvider(create: (_) => C()),
+  ],
+  child: const App(),
+)
+```
+
+## Mistake 3: Rebuilding Everything with context.watch
+```dart
+// WRONG — Entire Scaffold rebuilds on every change
+@override
+Widget build(BuildContext context) {
+  final model = context.watch<TodoService>(); // Rebuilds everything!
+  return Scaffold(
+    appBar: AppBar(title: const Text('Todos')),
+    body: ListView(...),
+  );
+}
+
+// CORRECT — Use Consumer for targeted rebuilds
+@override
+Widget build(BuildContext context) {
+  return Scaffold(
+    appBar: AppBar(title: const Text('Todos')),
+    body: Consumer<TodoService>(
+      builder: (context, model, _) => ListView(...),
+    ),
+  );
+}
+```
+
+## Mistake 4: Forgetting to Dispose in create
+```dart
+// WRONG — Model never disposed
+ChangeNotifierProvider(create: (_) => MyModel())
+
+// CORRECT — Provider auto-disposes ChangeNotifiers by default
+// But for custom cleanup:
+class MyModel extends ChangeNotifier {
+  final _streamSubscription = someStream.listen(...);
+
+  @override
+  void dispose() {
+    _streamSubscription.cancel();
+    super.dispose();
+  }
+}
+```
+
+## Mistake 5: Using Provider for Everything
+```dart
+// WRONG — Overkill for simple, local state
+ChangeNotifierProvider(create: (_) => PageIndexNotifier())
+
+// CORRECT — Use ValueNotifier or setState for local state
+final _pageIndex = ValueNotifier<int>(0);
+```
+
+## Mistake 6: Not Handling null in FutureProvider
+```dart
+// WRONG — May crash if initialData is wrong type
+FutureProvider<User>(
+  create: (_) => api.fetchUser(),
+  child: const ProfileScreen(),
+)
+
+// CORRECT — Use nullable type with loading state
+FutureProvider<User?>(
+  create: (_) => api.fetchUser(),
+  initialData: null,
+  child: const ProfileScreen(),
+)
+```
+
+## Mistake 7: Calling notifyListeners During build()
+```dart
+// WRONG — Throws exception
+@override
+Widget build(BuildContext context) {
+  final model = context.watch<MyModel>();
+  if (model.shouldLoad) {
+    model.load(); // Calls notifyListeners during build!
+  }
+  return Container();
+}
+
+// CORRECT — Use post-frame callback or initState
+@override
+void initState() {
+  super.initState();
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    context.read<MyModel>().load();
+  });
+}
+```
+
+---
+
+# 12. Day 12 Checklist
+
+Use this checklist to verify mastery:
+- [ ] Understands why Provider is preferred over raw InheritedWidget
+- [ ] Can set up ChangeNotifierProvider in main()
+- [ ] Can create a ChangeNotifier model with getters and business methods
+- [ ] Knows the difference between context.watch, context.read, context.select
+- [ ] Can use Consumer to limit rebuild scope
+- [ ] Can use Consumer with child parameter for optimization
+- [ ] Can use Selector for property-specific rebuilds
+- [ ] Can set up MultiProvider with multiple services
+- [ ] Can use FutureProvider for one-time async data
+- [ ] Can use StreamProvider for real-time data streams
+- [ ] Can inject dependencies using Provider + context.read
+- [ ] Can use ProxyProvider for dependent services
+- [ ] Understands Repository + Service + UI pattern
+- [ ] Built the Todo App with Provider + Categories + Priorities
+- [ ] App has filter by category, priority, and search
+- [ ] App shows statistics (total, pending, done, urgent)
+- [ ] App uses Consumer2 for combined state access
+- [ ] Never uses context.watch in initState
+- [ ] Pushed the project to GitHub
+
+---
+
+# Key Takeaways (Memorize These!)
+
+1. **Use ChangeNotifierProvider for mutable state**, Provider for immutable services.
+2. **context.watch** rebuilds the widget when model changes. **context.read** reads once and never rebuilds.
+3. **Use Selector** when you only need one property — prevents unnecessary rebuilds.
+4. **Use Consumer** to isolate rebuilds to a specific subtree, especially with expensive widgets.
+5. **Always use MultiProvider** when you have 2+ providers — flat is better than nested.
+6. **Never use context.watch in initState** — use context.read or addPostFrameCallback.
+7. **Separate business logic from UI** — keep models pure, widgets dumb.
+8. **FutureProvider/StreamProvider** handle loading states automatically — no manual flag needed.
+9. **Provider auto-disposes ChangeNotifiers** by default, but you must clean up custom resources.
+10. **Don't use Provider for everything** — local UI state still belongs in setState or ValueNotifier.
+
+---
+
+# Extra Practice (Do These Tonight!)
+
+1. **Shopping Cart with Provider:** Build a product catalog + cart app. Use Provider for cart state, Selector for cart total, and MultiProvider for auth + cart + catalog.
+2. **Weather App:** Use FutureProvider to fetch weather data. Show loading, error, and success states automatically.
+3. **Chat App:** Use StreamProvider for real-time messages. Combine with ChangeNotifier for user typing indicators.
+4. **Multi-step Form:** Build a 3-step wizard where each step is a ChangeNotifier. Use ProxyProvider to pass data between steps.
+5. **Theme + Auth + Settings:** Create an app with three independent ChangeNotifiers. Use MultiProvider and test that changes in one don't rebuild unrelated widgets.
+
+---
+
+**Congratulations!** You've completed Day 12. You now master Provider, the most popular state management solution in Flutter. You can build scalable apps with clean separation of concerns, efficient rebuilds, and proper dependency injection.
+
+**Next Up → Day 13: State Management — Riverpod**
+
+---
+
+*Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*
+*Day 12: State Management — Provider — Complete Deep Dive*
