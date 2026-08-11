@@ -18875,3 +18875,1327 @@ Use this checklist to verify mastery:
 
 *Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*
 *Day 12: State Management — Provider — Complete Deep Dive*
+# Day 13: State Management — Riverpod
+## Complete Deep Dive
+
+**Goal:** Learn the modern, compile-safe state management solution that is officially recommended for new Flutter projects in 2026. Master StateProvider, StateNotifierProvider, FutureProvider, StreamProvider, AsyncValue, code generation with @riverpod, and build a production-grade Weather App.
+
+---
+
+# Table of Contents
+1. Why Riverpod Over Provider
+2. Riverpod Package Setup
+3. Provider Types in Riverpod
+4. ref.watch, ref.read, ref.listen
+5. StateProvider & StateNotifierProvider
+6. FutureProvider & StreamProvider
+7. AsyncValue Handling
+8. Family Modifiers & AutoDispose
+9. Riverpod Generator & @riverpod
+10. Architecture Patterns with Riverpod
+11. Hands-On Project: Weather App
+12. Common Mistakes & How to Avoid Them
+13. Day 13 Checklist
+
+---
+
+# 1. Why Riverpod Over Provider
+
+## The Problems Provider Couldn't Solve
+| Problem | Provider | Riverpod |
+|---|---|---|
+| Compile safety | Runtime exceptions on typos | Compile-time safe |
+| Testing | Must wrap widget tree | Test providers in isolation |
+| Global state pollution | Providers always alive | AutoDispose by default |
+| Provider lookup | String-based, error-prone | Type-safe, direct reference |
+| DevTools | Limited | Full state inspection |
+| Code generation | Manual boilerplate | @riverpod generates everything |
+
+## Why Riverpod Won in 2026
+- **Created by Remi Rousselet** (same author as Provider)
+- **Officially recommended** for all new Flutter projects
+- **Compile-safe** — no more "Provider not found" crashes
+- **AutoDispose by default** — memory efficient out of the box
+- **Testable without BuildContext** — pure Dart testing
+- **DevTools integration** — inspect state in real-time
+- **Code generation** — write less boilerplate with `@riverpod`
+
+## Riverpod vs Provider Mental Model
+```
+Provider:     InheritedWidget → context.watch/read → Widget rebuilds
+Riverpod:     ProviderContainer → ref.watch/read → Widget rebuilds
+```
+
+---
+
+# 2. Riverpod Package Setup
+
+## pubspec.yaml
+```yaml
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+dev_dependencies:
+  riverpod_generator: ^2.4.0
+  build_runner: ^2.4.9
+  custom_lint: ^0.6.4
+  riverpod_lint: ^2.3.10
+```
+
+## Wrap App with ProviderScope
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+void main() {
+  runApp(
+    const ProviderScope(
+      child: MyApp(),
+    ),
+  );
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Riverpod App',
+      home: const HomeScreen(),
+    );
+  }
+}
+```
+
+## Widget Types
+| Widget | Use When |
+|---|---|
+| `ConsumerWidget` | Stateless widget that reads providers |
+| `ConsumerStatefulWidget` | Stateful widget that reads providers |
+| `StatelessWidget` | Doesn't need any provider |
+
+---
+
+# 3. Provider Types in Riverpod
+
+## Core Provider Types
+| Provider | Use Case | Mutable? |
+|---|---|---|
+| `Provider` | Immutable values, computed state, services | No |
+| `StateProvider` | Simple mutable state (primitives, enums) | Yes |
+| `StateNotifierProvider` | Complex mutable state with methods | Yes |
+| `FutureProvider` | Async data that resolves once | Auto |
+| `StreamProvider` | Continuous async data stream | Auto |
+| `ChangeNotifierProvider` | Legacy Provider migration | Yes |
+| `AsyncNotifierProvider` | Async operations with loading states | Yes |
+
+## Simple Provider (Immutable)
+```dart
+// Define a provider
+final greetingProvider = Provider<String>((ref) => 'Hello, Riverpod!');
+
+// Read in widget
+class GreetingText extends ConsumerWidget {
+  const GreetingText({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final greeting = ref.watch(greetingProvider);
+    return Text(greeting);
+  }
+}
+```
+
+## Provider with Dependencies
+```dart
+final nameProvider = Provider<String>((ref) => 'Kimi');
+
+// Computed provider that depends on another
+final welcomeMessageProvider = Provider<String>((ref) {
+  final name = ref.watch(nameProvider);
+  return 'Welcome back, $name!';
+});
+```
+
+---
+
+# 4. ref.watch, ref.read, ref.listen
+
+## ref.watch (Subscribe & Rebuild)
+```dart
+class CounterDisplay extends ConsumerWidget {
+  const CounterDisplay({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Rebuilds whenever counterProvider's state changes
+    final count = ref.watch(counterProvider);
+    return Text('Count: $count');
+  }
+}
+```
+
+## ref.read (One-time Read)
+```dart
+class CounterButton extends ConsumerWidget {
+  const CounterButton({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ElevatedButton(
+      // Read once, no subscription
+      onPressed: () => ref.read(counterProvider.notifier).state++,
+      child: const Text('Increment'),
+    );
+  }
+}
+```
+
+## ref.listen (Side Effects)
+```dart
+class LoginScreen extends ConsumerWidget {
+  const LoginScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Listen for errors and show SnackBar
+    ref.listen<AsyncValue<void>>(loginProvider, (previous, next) {
+      next.whenOrNull(
+        error: (error, _) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Login failed: $error')),
+          );
+        },
+        data: (_) {
+          Navigator.pushReplacementNamed(context, '/home');
+        },
+      );
+    });
+
+    return const LoginForm();
+  }
+}
+```
+
+## When to Use What?
+| Method | Use When |
+|---|---|
+| `ref.watch` | Displaying state that should trigger rebuilds |
+| `ref.read` | Event handlers (onPressed, callbacks) |
+| `ref.listen` | Side effects (navigation, SnackBar, analytics) |
+
+---
+
+# 5. StateProvider & StateNotifierProvider
+
+## StateProvider (Simple State)
+```dart
+final counterProvider = StateProvider<int>((ref) => 0);
+
+class CounterScreen extends ConsumerWidget {
+  const CounterScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final count = ref.watch(counterProvider);
+
+    return Scaffold(
+      body: Center(child: Text('$count')),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          // Update state
+          ref.read(counterProvider.notifier).state++;
+        },
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+```
+
+## StateNotifierProvider (Complex State)
+```dart
+class CounterState {
+  final int count;
+  final int maxCount;
+  final bool isAtMax;
+
+  CounterState({this.count = 0, this.maxCount = 10})
+      : isAtMax = count >= maxCount;
+
+  CounterState copyWith({int? count, int? maxCount}) {
+    return CounterState(
+      count: count ?? this.count,
+      maxCount: maxCount ?? this.maxCount,
+    );
+  }
+}
+
+class CounterNotifier extends StateNotifier<CounterState> {
+  CounterNotifier() : super(CounterState());
+
+  void increment() {
+    if (!state.isAtMax) {
+      state = state.copyWith(count: state.count + 1);
+    }
+  }
+
+  void decrement() {
+    if (state.count > 0) {
+      state = state.copyWith(count: state.count - 1);
+    }
+  }
+
+  void reset() {
+    state = CounterState();
+  }
+}
+
+final counterNotifierProvider = StateNotifierProvider<CounterNotifier, CounterState>((ref) {
+  return CounterNotifier();
+});
+
+// Usage
+class CounterScreen extends ConsumerWidget {
+  const CounterScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(counterNotifierProvider);
+    final notifier = ref.read(counterNotifierProvider.notifier);
+
+    return Scaffold(
+      body: Column(
+        children: [
+          Text('Count: ${state.count}'),
+          if (state.isAtMax) const Text('Maximum reached!'),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: state.isAtMax ? null : notifier.increment,
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 6. FutureProvider & StreamProvider
+
+## FutureProvider (HTTP/API Calls)
+```dart
+final weatherProvider = FutureProvider<Weather>((ref) async {
+  final api = ref.read(weatherApiProvider);
+  return await api.fetchCurrentWeather('London');
+});
+
+class WeatherScreen extends ConsumerWidget {
+  const WeatherScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final weatherAsync = ref.watch(weatherProvider);
+
+    return weatherAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, stack) => Center(child: Text('Error: $err')),
+      data: (weather) => WeatherCard(weather: weather),
+    );
+  }
+}
+```
+
+## StreamProvider (Real-time Data)
+```dart
+final messageStreamProvider = StreamProvider<List<Message>>((ref) {
+  final chatService = ref.read(chatServiceProvider);
+  return chatService.messageStream();
+});
+
+class ChatList extends ConsumerWidget {
+  const ChatList({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final messagesAsync = ref.watch(messageStreamProvider);
+
+    return messagesAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, _) => Center(child: Text('Error: $err')),
+      data: (messages) => ListView.builder(
+        itemCount: messages.length,
+        itemBuilder: (context, index) => MessageBubble(message: messages[index]),
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 7. AsyncValue Handling
+
+## What is AsyncValue?
+`AsyncValue` is Riverpod's unified type for async states. It replaces manual `isLoading`, `hasError`, `data` flags.
+
+```dart
+// Instead of this mess:
+bool _isLoading = true;
+String? _error;
+Weather? _weather;
+
+// Riverpod gives you:
+AsyncValue<Weather> weatherAsync;
+```
+
+## AsyncValue States
+```dart
+AsyncValue<T> can be:
+├── AsyncLoading()     // Initial loading state
+├── AsyncData(T value) // Success with data
+└── AsyncError(Object error, StackTrace stackTrace) // Error state
+```
+
+## Handling AsyncValue
+```dart
+// Method 1: .when() — handles all states
+final asyncValue = ref.watch(weatherProvider);
+
+return asyncValue.when(
+  loading: () => const LoadingWidget(),
+  error: (err, stack) => ErrorWidget(error: err),
+  data: (weather) => WeatherDisplay(weather: weather),
+);
+
+// Method 2: .whenOrNull() — handle only specific states
+return asyncValue.whenOrNull(
+  data: (weather) => WeatherDisplay(weather: weather),
+) ?? const LoadingWidget();
+
+// Method 3: .valueOrNull — get data or null
+final weather = asyncValue.valueOrNull;
+if (weather != null) {
+  return WeatherDisplay(weather: weather);
+}
+
+// Method 4: .hasValue, .hasError, .isLoading
+if (asyncValue.isLoading) return const LoadingWidget();
+if (asyncValue.hasError) return ErrorWidget(error: asyncValue.error!);
+if (asyncValue.hasValue) return WeatherDisplay(weather: asyncValue.value!);
+```
+
+## AsyncValue with Refresh (Pull-to-Refresh)
+```dart
+class WeatherScreen extends ConsumerWidget {
+  const WeatherScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final weatherAsync = ref.watch(weatherProvider);
+
+    return RefreshIndicator(
+      onRefresh: () => ref.refresh(weatherProvider.future),
+      child: weatherAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, _) => Center(child: Text('Error: $err')),
+        data: (weather) => ListView(
+          children: [WeatherCard(weather: weather)],
+        ),
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 8. Family Modifiers & AutoDispose
+
+## Provider Family (Parameterized Providers)
+```dart
+// Create a provider that takes a parameter
+final cityWeatherProvider = FutureProvider.family<Weather, String>((ref, city) async {
+  final api = ref.read(weatherApiProvider);
+  return await api.fetchWeather(city);
+});
+
+// Usage
+class CityWeather extends ConsumerWidget {
+  final String cityName;
+  const CityWeather({super.key, required this.cityName});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Each city gets its own cached provider instance
+    final weather = ref.watch(cityWeatherProvider(cityName));
+    return weather.when(
+      loading: () => const CircularProgressIndicator(),
+      error: (err, _) => Text('Error: $err'),
+      data: (w) => Text('${w.temperature}°C'),
+    );
+  }
+}
+```
+
+## AutoDispose (Memory Management)
+```dart
+// AutoDispose by default in Riverpod 2.x
+final searchResultsProvider = FutureProvider.autoDispose<List<Product>>((ref) async {
+  // Automatically disposed when no widget is listening
+  final query = ref.watch(searchQueryProvider);
+  return await api.searchProducts(query);
+});
+
+// Keep alive for caching
+final cachedUserProvider = FutureProvider<User>((ref) async {
+  // This provider stays alive even if no listeners
+  final link = ref.keepAlive();
+  return await api.fetchUser();
+});
+
+// Dispose after timeout
+final tempDataProvider = FutureProvider<String>((ref) async {
+  final link = ref.keepAlive();
+  // Dispose after 5 minutes of inactivity
+  Timer(const Duration(minutes: 5), link.close);
+  return await api.fetchTempData();
+});
+```
+
+---
+
+# 9. Riverpod Generator & @riverpod
+
+## Why Code Generation?
+- Less boilerplate
+- Compile-safe provider names
+- Automatic family support
+- Better IDE autocomplete
+
+## Setup
+```yaml
+dev_dependencies:
+  riverpod_generator: ^2.4.0
+  build_runner: ^2.4.9
+```
+
+Run generator:
+```bash
+dart run build_runner watch
+```
+
+## @riverpod Annotation
+```dart
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+part 'providers.g.dart'; // Generated file
+
+// Simple provider
+@riverpod
+String greeting(GreetingRef ref) {
+  return 'Hello from Riverpod Generator!';
+}
+
+// Generated provider name: greetingProvider
+
+// Future provider
+@riverpod
+Future<Weather> currentWeather(CurrentWeatherRef ref, String city) async {
+  final api = ref.read(weatherApiProvider);
+  return await api.fetchWeather(city);
+}
+
+// Generated: currentWeatherProvider
+
+// StateNotifier with @riverpod
+@riverpod
+class Counter extends _$Counter {
+  @override
+  int build() => 0;
+
+  void increment() => state++;
+  void decrement() => state--;
+}
+
+// Generated: counterProvider
+// Usage: ref.watch(counterProvider), ref.read(counterProvider.notifier).increment()
+```
+
+## Generated File (providers.g.dart)
+```dart
+// AUTO-GENERATED — Do not edit manually
+part of 'providers.dart';
+
+String _$greetingHash() => r'abc123';
+
+@ProviderFor(greeting)
+final greetingProvider = AutoDisposeProvider<String>(
+  greeting,
+  name: r'greetingProvider',
+  debugGetCreateSourceHash: _$greetingHash,
+);
+typedef GreetingRef = AutoDisposeProviderRef<String>;
+
+// ... more generated code
+```
+
+## AsyncNotifier with @riverpod
+```dart
+@riverpod
+class WeatherController extends _$WeatherController {
+  @override
+  Future<Weather> build(String city) async {
+    final api = ref.read(weatherApiProvider);
+    return await api.fetchWeather(city);
+  }
+
+  Future<void> refresh() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      final api = ref.read(weatherApiProvider);
+      return await api.fetchWeather(arg); // arg = city parameter
+    });
+  }
+}
+
+// Usage
+class WeatherScreen extends ConsumerWidget {
+  final String city;
+  const WeatherScreen({super.key, required this.city});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final weather = ref.watch(weatherControllerProvider(city));
+
+    return weather.when(
+      loading: () => const LoadingWidget(),
+      error: (err, _) => ErrorWidget(error: err),
+      data: (w) => Column(
+        children: [
+          WeatherCard(weather: w),
+          ElevatedButton(
+            onPressed: () => ref.read(weatherControllerProvider(city).notifier).refresh(),
+            child: const Text('Refresh'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 10. Architecture Patterns with Riverpod
+
+## Pattern 1: Repository + Service + Controller
+```dart
+// Data Layer
+class WeatherRepository {
+  final Dio _dio;
+  WeatherRepository(this._dio);
+
+  Future<Weather> fetchWeather(String city) async {
+    final response = await _dio.get('/weather?q=$city');
+    return Weather.fromJson(response.data);
+  }
+}
+
+// Service Layer (Business Logic)
+class WeatherService {
+  final WeatherRepository _repository;
+  WeatherService(this._repository);
+
+  Future<Weather> getWeather(String city) async {
+    return await _repository.fetchWeather(city);
+  }
+}
+
+// Controller Layer (State Management)
+@riverpod
+class WeatherController extends _$WeatherController {
+  @override
+  Future<Weather> build(String city) async {
+    final service = ref.read(weatherServiceProvider);
+    return await service.getWeather(city);
+  }
+
+  Future<void> refresh() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      final service = ref.read(weatherServiceProvider);
+      return await service.getWeather(arg);
+    });
+  }
+}
+
+// UI Layer
+class WeatherScreen extends ConsumerWidget {
+  final String city;
+  const WeatherScreen({super.key, required this.city});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final weather = ref.watch(weatherControllerProvider(city));
+    return weather.when(
+      loading: () => const LoadingWidget(),
+      error: (err, _) => ErrorWidget(error: err),
+      data: (w) => WeatherDisplay(weather: w),
+    );
+  }
+}
+```
+
+## Pattern 2: Dependency Injection
+```dart
+// Repository provider
+final weatherRepositoryProvider = Provider<WeatherRepository>((ref) {
+  return WeatherRepository(Dio());
+});
+
+// Service provider (depends on repository)
+final weatherServiceProvider = Provider<WeatherService>((ref) {
+  final repository = ref.watch(weatherRepositoryProvider);
+  return WeatherService(repository);
+});
+
+// Override for testing
+final container = ProviderContainer(
+  overrides: [
+    weatherRepositoryProvider.overrideWithValue(MockWeatherRepository()),
+  ],
+);
+```
+
+---
+
+# 11. Hands-On Project: Weather App
+
+## Project Overview
+Build a complete Weather App using Riverpod with:
+- OpenWeatherMap API (mock data for offline testing)
+- Search for any city
+- Current weather display with icons
+- 5-day forecast
+- Pull-to-refresh
+- Error handling with retry
+- Riverpod Generator (@riverpod)
+
+## Complete Code
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+void main() {
+  runApp(
+    const ProviderScope(
+      child: WeatherApp(),
+    ),
+  );
+}
+
+// ============ MODELS ============
+class Weather {
+  final String city;
+  final double temperature;
+  final String condition;
+  final String iconCode;
+  final double humidity;
+  final double windSpeed;
+  final List<ForecastDay> forecast;
+
+  Weather({
+    required this.city,
+    required this.temperature,
+    required this.condition,
+    required this.iconCode,
+    required this.humidity,
+    required this.windSpeed,
+    required this.forecast,
+  });
+
+  factory Weather.fromMock(String city) {
+    final conditions = ['Sunny', 'Cloudy', 'Rainy', 'Stormy', 'Snowy'];
+    final icons = ['01d', '02d', '10d', '11d', '13d'];
+    final index = city.length % conditions.length;
+
+    return Weather(
+      city: city,
+      temperature: 15 + (city.hashCode % 20).toDouble(),
+      condition: conditions[index],
+      iconCode: icons[index],
+      humidity: 40 + (city.hashCode % 50).toDouble(),
+      windSpeed: 5 + (city.hashCode % 25).toDouble(),
+      forecast: List.generate(5, (i) => ForecastDay.mock(i)),
+    );
+  }
+}
+
+class ForecastDay {
+  final String day;
+  final double minTemp;
+  final double maxTemp;
+  final String condition;
+
+  ForecastDay({
+    required this.day,
+    required this.minTemp,
+    required this.maxTemp,
+    required this.condition,
+  });
+
+  factory ForecastDay.mock(int offset) {
+    final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final dayIndex = (DateTime.now().weekday - 1 + offset) % 7;
+    return ForecastDay(
+      day: days[dayIndex],
+      minTemp: 10 + offset * 2.toDouble(),
+      maxTemp: 20 + offset * 2.toDouble(),
+      condition: ['Sunny', 'Cloudy', 'Rainy'][offset % 3],
+    );
+  }
+}
+
+// ============ PROVIDERS ============
+final searchQueryProvider = StateProvider<String>((ref) => 'London');
+
+final weatherProvider = FutureProvider.family<Weather, String>((ref, city) async {
+  // Simulate API delay
+  await Future.delayed(const Duration(seconds: 1));
+  // In real app: return await WeatherApi().fetchWeather(city);
+  return Weather.fromMock(city);
+});
+
+final currentWeatherProvider = Provider<AsyncValue<Weather>>((ref) {
+  final city = ref.watch(searchQueryProvider);
+  return ref.watch(weatherProvider(city));
+});
+
+// ============ APP ============
+class WeatherApp extends StatelessWidget {
+  const WeatherApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'WeatherPro',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+      ),
+      home: const WeatherHomeScreen(),
+    );
+  }
+}
+
+// ============ HOME SCREEN ============
+class WeatherHomeScreen extends ConsumerWidget {
+  const WeatherHomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final weatherAsync = ref.watch(currentWeatherProvider);
+    final city = ref.watch(searchQueryProvider);
+
+    return Scaffold(
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(weatherProvider(city));
+        },
+        child: CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              expandedHeight: 120,
+              floating: true,
+              pinned: true,
+              flexibleSpace: FlexibleSpaceBar(
+                title: const Text('WeatherPro'),
+                background: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.blue.shade400, Colors.blue.shade800],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: _SearchBar(),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: weatherAsync.when(
+                loading: () => const SizedBox(
+                  height: 400,
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (err, _) => _ErrorView(error: err.toString(), city: city),
+                data: (weather) => _WeatherContent(weather: weather),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============ SEARCH BAR ============
+class _SearchBar extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final controller = TextEditingController(
+      text: ref.read(searchQueryProvider),
+    );
+
+    return TextField(
+      controller: controller,
+      decoration: InputDecoration(
+        hintText: 'Search city...',
+        prefixIcon: const Icon(Icons.search),
+        suffixIcon: IconButton(
+          icon: const Icon(Icons.clear),
+          onPressed: () {
+            controller.clear();
+          },
+        ),
+        filled: true,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+      ),
+      onSubmitted: (value) {
+        if (value.trim().isNotEmpty) {
+          ref.read(searchQueryProvider.notifier).state = value.trim();
+        }
+      },
+    );
+  }
+}
+
+// ============ WEATHER CONTENT ============
+class _WeatherContent extends StatelessWidget {
+  final Weather weather;
+  const _WeatherContent({required this.weather});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _CurrentWeatherCard(weather: weather),
+        const SizedBox(height: 24),
+        _WeatherDetails(weather: weather),
+        const SizedBox(height: 24),
+        _ForecastSection(forecast: weather.forecast),
+        const SizedBox(height: 32),
+      ],
+    );
+  }
+}
+
+// ============ CURRENT WEATHER CARD ============
+class _CurrentWeatherCard extends StatelessWidget {
+  final Weather weather;
+  const _CurrentWeatherCard({required this.weather});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          gradient: LinearGradient(
+            colors: [Colors.blue.shade400, Colors.blue.shade700],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Column(
+          children: [
+            Text(
+              weather.city,
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Icon(
+              _getWeatherIcon(weather.condition),
+              size: 80,
+              color: Colors.white,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '${weather.temperature.round()}°C',
+              style: const TextStyle(
+                fontSize: 64,
+                fontWeight: FontWeight.w200,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              weather.condition,
+              style: const TextStyle(
+                fontSize: 20,
+                color: Colors.white70,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _getWeatherIcon(String condition) {
+    switch (condition) {
+      case 'Sunny': return Icons.wb_sunny;
+      case 'Cloudy': return Icons.wb_cloudy;
+      case 'Rainy': return Icons.water_drop;
+      case 'Stormy': return Icons.thunderstorm;
+      case 'Snowy': return Icons.ac_unit;
+      default: return Icons.wb_sunny;
+    }
+  }
+}
+
+// ============ WEATHER DETAILS ============
+class _WeatherDetails extends StatelessWidget {
+  final Weather weather;
+  const _WeatherDetails({required this.weather});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        _DetailItem(
+          icon: Icons.water_drop,
+          label: 'Humidity',
+          value: '${weather.humidity.round()}%',
+        ),
+        _DetailItem(
+          icon: Icons.air,
+          label: 'Wind',
+          value: '${weather.windSpeed.round()} km/h',
+        ),
+        _DetailItem(
+          icon: Icons.thermostat,
+          label: 'Feels Like',
+          value: '${(weather.temperature + 2).round()}°C',
+        ),
+      ],
+    );
+  }
+}
+
+class _DetailItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _DetailItem({required this.icon, required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Icon(icon, color: Colors.blue),
+        const SizedBox(height: 8),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+        Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+      ],
+    );
+  }
+}
+
+// ============ FORECAST SECTION ============
+class _ForecastSection extends StatelessWidget {
+  final List<ForecastDay> forecast;
+  const _ForecastSection({required this.forecast});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            '5-Day Forecast',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 120,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: forecast.length,
+            itemBuilder: (context, index) {
+              final day = forecast[index];
+              return _ForecastCard(day: day);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ForecastCard extends StatelessWidget {
+  final ForecastDay day;
+  const _ForecastCard({required this.day});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(right: 12),
+      child: Container(
+        width: 80,
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(day.day, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Icon(
+              day.condition == 'Sunny' ? Icons.wb_sunny :
+              day.condition == 'Cloudy' ? Icons.wb_cloudy : Icons.water_drop,
+              color: Colors.orange,
+            ),
+            const SizedBox(height: 8),
+            Text('${day.maxTemp.round()}°'),
+            Text('${day.minTemp.round()}°', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============ ERROR VIEW ============
+class _ErrorView extends StatelessWidget {
+  final String error;
+  final String city;
+  const _ErrorView({required this.error, required this.city});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          children: [
+            Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
+            const SizedBox(height: 16),
+            Text(
+              'Failed to load weather for "$city"',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              error,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () {
+                // Trigger rebuild by invalidating provider
+                final container = ProviderScope.containerOf(context);
+                container.invalidate(weatherProvider(city));
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 12. Common Mistakes & How to Avoid Them
+
+## Mistake 1: Using ref.watch in initState
+```dart
+// WRONG — ConsumerWidget doesn't have initState, but in ConsumerStatefulWidget:
+@override
+void initState() {
+  super.initState();
+  final value = ref.watch(myProvider); // CRASH in initState!
+}
+
+// CORRECT — Use ref.read
+@override
+void initState() {
+  super.initState();
+  final value = ref.read(myProvider); // OK
+}
+```
+
+## Mistake 2: Not Using ProviderScope
+```dart
+// WRONG — Riverpod providers won't work
+void main() => runApp(const MyApp());
+
+// CORRECT
+void main() {
+  runApp(const ProviderScope(child: MyApp()));
+}
+```
+
+## Mistake 3: Forgetting .notifier for StateProvider
+```dart
+// WRONG — Can't modify state directly
+ref.read(counterProvider).state++; // Doesn't work in Riverpod 2.x
+
+// CORRECT
+ref.read(counterProvider.notifier).state++;
+```
+
+## Mistake 4: Calling notifyListeners in StateNotifier
+```dart
+// WRONG — StateNotifier uses state =, not notifyListeners()
+class MyNotifier extends StateNotifier<int> {
+  void increment() {
+    state++;
+    notifyListeners(); // Don't do this!
+  }
+}
+
+// CORRECT — Just assign to state
+class MyNotifier extends StateNotifier<int> {
+  MyNotifier() : super(0);
+  void increment() => state++;
+}
+```
+
+## Mistake 5: Not Handling AsyncValue Loading State
+```dart
+// WRONG — May show null or crash
+final weather = ref.watch(weatherProvider);
+return Text(weather.value!.temperature.toString()); // Crash on loading!
+
+// CORRECT — Always handle all three states
+return weather.when(
+  loading: () => const CircularProgressIndicator(),
+  error: (err, _) => Text('Error: $err'),
+  data: (w) => Text('${w.temperature}°C'),
+);
+```
+
+## Mistake 6: Using Global ProviderContainer
+```dart
+// WRONG — Tight coupling, hard to test
+final container = ProviderContainer();
+final value = container.read(myProvider);
+
+// CORRECT — Use WidgetRef in widgets, or inject container
+class MyWidget extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final value = ref.watch(myProvider); // Scoped to widget tree
+    return Text(value);
+  }
+}
+```
+
+## Mistake 7: Not Invalidating Providers on Refresh
+```dart
+// WRONG — Old data persists
+onRefresh: () => ref.read(weatherProvider); // Returns cached value
+
+// CORRECT — Invalidate to force re-fetch
+onRefresh: () {
+  ref.invalidate(weatherProvider);
+  return ref.refresh(weatherProvider.future);
+}
+```
+
+---
+
+# 13. Day 13 Checklist
+
+Use this checklist to verify mastery:
+- [ ] Understands why Riverpod is preferred over Provider in 2026
+- [ ] Can set up ProviderScope in main()
+- [ ] Knows the difference between Provider, StateProvider, StateNotifierProvider
+- [ ] Can use ref.watch for reactive state
+- [ ] Can use ref.read for one-time reads and event handlers
+- [ ] Can use ref.listen for side effects (Snackbar, navigation)
+- [ ] Can create a StateNotifier with immutable state
+- [ ] Can use FutureProvider for async data
+- [ ] Can use StreamProvider for real-time data
+- [ ] Understands AsyncValue (loading, data, error states)
+- [ ] Can handle AsyncValue with .when(), .whenOrNull(), .valueOrNull
+- [ ] Can use Provider.family for parameterized providers
+- [ ] Understands autoDispose and keepAlive
+- [ ] Can set up Riverpod Generator with @riverpod
+- [ ] Can generate providers with build_runner
+- [ ] Built the Weather App with Riverpod
+- [ ] App has search, current weather, forecast
+- [ ] App handles loading, error, and success states
+- [ ] App supports pull-to-refresh with invalidate/refresh
+- [ ] Pushed the project to GitHub
+
+---
+
+# Key Takeaways (Memorize These!)
+
+1. **Riverpod is compile-safe** — no more "Provider not found" runtime crashes.
+2. **Use ConsumerWidget instead of StatelessWidget** when you need to read providers.
+3. **ref.watch** subscribes and rebuilds. **ref.read** reads once. **ref.listen** handles side effects.
+4. **StateNotifier + immutable state** is the recommended pattern for complex state in Riverpod.
+5. **AsyncValue handles all three states** (loading, data, error) in one type — no manual flags needed.
+6. **Use .family** when a provider needs parameters (e.g., city name for weather).
+7. **Providers are autoDispose by default** — memory efficient, but use `ref.keepAlive()` for caching.
+8. **Use @riverpod code generation** for less boilerplate and better IDE support.
+9. **Invalidate providers** to force refresh: `ref.invalidate(provider)` or `ref.refresh(provider.future)`.
+10. **Never create global ProviderContainer** — always use ProviderScope and WidgetRef.
+
+---
+
+# Extra Practice (Do These Tonight!)
+
+1. **News App with Riverpod:** Build a news reader using FutureProvider for API calls, StateProvider for category filters, and pull-to-refresh.
+2. **Chat App:** Use StreamProvider for real-time messages and StateNotifier for message input state.
+3. **E-commerce Cart:** Use StateNotifierProvider for cart logic with add/remove/quantity methods. Use Provider.family for product details.
+4. **Multi-step Wizard:** Build a 3-step form where each step's data is preserved in a StateNotifier. Use AsyncNotifier for final submission.
+5. **GitHub User Search:** Use FutureProvider.family to search users by username. Implement debounced search with StateProvider.
+
+---
+
+**Congratulations!** You've completed Day 13. You now master Riverpod, the modern, compile-safe state management solution officially recommended for Flutter in 2026. You can build scalable, testable apps with clean architecture and minimal boilerplate.
+
+**Next Up → Day 14: State Management — BLoC Pattern**
+
+---
+
+*Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*
+*Day 13: State Management — Riverpod — Complete Deep Dive*
