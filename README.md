@@ -16167,6 +16167,1391 @@ Use this checklist to verify mastery:
 *Day 10: Theming, Assets & Responsive Design — Complete Deep Dive*
 
 
+# Day 11: State Management — setState & InheritedWidget
+## Complete Deep Dive
+
+**Goal:** Understand Flutter's fundamental state management patterns. Master when to use setState, when to avoid it, and how to share state across the widget tree using InheritedWidget, ValueNotifier, and ChangeNotifier. Build a production-ready Todo app with clean state separation.
+
+---
+
+# Table of Contents
+1. Why State Management Matters
+2. Ephemeral vs App State
+3. setState Deep Dive
+4. When NOT to Use setState
+5. The Widget Tree & BuildContext
+6. InheritedWidget & InheritedModel
+7. ValueNotifier & ValueListenableBuilder
+8. ChangeNotifier Basics
+9. State Lifting Pattern
+10. Hands-On Project: Todo App with ValueNotifier
+11. Common Mistakes & How to Avoid Them
+12. Day 11 Checklist
+
+---
+
+# 1. Why State Management Matters
+
+## The State Problem
+Every interactive app has state:
+- Counter value
+- Form input values
+- Login status
+- Shopping cart items
+- Theme preference
+- API response data
+
+## Without Proper State Management
+| Problem | Symptom |
+|---|---|
+| Passing data through 5+ constructors | "Prop drilling" nightmare |
+| setState rebuilds entire screen | Janky 60fps drops |
+| Business logic in UI widgets | Untestable spaghetti code |
+| No single source of truth | Inconsistent data across screens |
+| State lost on navigation | Form resets, cart empties |
+
+## State Management Spectrum (Flutter)
+```
+Simple                          Complex
+setState → ValueNotifier → Provider → Riverpod → BLoC
+(Local)    (Lightweight)   (Popular)  (Modern)   (Enterprise)
+```
+
+---
+
+# 2. Ephemeral vs App State
+
+## Ephemeral State (Local/UI State)
+- Lives in a single widget
+- No need to share with other widgets
+- Short-lived
+
+**Examples:**
+- Current page in PageView
+- Animation progress
+- Checkbox checked/unchecked
+- TextField current text (with controller)
+
+```dart
+class CounterButton extends StatefulWidget {
+  const CounterButton({super.key});
+
+  @override
+  State<CounterButton> createState() => _CounterButtonState();
+}
+
+class _CounterButtonState extends State<CounterButton> {
+  int _count = 0; // Ephemeral state
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton(
+      onPressed: () => setState(() => _count++),
+      child: Text('Count: $_count'),
+    );
+  }
+}
+```
+
+## App State (Shared/Global State)
+- Shared across multiple widgets/screens
+- Persists across navigation
+- Often comes from outside (API, database)
+
+**Examples:**
+- User authentication status
+- Shopping cart contents
+- App theme preference
+- Notification count
+- Cached API data
+
+```dart
+// BAD: Prop drilling through 4 levels
+ScreenA(user: user)
+  → ScreenB(user: user)
+    → ScreenC(user: user)
+      → ScreenD(user: user) // Finally uses it!
+
+// GOOD: Access anywhere in tree
+final user = UserProvider.of(context).currentUser;
+```
+
+## The Golden Rule
+> **Use setState for ephemeral state. Use InheritedWidget/Provider/Riverpod for app state.**
+
+---
+
+# 3. setState Deep Dive
+
+## What Does setState Actually Do?
+```dart
+setState(() {
+  _counter++;
+});
+```
+
+1. Updates the variable (`_counter++`)
+2. Marks the widget as "dirty" (needs rebuild)
+3. Flutter schedules a rebuild
+4. `build()` runs again with new values
+5. Flutter compares old vs new widget tree (diffing)
+6. Only changed parts update in the DOM/render tree
+
+## setState Syntax Patterns
+```dart
+// Pattern 1: Inline (fine for simple cases)
+setState(() => _count++);
+
+// Pattern 2: Block body (better for multiple changes)
+setState(() {
+  _count++;
+  _lastUpdated = DateTime.now();
+});
+
+// Pattern 3: Pre-calculate (most efficient)
+final newCount = _count + 1;
+setState(() => _count = newCount);
+```
+
+## setState Rebuild Scope
+**Critical concept:** `setState` rebuilds the **current widget** and **all its descendants**.
+
+```dart
+class Parent extends StatefulWidget {
+  @override
+  State<Parent> createState() => _ParentState();
+}
+
+class _ParentState extends State<Parent> {
+  int _counter = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    print('Parent rebuilt!'); // ← Rebuilds
+    return Column(
+      children: [
+        Text('Counter: $_counter'),
+        ChildA(), // ← Rebuilds (descendant)
+        ChildB(), // ← Rebuilds (descendant)
+        ChildC(), // ← Rebuilds (descendant)
+      ],
+    );
+  }
+}
+```
+
+## Optimizing Rebuilds with const
+```dart
+class _ParentState extends State<Parent> {
+  int _counter = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text('Counter: $_counter'), // Must rebuild (uses state)
+        const ChildA(), // ← Skips rebuild (const + no state change)
+        const ChildB(), // ← Skips rebuild
+        ChildC(count: _counter), // Must rebuild (receives new prop)
+      ],
+    );
+  }
+}
+```
+
+**Rule:** Use `const` constructors for widgets that don't depend on changing state.
+
+---
+
+# 4. When NOT to Use setState
+
+## Anti-Pattern 1: Sharing State Across Screens
+```dart
+// WRONG — State lost when navigating!
+class HomeScreen extends StatefulWidget {
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  List<String> todos = []; // Lost on push to DetailScreen!
+}
+```
+
+## Anti-Pattern 2: Deep Nesting with Callbacks
+```dart
+// WRONG — Callback hell
+class Parent extends StatefulWidget {
+  @override
+  State<Parent> createState() => _ParentState();
+}
+
+class _ParentState extends State<Parent> {
+  String _filter = '';
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Column(
+        children: [
+          SearchBar(onChanged: (v) => setState(() => _filter = v)),
+          FilterChips(
+            selected: _filter,
+            onSelected: (v) => setState(() => _filter = v),
+          ),
+          TodoList(
+            filter: _filter,
+            onToggle: (id) => setState(() => /* update */),
+            onDelete: (id) => setState(() => /* update */),
+          ),
+        ],
+      ),
+    );
+  }
+}
+```
+
+## Anti-Pattern 3: setState in onChanged for Every Keystroke
+```dart
+// WRONG — Rebuilds entire form on every keystroke
+TextField(
+  onChanged: (value) {
+    setState(() => _searchText = value); // Expensive!
+  },
+)
+
+// CORRECT — Use controller, no setState needed
+TextField(controller: _searchController)
+```
+
+## Anti-Pattern 4: Business Logic in UI
+```dart
+// WRONG — Untestable, tightly coupled
+setState(() {
+  if (_balance >= amount && amount > 0) {
+    _balance -= amount;
+    _transactions.add(Transaction.withdraw(amount));
+    _lastTransaction = DateTime.now();
+  }
+});
+
+// CORRECT — Extract to model/service
+final result = account.withdraw(amount);
+if (result.isSuccess) {
+  setState(() => _balance = account.balance);
+}
+```
+
+## The setState Decision Tree
+```
+Does the state need to be shared?
+├── NO → Is it simple UI state?
+│   ├── YES → Use setState ✅
+│   └── NO  → Use ValueNotifier ✅
+└── YES → Does it need to persist?
+    ├── NO  → Use Provider/Riverpod ✅
+    └── YES → Use BLoC + Repository ✅
+```
+
+---
+
+# 5. The Widget Tree & BuildContext
+
+## BuildContext is Your Location in the Tree
+```dart
+@override
+Widget build(BuildContext context) {
+  // context = "Where am I in the widget tree?"
+  final theme = Theme.of(context); // Walks UP the tree to find Theme
+  return Container();
+}
+```
+
+## Finding Ancestors with context
+```dart
+// Find nearest Theme
+Theme.of(context)
+
+// Find nearest Navigator
+Navigator.of(context)
+
+// Find nearest Scaffold
+Scaffold.of(context)
+
+// Find nearest MediaQuery
+MediaQuery.of(context)
+
+// Custom: Find nearest InheritedWidget
+MyProvider.of(context)
+```
+
+## The "of()" Pattern
+All these use `BuildContext` to walk up the tree and find the nearest ancestor of a specific type. This is the foundation of InheritedWidget and all state management solutions.
+
+---
+
+# 6. InheritedWidget & InheritedModel
+
+## What is InheritedWidget?
+An `InheritedWidget` is a special widget that efficiently propagates information down the tree. Descendants can access it via `context.dependOnInheritedWidgetOfExactType()`.
+
+## Why Use InheritedWidget?
+- **Efficient:** Only rebuilds widgets that actually depend on the data
+- **Scoped:** Data lives in the widget tree, not global variables
+- **Flutter-native:** No external packages needed
+
+## Building a Custom InheritedWidget
+
+### Step 1: Create the InheritedWidget
+```dart
+class UserInfo extends InheritedWidget {
+  final String userName;
+  final int userAge;
+  final bool isPremium;
+
+  const UserInfo({
+    super.key,
+    required this.userName,
+    required this.userAge,
+    required this.isPremium,
+    required super.child,
+  });
+
+  // The magic: Flutter calls this when data changes
+  @override
+  bool updateShouldNotify(UserInfo oldWidget) {
+    return oldWidget.userName != userName ||
+           oldWidget.userAge != userAge ||
+           oldWidget.isPremium != isPremium;
+  }
+
+  // Helper method for easy access
+  static UserInfo? of(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<UserInfo>();
+  }
+}
+```
+
+### Step 2: Place it High in the Tree
+```dart
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return UserInfo(
+      userName: 'Kimi',
+      userAge: 25,
+      isPremium: true,
+      child: MaterialApp(
+        home: const HomeScreen(),
+      ),
+    );
+  }
+}
+```
+
+### Step 3: Access Anywhere in the Tree
+```dart
+class ProfileScreen extends StatelessWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final userInfo = UserInfo.of(context)!;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Profile')),
+      body: Column(
+        children: [
+          Text('Name: ${userInfo.userName}'),
+          Text('Age: ${userInfo.userAge}'),
+          if (userInfo.isPremium)
+            const Chip(label: Text('PREMIUM')),
+        ],
+      ),
+    );
+  }
+}
+```
+
+## InheritedModel (Selective Rebuilds)
+`InheritedModel` is an advanced version that lets widgets subscribe to only specific aspects of the data.
+
+```dart
+class AppConfig extends InheritedModel<String> {
+  final String theme;
+  final String language;
+  final String fontSize;
+
+  const AppConfig({
+    super.key,
+    required this.theme,
+    required this.language,
+    required this.fontSize,
+    required super.child,
+  });
+
+  @override
+  bool updateShouldNotify(AppConfig oldWidget) {
+    return oldWidget.theme != theme ||
+           oldWidget.language != language ||
+           oldWidget.fontSize != fontSize;
+  }
+
+  @override
+  bool updateShouldNotifyDependent(
+    AppConfig oldWidget,
+    Set<String> dependencies,
+  ) {
+    if (dependencies.contains('theme') && oldWidget.theme != theme) {
+      return true;
+    }
+    if (dependencies.contains('language') && oldWidget.language != language) {
+      return true;
+    }
+    return false;
+  }
+
+  static AppConfig? of(BuildContext context, String aspect) {
+    return InheritedModel.inheritFrom<AppConfig>(context, aspect: aspect);
+  }
+}
+
+// Usage: Only rebuilds when 'theme' changes
+final theme = AppConfig.of(context, 'theme')!.theme;
+```
+
+---
+
+# 7. ValueNotifier & ValueListenableBuilder
+
+## What is ValueNotifier?
+A `ValueNotifier` is a simple, lightweight observable object. When its value changes, it notifies listeners. Perfect for simple state that doesn't need a full state management package.
+
+## Basic ValueNotifier Pattern
+```dart
+class CounterPage extends StatefulWidget {
+  const CounterPage({super.key});
+
+  @override
+  State<CounterPage> createState() => _CounterPageState();
+}
+
+class _CounterPageState extends State<CounterPage> {
+  final _counter = ValueNotifier<int>(0); // ← Observable
+
+  @override
+  void dispose() {
+    _counter.dispose(); // ← ALWAYS dispose!
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('ValueNotifier Demo')),
+      body: Center(
+        // Only rebuilds this widget, not the whole screen!
+        child: ValueListenableBuilder<int>(
+          valueListenable: _counter,
+          builder: (context, value, child) {
+            return Text(
+              'Count: $value',
+              style: const TextStyle(fontSize: 48),
+            );
+          },
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _counter.value++, // ← Update value
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+```
+
+## ValueNotifier for Form Validation
+```dart
+class LoginForm extends StatefulWidget {
+  const LoginForm({super.key});
+
+  @override
+  State<LoginForm> createState() => _LoginFormState();
+}
+
+class _LoginFormState extends State<LoginForm> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _isFormValid = ValueNotifier<bool>(false);
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController.addListener(_validate);
+    _passwordController.addListener(_validate);
+  }
+
+  void _validate() {
+    final emailValid = _emailController.text.contains('@');
+    final passwordValid = _passwordController.text.length >= 6;
+    _isFormValid.value = emailValid && passwordValid;
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _isFormValid.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        TextField(controller: _emailController, decoration: const InputDecoration(labelText: 'Email')),
+        TextField(controller: _passwordController, decoration: const InputDecoration(labelText: 'Password'), obscureText: true),
+        ValueListenableBuilder<bool>(
+          valueListenable: _isFormValid,
+          builder: (context, isValid, child) {
+            return ElevatedButton(
+              onPressed: isValid ? _submit : null,
+              child: const Text('Login'),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  void _submit() {/* ... */}
+}
+```
+
+## Multiple ValueNotifiers
+```dart
+class _FiltersState extends State<Filters> {
+  final _category = ValueNotifier<String>('All');
+  final _sortBy = ValueNotifier<String>('Date');
+  final _isAscending = ValueNotifier<bool>(true);
+
+  @override
+  void dispose() {
+    _category.dispose();
+    _sortBy.dispose();
+    _isAscending.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        ValueListenableBuilder<String>(
+          valueListenable: _category,
+          builder: (context, category, _) => DropdownButton(
+            value: category,
+            items: ['All', 'Work', 'Personal'].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+            onChanged: (v) => _category.value = v!,
+          ),
+        ),
+        // ... other filters
+      ],
+    );
+  }
+}
+```
+
+---
+
+# 8. ChangeNotifier Basics
+
+## What is ChangeNotifier?
+A more powerful observable class. You can notify listeners manually with `notifyListeners()`. This is the foundation of Provider and many state management solutions.
+
+## Simple ChangeNotifier Example
+```dart
+import 'package:flutter/material.dart';
+
+class CounterModel extends ChangeNotifier {
+  int _count = 0;
+
+  int get count => _count;
+
+  void increment() {
+    _count++;
+    notifyListeners(); // ← Triggers rebuilds
+  }
+
+  void decrement() {
+    _count--;
+    notifyListeners();
+  }
+
+  void reset() {
+    _count = 0;
+    notifyListeners();
+  }
+}
+```
+
+## Using with AnimatedBuilder (or custom listener)
+```dart
+class CounterPage extends StatefulWidget {
+  const CounterPage({super.key});
+
+  @override
+  State<CounterPage> createState() => _CounterPageState();
+}
+
+class _CounterPageState extends State<CounterPage> {
+  final _counter = CounterModel();
+
+  @override
+  void initState() {
+    super.initState();
+    _counter.addListener(_onCounterChanged);
+  }
+
+  void _onCounterChanged() {
+    setState(() {}); // Rebuild when model changes
+  }
+
+  @override
+  void dispose() {
+    _counter.removeListener(_onCounterChanged);
+    _counter.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(child: Text('${_counter.count}')),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _counter.increment,
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+```
+
+## ChangeNotifier with List Data
+```dart
+class TodoModel extends ChangeNotifier {
+  final List<Todo> _todos = [];
+
+  List<Todo> get todos => List.unmodifiable(_todos);
+  List<Todo> get completedTodos => _todos.where((t) => t.isDone).toList();
+  List<Todo> get pendingTodos => _todos.where((t) => !t.isDone).toList();
+  int get todoCount => _todos.length;
+  int get completedCount => completedTodos.length;
+
+  void addTodo(String title) {
+    _todos.add(Todo(id: DateTime.now().toString(), title: title));
+    notifyListeners();
+  }
+
+  void toggleTodo(String id) {
+    final todo = _todos.firstWhere((t) => t.id == id);
+    todo.isDone = !todo.isDone;
+    notifyListeners();
+  }
+
+  void deleteTodo(String id) {
+    _todos.removeWhere((t) => t.id == id);
+    notifyListeners();
+  }
+}
+```
+
+---
+
+# 9. State Lifting Pattern
+
+## What is Lifting State Up?
+When multiple children need to share state, move the state to their **common ancestor**.
+
+## Before (Broken)
+```dart
+class Parent extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        CounterA(), // Has its own _count
+        CounterB(), // Has its own _count — not shared!
+      ],
+    );
+  }
+}
+```
+
+## After (Lifted)
+```dart
+class Parent extends StatefulWidget {
+  @override
+  State<Parent> createState() => _ParentState();
+}
+
+class _ParentState extends State<Parent> {
+  int _count = 0;
+
+  void _increment() => setState(() => _count++);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        CounterDisplay(count: _count),
+        CounterButton(onPressed: _increment),
+      ],
+    );
+  }
+}
+
+class CounterDisplay extends StatelessWidget {
+  final int count;
+  const CounterDisplay({super.key, required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text('Count: $count');
+  }
+}
+
+class CounterButton extends StatelessWidget {
+  final VoidCallback onPressed;
+  const CounterButton({super.key, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton(onPressed: onPressed, child: const Text('+'));
+  }
+}
+```
+
+## State Lifting Decision Flow
+```
+Does Widget A need to affect Widget B?
+├── NO → Keep state local in each widget
+└── YES → Do they share a parent?
+    ├── YES → Lift state to that parent
+    └── NO → Lift state higher until common ancestor found
+```
+
+---
+
+# 10. Hands-On Project: Todo App with ValueNotifier
+
+## Project Overview
+Build a fully functional Todo app using:
+- ValueNotifier for individual todo items
+- ChangeNotifier for the todo list
+- InheritedWidget for app configuration
+- Clean separation of UI and business logic
+- Filter tabs (All / Pending / Completed)
+
+## Complete Code
+
+```dart
+import 'package:flutter/material.dart';
+
+void main() {
+  runApp(const TodoApp());
+}
+
+// ============ MODELS ============
+class Todo {
+  final String id;
+  String title;
+  bool isDone;
+  DateTime createdAt;
+
+  Todo({
+    required this.id,
+    required this.title,
+    this.isDone = false,
+    required this.createdAt,
+  });
+}
+
+// ============ APP CONFIG (InheritedWidget) ============
+class AppConfig extends InheritedWidget {
+  final String appName;
+  final bool showCompletedCount;
+
+  const AppConfig({
+    super.key,
+    required this.appName,
+    required this.showCompletedCount,
+    required super.child,
+  });
+
+  @override
+  bool updateShouldNotify(AppConfig oldWidget) {
+    return oldWidget.appName != appName ||
+           oldWidget.showCompletedCount != showCompletedCount;
+  }
+
+  static AppConfig of(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<AppConfig>()!;
+  }
+}
+
+// ============ TODO SERVICE (ChangeNotifier) ============
+class TodoService extends ChangeNotifier {
+  final List<Todo> _todos = [];
+
+  List<Todo> get todos => List.unmodifiable(_todos);
+
+  List<Todo> getByFilter(String filter) {
+    switch (filter) {
+      case 'pending':
+        return _todos.where((t) => !t.isDone).toList();
+      case 'completed':
+        return _todos.where((t) => t.isDone).toList();
+      default:
+        return List.unmodifiable(_todos);
+    }
+  }
+
+  int get completedCount => _todos.where((t) => t.isDone).length;
+  int get pendingCount => _todos.where((t) => !t.isDone).length;
+
+  void addTodo(String title) {
+    _todos.add(Todo(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: title,
+      createdAt: DateTime.now(),
+    ));
+    notifyListeners();
+  }
+
+  void toggleTodo(String id) {
+    final todo = _todos.firstWhere((t) => t.id == id);
+    todo.isDone = !todo.isDone;
+    notifyListeners();
+  }
+
+  void deleteTodo(String id) {
+    _todos.removeWhere((t) => t.id == id);
+    notifyListeners();
+  }
+
+  void editTodo(String id, String newTitle) {
+    final todo = _todos.firstWhere((t) => t.id == id);
+    todo.title = newTitle;
+    notifyListeners();
+  }
+}
+
+// ============ APP ============
+class TodoApp extends StatelessWidget {
+  const TodoApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return AppConfig(
+      appName: 'TaskMaster',
+      showCompletedCount: true,
+      child: MaterialApp(
+        title: 'TaskMaster',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          useMaterial3: true,
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
+        ),
+        home: const TodoHomeScreen(),
+      ),
+    );
+  }
+}
+
+// ============ HOME SCREEN ============
+class TodoHomeScreen extends StatefulWidget {
+  const TodoHomeScreen({super.key});
+
+  @override
+  State<TodoHomeScreen> createState() => _TodoHomeScreenState();
+}
+
+class _TodoHomeScreenState extends State<TodoHomeScreen> {
+  final _todoService = TodoService();
+  final _textController = TextEditingController();
+  final _filterNotifier = ValueNotifier<String>('all');
+
+  @override
+  void dispose() {
+    _todoService.dispose();
+    _textController.dispose();
+    _filterNotifier.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final appConfig = AppConfig.of(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(appConfig.appName),
+        centerTitle: true,
+        actions: [
+          if (appConfig.showCompletedCount)
+            ValueListenableBuilder<String>(
+              valueListenable: _filterNotifier,
+              builder: (context, filter, _) {
+                return AnimatedBuilder(
+                  animation: _todoService,
+                  builder: (context, _) {
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 16),
+                      child: Chip(
+                        label: Text('${_todoService.completedCount} done'),
+                        backgroundColor: Colors.green.shade100,
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Input Field
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _textController,
+                    decoration: InputDecoration(
+                      hintText: 'Add a new task...',
+                      filled: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    ),
+                    onSubmitted: (value) => _addTodo(),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                FloatingActionButton.small(
+                  onPressed: _addTodo,
+                  child: const Icon(Icons.add),
+                ),
+              ],
+            ),
+          ),
+
+          // Filter Tabs
+          ValueListenableBuilder<String>(
+            valueListenable: _filterNotifier,
+            builder: (context, selectedFilter, _) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    _FilterChip(
+                      label: 'All',
+                      count: _todoService.todos.length,
+                      isSelected: selectedFilter == 'all',
+                      onSelected: () => _filterNotifier.value = 'all',
+                    ),
+                    const SizedBox(width: 8),
+                    _FilterChip(
+                      label: 'Pending',
+                      count: _todoService.pendingCount,
+                      isSelected: selectedFilter == 'pending',
+                      onSelected: () => _filterNotifier.value = 'pending',
+                    ),
+                    const SizedBox(width: 8),
+                    _FilterChip(
+                      label: 'Completed',
+                      count: _todoService.completedCount,
+                      isSelected: selectedFilter == 'completed',
+                      onSelected: () => _filterNotifier.value = 'completed',
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+
+          const SizedBox(height: 8),
+
+          // Todo List
+          Expanded(
+            child: AnimatedBuilder(
+              animation: _todoService,
+              builder: (context, _) {
+                return ValueListenableBuilder<String>(
+                  valueListenable: _filterNotifier,
+                  builder: (context, filter, _) {
+                    final todos = _todoService.getByFilter(filter);
+
+                    if (todos.isEmpty) {
+                      return _EmptyState(filter: filter);
+                    }
+
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: todos.length,
+                      itemBuilder: (context, index) {
+                        final todo = todos[index];
+                        return _TodoItem(
+                          todo: todo,
+                          onToggle: () => _todoService.toggleTodo(todo.id),
+                          onDelete: () => _todoService.deleteTodo(todo.id),
+                          onEdit: (newTitle) => _todoService.editTodo(todo.id, newTitle),
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _addTodo() {
+    final text = _textController.text.trim();
+    if (text.isNotEmpty) {
+      _todoService.addTodo(text);
+      _textController.clear();
+    }
+  }
+}
+
+// ============ FILTER CHIP ============
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final int count;
+  final bool isSelected;
+  final VoidCallback onSelected;
+
+  const _FilterChip({
+    required this.label,
+    required this.count,
+    required this.isSelected,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ActionChip(
+      label: Text('$label ($count)'),
+      backgroundColor: isSelected ? colorScheme.primaryContainer : null,
+      labelStyle: TextStyle(
+        color: isSelected ? colorScheme.primary : null,
+        fontWeight: isSelected ? FontWeight.bold : null,
+      ),
+      onPressed: onSelected,
+    );
+  }
+}
+
+// ============ TODO ITEM ============
+class _TodoItem extends StatelessWidget {
+  final Todo todo;
+  final VoidCallback onToggle;
+  final VoidCallback onDelete;
+  final ValueChanged<String> onEdit;
+
+  const _TodoItem({
+    required this.todo,
+    required this.onToggle,
+    required this.onDelete,
+    required this.onEdit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Dismissible(
+      key: Key(todo.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        color: Colors.red,
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      onDismissed: (_) => onDelete(),
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 8),
+        child: ListTile(
+          leading: Checkbox(
+            value: todo.isDone,
+            onChanged: (_) => onToggle(),
+          ),
+          title: Text(
+            todo.title,
+            style: TextStyle(
+              decoration: todo.isDone ? TextDecoration.lineThrough : null,
+              color: todo.isDone ? Colors.grey : null,
+            ),
+          ),
+          subtitle: Text(
+            '${todo.createdAt.day}/${todo.createdAt.month}/${todo.createdAt.year}',
+            style: const TextStyle(fontSize: 12),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.edit, size: 20),
+                onPressed: () => _showEditDialog(context),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                onPressed: onDelete,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showEditDialog(BuildContext context) {
+    final controller = TextEditingController(text: todo.title);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Task'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: 'Task name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              onEdit(controller.text.trim());
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============ EMPTY STATE ============
+class _EmptyState extends StatelessWidget {
+  final String filter;
+  const _EmptyState({required this.filter});
+
+  @override
+  Widget build(BuildContext context) {
+    String message;
+    IconData icon;
+
+    switch (filter) {
+      case 'pending':
+        message = 'No pending tasks!';
+        icon = Icons.check_circle;
+        break;
+      case 'completed':
+        message = 'No completed tasks yet';
+        icon = Icons.hourglass_empty;
+        break;
+      default:
+        message = 'No tasks yet. Add one above!';
+        icon = Icons.note_add;
+    }
+
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 64, color: Colors.grey.shade400),
+          const SizedBox(height: 16),
+          Text(
+            message,
+            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+          ),
+        ],
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 11. Common Mistakes & How to Avoid Them
+
+## Mistake 1: Forgetting to Dispose Notifiers
+```dart
+// WRONG — Memory leak!
+class _MyState extends State<MyWidget> {
+  final _notifier = ValueNotifier<int>(0);
+  // Never disposed!
+
+// CORRECT
+@override
+void dispose() {
+  _notifier.dispose();
+  super.dispose();
+}
+```
+
+## Mistake 2: Calling setState After dispose()
+```dart
+// WRONG — Crash!
+Future.delayed(Duration(seconds: 2), () {
+  setState(() => _data = result); // Widget might be disposed!
+});
+
+// CORRECT
+Future.delayed(Duration(seconds: 2), () {
+  if (mounted) {
+    setState(() => _data = result);
+  }
+});
+```
+
+## Mistake 3: setState in Build Method
+```dart
+// WRONG — Infinite loop!
+@override
+Widget build(BuildContext context) {
+  setState(() => _count++); // ← NEVER do this!
+  return Text('$_count');
+}
+```
+
+## Mistake 4: Rebuilding Everything with setState
+```dart
+// WRONG — Rebuilds entire screen for a small change
+setState(() => _isLoading = true); // Rebuilds AppBar, Body, FAB...
+
+// CORRECT — Use ValueListenableBuilder for localized rebuilds
+ValueListenableBuilder<bool>(
+  valueListenable: _isLoading,
+  builder: (context, loading, _) {
+    return loading ? CircularProgressIndicator() : Content();
+  },
+)
+```
+
+## Mistake 5: Business Logic in Widgets
+```dart
+// WRONG — Can't test, tightly coupled
+setState(() {
+  _discount = _total * 0.15;
+  _tax = (_total - _discount) * 0.08;
+  _finalTotal = _total - _discount + _tax;
+});
+
+// CORRECT — Extract to model
+setState(() => _invoice.calculateTotals());
+```
+
+## Mistake 6: Not Using List.unmodifiable
+```dart
+// WRONG — External code can mutate internal state
+List<Todo> get todos => _todos; // Caller can .add() directly!
+
+// CORRECT — Return unmodifiable view
+List<Todo> get todos => List.unmodifiable(_todos);
+```
+
+## Mistake 7: Multiple setState Calls in Sequence
+```dart
+// WRONG — Triggers multiple rebuilds
+setState(() => _step = 1);
+setState(() => _isLoading = true);
+setState(() => _data = fetchedData);
+
+// CORRECT — Single setState with all changes
+setState(() {
+  _step = 1;
+  _isLoading = true;
+  _data = fetchedData;
+});
+```
+
+---
+
+# 12. Day 11 Checklist
+
+Use this checklist to verify mastery:
+- [ ] Understands difference between ephemeral state and app state
+- [ ] Can identify when to use setState vs external state management
+- [ ] Knows that setState rebuilds current widget + all descendants
+- [ ] Can optimize rebuilds using `const` constructors
+- [ ] Understands BuildContext and the "of()" pattern
+- [ ] Can create a custom InheritedWidget
+- [ ] Can access InheritedWidget data from descendant widgets
+- [ ] Understands InheritedModel for selective rebuilds
+- [ ] Can create and use ValueNotifier
+- [ ] Can use ValueListenableBuilder for localized rebuilds
+- [ ] Can create a ChangeNotifier with custom business logic
+- [ ] Can add/remove listeners to ChangeNotifier safely
+- [ ] Understands state lifting pattern
+- [ ] Can lift state to a common ancestor widget
+- [ ] Built the Todo App with ValueNotifier and ChangeNotifier
+- [ ] App has add, toggle, delete, and edit functionality
+- [ ] App uses filter tabs with ValueNotifier
+- [ ] App uses InheritedWidget for app configuration
+- [ ] Always disposes controllers and notifiers
+- [ ] Pushed the project to GitHub
+
+---
+
+# Key Takeaways (Memorize These!)
+
+1. **Use setState only for ephemeral (local) UI state.** If state is shared, lift it up or use a state management solution.
+2. **setState rebuilds the entire widget subtree.** Use `const`, `ValueListenableBuilder`, or `AnimatedBuilder` to limit rebuild scope.
+3. **Always dispose ValueNotifiers, ChangeNotifiers, TextEditingControllers, and FocusNodes.** They cause memory leaks if not disposed.
+4. **Use `List.unmodifiable()`** when exposing internal lists from your models. Prevents external mutation.
+5. **Check `mounted` before calling setState after async operations.** The widget may have been disposed.
+6. **Never call setState inside build().** It causes infinite loops.
+7. **Lift state up to the lowest common ancestor** of all widgets that need to read or write that state.
+8. **ValueNotifier is perfect for simple independent state** (checkboxes, counters, filters) without adding dependencies.
+9. **ChangeNotifier is the foundation** for all advanced state management (Provider, Riverpod, BLoC all build on it).
+10. **Separate business logic from UI.** Keep calculations, validation, and data transformation in models/services, not widgets.
+
+---
+
+# Extra Practice (Do These Tonight!)
+
+1. **Counter with History:** Build a counter app that tracks every increment/decrement in a history list. Use ChangeNotifier for the history.
+2. **Shopping Cart:** Create a product list and cart screen. Use InheritedWidget to share cart data across the app without prop drilling.
+3. **Timer App:** Build a multi-timer app where each timer is a ValueNotifier. Parent shows total active timers using AnimatedBuilder.
+4. **Form Wizard:** Create a 3-step form where each step's data is preserved. Use a single ChangeNotifier to hold all form data.
+5. **Theme Switcher:** Build an app where each tab can have a different accent color. Use InheritedModel so only affected tabs rebuild.
+
+---
+
+**Congratulations!** You've completed Day 11. You now understand the fundamental state management patterns in Flutter: setState, InheritedWidget, ValueNotifier, and ChangeNotifier. These concepts are the foundation for every advanced state management solution you'll learn next.
+
+**Next Up → Day 12: State Management — Provider**
+
+---
+
+*Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*
+*Day 11: State Management — setState & InheritedWidget — Complete Deep Dive*
+
 
 
 
