@@ -25862,6 +25862,2069 @@ Use this checklist to verify mastery:
 
 *Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*
 *Day 16: Networking & APIs - Complete Deep Dive*
+# Day 17: Authentication & Security
+## Complete Deep Dive
+
+**Goal:** Master secure user authentication in Flutter. Implement Firebase Auth (Email, Google, Apple), JWT token lifecycle management, biometric authentication, OAuth 2.0 flows, and build a production-grade authentication system with secure token storage and automatic session refresh.
+
+---
+
+# Table of Contents
+1. Why Auth & Security is Non-Negotiable
+2. Authentication Architecture Overview
+3. Firebase Authentication Setup
+4. Email/Password Authentication
+5. Social Authentication (Google, Apple)
+6. Anonymous & Phone Authentication
+7. Auth State Management (Stream-based)
+8. JWT Token Management & Refresh
+9. flutter_secure_storage for Tokens
+10. Biometric Authentication with local_auth
+11. OAuth 2.0 & Custom Backend Auth
+12. Security Best Practices
+13. Hands-On Project: Secure Auth Flow
+14. Common Mistakes & How to Avoid Them
+15. Day 17 Checklist
+
+---
+
+# 1. Why Auth & Security is Non-Negotiable
+
+## The Threat Landscape in 2026
+```
+Attack Vector          | Risk Level | Flutter Defense
+-----------------------|------------|----------------------------------
+Token theft            | Critical   | flutter_secure_storage + Keychain
+Man-in-the-middle      | High       | Certificate pinning (ssl_pinning)
+Credential stuffing    | High       | Rate limiting + strong passwords
+Session hijacking      | High       | Short-lived JWT + refresh tokens
+Biometric bypass       | Medium     | local_auth + crypto fallback
+Hardcoded API keys     | Critical   | --dart-define or secure vault
+```
+
+## Authentication Flow Mental Model
+```
+User Action          Auth Service          Token Storage         Backend API
+     |                    |                       |                    |
+     |-- Login ---------> |                       |                    |
+     |                    |-- Validate ---------> |                    |
+     |                    |<-- JWT + Refresh ---- |                    |
+     |<-- Success ------- |                       |                    |
+     |                    |                       |-- Store Secure ---->|
+     |                    |                       |                    |
+     |-- API Call ----------------------------------------->|         |
+     |                    |                       |-- Attach JWT ----->|
+     |                    |                       |                    |
+     |                    |                       |<-- 401 Expired ----|
+     |                    |                       |-- Refresh Token --->|
+     |                    |                       |<-- New JWT --------|
+     |                    |                       |-- Retry API Call ->|
+```
+
+## What You Will Build Today
+- **Firebase Auth** integration with multiple providers
+- **JWT token lifecycle** (access + refresh tokens)
+- **Secure token storage** using OS-level encryption
+- **Biometric lock** for sensitive screens
+- **Auth-guarded navigation** with automatic redirect
+- **Logout & session cleanup** across all layers
+
+---
+
+# 2. Authentication Architecture Overview
+
+## The Three-Layer Auth Model
+```
+┌─────────────────────────────────────────┐
+│  Presentation Layer                     │
+│  - Login Screen, Register Screen        │
+│  - Biometric Prompt UI                  │
+│  - AuthGuard (route protection)         │
+├─────────────────────────────────────────┤
+│  State Management Layer                 │
+│  - AuthBloc / AuthNotifier              │
+│  - Emits: Unauthenticated → Loading →   │
+│    Authenticated / Error                │
+├─────────────────────────────────────────┤
+│  Service Layer                          │
+│  - FirebaseAuth.instance                │
+│  - GoogleSignIn                         │
+│  - flutter_secure_storage               │
+│  - local_auth                           │
+└─────────────────────────────────────────┘
+```
+
+## Token Types Explained
+| Token | Lifespan | Storage | Purpose |
+|---|---|---|---|
+| **ID Token** | 1 hour | Memory | Verify user identity (contains claims) |
+| **Access Token** | 1 hour | Secure Storage | Authorize API requests |
+| **Refresh Token** | ~6 months | Secure Storage | Get new access token silently |
+| **Custom Token** | 1 hour | N/A | Admin-generated, used for sign-in |
+
+---
+
+# 3. Firebase Authentication Setup
+
+## Firebase Console Setup
+1. Go to [Firebase Console](https://console.firebase.google.com)
+2. Create/Select project → Add Flutter app
+3. Download `google-services.json` (Android) and `GoogleService-Info.plist` (iOS)
+4. Enable Authentication → Sign-in methods → Enable Email/Password, Google, Apple
+
+## pubspec.yaml
+```yaml
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase Core
+  firebase_core: ^2.31.0
+  firebase_auth: ^4.19.5
+
+  # Social Auth
+  google_sign_in: ^6.2.1
+  sign_in_with_apple: ^5.0.0
+
+  # Security
+  flutter_secure_storage: ^9.2.2
+  local_auth: ^2.2.0
+  local_auth_android: ^1.0.38
+  local_auth_darwin: ^1.3.0
+
+  # State Management
+  flutter_bloc: ^8.1.6
+  equatable: ^2.0.5
+```
+
+## Platform Configuration
+
+### Android (android/app/build.gradle)
+```gradle
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "com.google.gms.google-services"  // Add this
+}
+
+defaultConfig {
+    minSdkVersion 23  // Firebase requires min 23
+}
+```
+
+### Android (android/build.gradle)
+```gradle
+plugins {
+    id "com.google.gms.google-services" version "4.4.1" apply false
+}
+```
+
+### iOS (ios/Runner/Info.plist)
+```xml
+<key>CFBundleURLTypes</key>
+<array>
+  <dict>
+    <key>CFBundleTypeRole</key>
+    <string>Editor</string>
+    <key>CFBundleURLSchemes</key>
+    <array>
+      <string>com.googleusercontent.apps.YOUR_CLIENT_ID</string>
+    </array>
+  </dict>
+</array>
+```
+
+### Initialize Firebase
+```dart
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  runApp(const MyApp());
+}
+```
+
+---
+
+# 4. Email/Password Authentication
+
+## Complete Auth Service
+```dart
+import 'package:firebase_auth/firebase_auth.dart';
+
+class FirebaseAuthService {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  // Get current user stream
+  Stream<User?> get authStateChanges => _auth.authStateChanges();
+  User? get currentUser => _auth.currentUser;
+
+  // Sign Up with Email
+  Future<UserCredential> signUpWithEmail({
+    required String email,
+    required String password,
+    String? displayName,
+  }) async {
+    try {
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+
+      // Update display name
+      if (displayName != null && credential.user != null) {
+        await credential.user!.updateDisplayName(displayName);
+      }
+
+      // Send email verification
+      await credential.user?.sendEmailVerification();
+
+      return credential;
+    } on FirebaseAuthException catch (e) {
+      throw _handleAuthException(e);
+    }
+  }
+
+  // Sign In with Email
+  Future<UserCredential> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      return await _auth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+    } on FirebaseAuthException catch (e) {
+      throw _handleAuthException(e);
+    }
+  }
+
+  // Sign Out
+  Future<void> signOut() async {
+    await _auth.signOut();
+  }
+
+  // Password Reset
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+    } on FirebaseAuthException catch (e) {
+      throw _handleAuthException(e);
+    }
+  }
+
+  // Update Password
+  Future<void> updatePassword(String newPassword) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('No user logged in');
+    await user.updatePassword(newPassword);
+  }
+
+  // Re-authenticate (required for sensitive operations)
+  Future<void> reauthenticate(String password) async {
+    final user = _auth.currentUser;
+    if (user == null || user.email == null) return;
+
+    final credential = EmailAuthProvider.credential(
+      email: user.email!,
+      password: password,
+    );
+    await user.reauthenticateWithCredential(credential);
+  }
+
+  // Delete Account
+  Future<void> deleteAccount() async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('No user logged in');
+    await user.delete();
+  }
+
+  // Handle Firebase Auth Errors
+  Exception _handleAuthException(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'user-not-found':
+        return Exception('No user found with this email.');
+      case 'wrong-password':
+        return Exception('Incorrect password.');
+      case 'email-already-in-use':
+        return Exception('An account already exists with this email.');
+      case 'weak-password':
+        return Exception('Password is too weak. Use at least 6 characters.');
+      case 'invalid-email':
+        return Exception('Invalid email address.');
+      case 'user-disabled':
+        return Exception('This account has been disabled.');
+      case 'too-many-requests':
+        return Exception('Too many attempts. Please try again later.');
+      case 'operation-not-allowed':
+        return Exception('This sign-in method is not enabled.');
+      case 'network-request-failed':
+        return Exception('Network error. Check your connection.');
+      case 'requires-recent-login':
+        return Exception('Please log in again to complete this action.');
+      default:
+        return Exception(e.message ?? 'Authentication failed.');
+    }
+  }
+}
+```
+
+## Email Validation & Password Strength
+```dart
+class AuthValidators {
+  static String? validateEmail(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Email is required';
+    }
+    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+    if (!emailRegex.hasMatch(value.trim())) {
+      return 'Enter a valid email address';
+    }
+    return null;
+  }
+
+  static String? validatePassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Password is required';
+    }
+    if (value.length < 8) {
+      return 'Password must be at least 8 characters';
+    }
+    if (!value.contains(RegExp(r'[A-Z]'))) {
+      return 'Password must contain an uppercase letter';
+    }
+    if (!value.contains(RegExp(r'[a-z]'))) {
+      return 'Password must contain a lowercase letter';
+    }
+    if (!value.contains(RegExp(r'[0-9]'))) {
+      return 'Password must contain a number';
+    }
+    if (!value.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'))) {
+      return 'Password must contain a special character';
+    }
+    return null;
+  }
+
+  static String? validateConfirmPassword(String? value, String password) {
+    if (value != password) {
+      return 'Passwords do not match';
+    }
+    return null;
+  }
+}
+```
+
+---
+
+# 5. Social Authentication (Google, Apple)
+
+## Google Sign-In
+```dart
+import 'package:google_sign_in/google_sign_in.dart';
+
+class GoogleAuthService {
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: ['email', 'profile'],
+  );
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  Future<UserCredential?> signInWithGoogle() async {
+    try {
+      // Trigger sign-in flow
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return null; // User cancelled
+
+      // Obtain auth details
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+      // Create credential
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // Sign in to Firebase
+      return await _auth.signInWithCredential(credential);
+    } on FirebaseAuthException catch (e) {
+      throw Exception('Google sign-in failed: ${e.message}');
+    }
+  }
+
+  Future<void> signOut() async {
+    await _googleSignIn.signOut();
+    await _auth.signOut();
+  }
+}
+```
+
+## Apple Sign-In (iOS Mandatory Requirement)
+```dart
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+
+class AppleAuthService {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  Future<UserCredential?> signInWithApple() async {
+    try {
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        webAuthenticationOptions: WebAuthenticationOptions(
+          clientId: 'your.bundle.id', // Service ID
+          redirectUri: Uri.parse('https://your-backend.com/callbacks/sign_in_with_apple'),
+        ),
+      );
+
+      final oauthCredential = OAuthProvider('apple.com').credential(
+        idToken: credential.identityToken,
+        accessToken: credential.authorizationCode,
+      );
+
+      final userCredential = await _auth.signInWithCredential(oauthCredential);
+
+      // Apple only returns name on FIRST sign-in
+      if (credential.givenName != null || credential.familyName != null) {
+        final displayName = '${credential.givenName ?? ''} ${credential.familyName ?? ''}'.trim();
+        if (displayName.isNotEmpty) {
+          await userCredential.user?.updateDisplayName(displayName);
+        }
+      }
+
+      return userCredential;
+    } catch (e) {
+      throw Exception('Apple sign-in failed: $e');
+    }
+  }
+}
+```
+
+## iOS Configuration for Apple Sign-In
+```
+1. Xcode → Signing & Capabilities → + Capability
+2. Add "Sign In with Apple"
+3. Firebase Console → Authentication → Apple → Enable
+4. Configure Apple Developer Team ID in Firebase
+```
+
+---
+
+# 6. Anonymous & Phone Authentication
+
+## Anonymous Auth (Guest Mode)
+```dart
+class AnonymousAuthService {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  Future<UserCredential> signInAnonymously() async {
+    return await _auth.signInAnonymously();
+  }
+
+  // Link anonymous account to permanent account
+  Future<UserCredential> linkAnonymousToEmail({
+    required String email,
+    required String password,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('No anonymous user');
+
+    final credential = EmailAuthProvider.credential(
+      email: email,
+      password: password,
+    );
+
+    return await user.linkWithCredential(credential);
+  }
+
+  // Link anonymous to Google
+  Future<UserCredential> linkAnonymousToGoogle() async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('No anonymous user');
+
+    final googleUser = await GoogleSignIn().signIn();
+    final googleAuth = await googleUser!.authentication;
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
+
+    return await user.linkWithCredential(credential);
+  }
+}
+```
+
+## Phone Authentication (OTP)
+```dart
+class PhoneAuthService {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  String? _verificationId;
+
+  Future<void> verifyPhoneNumber(String phoneNumber) async {
+    await _auth.verifyPhoneNumber(
+      phoneNumber: phoneNumber,
+      verificationCompleted: (PhoneAuthCredential credential) async {
+        // Auto-verification on Android
+        await _auth.signInWithCredential(credential);
+      },
+      verificationFailed: (FirebaseAuthException e) {
+        throw Exception(e.message ?? 'Phone verification failed');
+      },
+      codeSent: (String verificationId, int? resendToken) {
+        _verificationId = verificationId;
+      },
+      codeAutoRetrievalTimeout: (String verificationId) {
+        _verificationId = verificationId;
+      },
+      timeout: const Duration(seconds: 60),
+    );
+  }
+
+  Future<UserCredential> verifyOTP(String smsCode) async {
+    if (_verificationId == null) {
+      throw Exception('Verification ID not found. Request OTP first.');
+    }
+
+    final credential = PhoneAuthProvider.credential(
+      verificationId: _verificationId!,
+      smsCode: smsCode,
+    );
+
+    return await _auth.signInWithCredential(credential);
+  }
+}
+```
+
+---
+
+# 7. Auth State Management (Stream-based)
+
+## AuthBloc with Firebase Stream
+```dart
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:equatable/equatable.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+// Events
+abstract class AuthEvent extends Equatable {
+  const AuthEvent();
+  @override List<Object?> get props => [];
+}
+
+class AuthCheckRequested extends AuthEvent {}
+class AuthEmailLoginRequested extends AuthEvent {
+  final String email;
+  final String password;
+  const AuthEmailLoginRequested(this.email, this.password);
+  @override List<Object?> get props => [email, password];
+}
+class AuthEmailSignUpRequested extends AuthEvent {
+  final String email;
+  final String password;
+  final String? displayName;
+  const AuthEmailSignUpRequested(this.email, this.password, {this.displayName});
+}
+class AuthGoogleLoginRequested extends AuthEvent {}
+class AuthAppleLoginRequested extends AuthEvent {}
+class AuthLogoutRequested extends AuthEvent {}
+class AuthUserChanged extends AuthEvent {
+  final User? user;
+  const AuthUserChanged(this.user);
+}
+
+// States
+abstract class AuthState extends Equatable {
+  const AuthState();
+  @override List<Object?> get props => [];
+}
+
+class AuthInitial extends AuthState {}
+class AuthLoading extends AuthState {}
+class AuthAuthenticated extends AuthState {
+  final User user;
+  const AuthAuthenticated(this.user);
+  @override List<Object?> get props => [user];
+}
+class AuthUnauthenticated extends AuthState {}
+class AuthError extends AuthState {
+  final String message;
+  const AuthError(this.message);
+  @override List<Object?> get props => [message];
+}
+
+// Bloc
+class AuthBloc extends Bloc<AuthEvent, AuthState> {
+  final FirebaseAuthService _authService;
+  final SecureTokenService _tokenService;
+  StreamSubscription<User?>? _authSubscription;
+
+  AuthBloc(this._authService, this._tokenService) : super(AuthInitial()) {
+    on<AuthCheckRequested>(_onCheckRequested);
+    on<AuthEmailLoginRequested>(_onEmailLogin);
+    on<AuthEmailSignUpRequested>(_onEmailSignUp);
+    on<AuthGoogleLoginRequested>(_onGoogleLogin);
+    on<AuthAppleLoginRequested>(_onAppleLogin);
+    on<AuthLogoutRequested>(_onLogout);
+    on<AuthUserChanged>(_onUserChanged);
+
+    // Listen to Firebase auth state
+    _authSubscription = _authService.authStateChanges.listen((user) {
+      add(AuthUserChanged(user));
+    });
+  }
+
+  void _onUserChanged(AuthUserChanged event, Emitter<AuthState> emit) async {
+    if (event.user != null) {
+      // Store tokens securely
+      final token = await event.user!.getIdToken();
+      await _tokenService.saveAccessToken(token);
+      await _tokenService.saveRefreshToken(event.user!.refreshToken ?? '');
+      emit(AuthAuthenticated(event.user!));
+    } else {
+      await _tokenService.clearAll();
+      emit(AuthUnauthenticated());
+    }
+  }
+
+  Future<void> _onEmailLogin(
+    AuthEmailLoginRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+    try {
+      await _authService.signInWithEmail(
+        email: event.email,
+        password: event.password,
+      );
+      // AuthUserChanged event will handle state update
+    } catch (e) {
+      emit(AuthError(e.toString().replaceAll('Exception: ', '')));
+    }
+  }
+
+  Future<void> _onEmailSignUp(
+    AuthEmailSignUpRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+    try {
+      await _authService.signUpWithEmail(
+        email: event.email,
+        password: event.password,
+        displayName: event.displayName,
+      );
+    } catch (e) {
+      emit(AuthError(e.toString().replaceAll('Exception: ', '')));
+    }
+  }
+
+  Future<void> _onGoogleLogin(
+    AuthGoogleLoginRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+    try {
+      await GoogleAuthService().signInWithGoogle();
+    } catch (e) {
+      emit(AuthError(e.toString().replaceAll('Exception: ', '')));
+    }
+  }
+
+  Future<void> _onAppleLogin(
+    AuthAppleLoginRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+    try {
+      await AppleAuthService().signInWithApple();
+    } catch (e) {
+      emit(AuthError(e.toString().replaceAll('Exception: ', '')));
+    }
+  }
+
+  Future<void> _onLogout(
+    AuthLogoutRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+    await _authService.signOut();
+    await GoogleAuthService().signOut();
+    await _tokenService.clearAll();
+  }
+
+  Future<void> _onCheckRequested(
+    AuthCheckRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+    final user = _authService.currentUser;
+    if (user != null) {
+      emit(AuthAuthenticated(user));
+    } else {
+      emit(AuthUnauthenticated());
+    }
+  }
+
+  @override
+  Future<void> close() {
+    _authSubscription?.cancel();
+    return super.close();
+  }
+}
+```
+
+---
+
+# 8. JWT Token Management & Refresh
+
+## Token Service with Secure Storage
+```dart
+class SecureTokenService {
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+  );
+
+  static const String _accessTokenKey = 'access_token';
+  static const String _refreshTokenKey = 'refresh_token';
+  static const String _tokenExpiryKey = 'token_expiry';
+
+  // Save tokens
+  static Future<void> saveAccessToken(String token) async {
+    await _storage.write(key: _accessTokenKey, value: token);
+    // Decode JWT to get expiry
+    final expiry = _getTokenExpiry(token);
+    if (expiry != null) {
+      await _storage.write(key: _tokenExpiryKey, value: expiry.toIso8601String());
+    }
+  }
+
+  static Future<void> saveRefreshToken(String token) async {
+    await _storage.write(key: _refreshTokenKey, value: token);
+  }
+
+  // Read tokens
+  static Future<String?> getAccessToken() async {
+    return await _storage.read(key: _accessTokenKey);
+  }
+
+  static Future<String?> getRefreshToken() async {
+    return await _storage.read(key: _refreshTokenKey);
+  }
+
+  // Check if token is expired
+  static Future<bool> isTokenExpired() async {
+    final expiryStr = await _storage.read(key: _tokenExpiryKey);
+    if (expiryStr == null) return true;
+    final expiry = DateTime.parse(expiryStr);
+    // Refresh 5 minutes before expiry
+    return DateTime.now().isAfter(expiry.subtract(const Duration(minutes: 5)));
+  }
+
+  // Clear all tokens
+  static Future<void> clearAll() async {
+    await _storage.deleteAll();
+  }
+
+  // Decode JWT payload
+  static DateTime? _getTokenExpiry(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return null;
+      final payload = jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+      );
+      final exp = payload['exp'] as int?;
+      if (exp != null) {
+        return DateTime.fromMillisecondsSinceEpoch(exp * 1000);
+      }
+    } catch (_) {}
+    return null;
+  }
+}
+```
+
+## Automatic Token Refresh Interceptor
+```dart
+class TokenRefreshInterceptor extends Interceptor {
+  final Dio _dio;
+  bool _isRefreshing = false;
+  final List<Function> _pendingRequests = [];
+
+  TokenRefreshInterceptor(this._dio);
+
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
+    final token = await SecureTokenService.getAccessToken();
+    if (token != null) {
+      options.headers['Authorization'] = 'Bearer $token';
+    }
+    handler.next(options);
+  }
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) async {
+    if (err.response?.statusCode == 401) {
+      final originalRequest = err.requestOptions;
+
+      if (_isRefreshing) {
+        _pendingRequests.add(() async {
+          final token = await SecureTokenService.getAccessToken();
+          originalRequest.headers['Authorization'] = 'Bearer $token';
+          final response = await _dio.fetch(originalRequest);
+          handler.resolve(response);
+        });
+        return;
+      }
+
+      _isRefreshing = true;
+
+      try {
+        final newToken = await _refreshToken();
+        await SecureTokenService.saveAccessToken(newToken);
+
+        originalRequest.headers['Authorization'] = 'Bearer $newToken';
+        final response = await _dio.fetch(originalRequest);
+
+        for (final request in _pendingRequests) {
+          await request();
+        }
+        _pendingRequests.clear();
+
+        handler.resolve(response);
+      } catch (e) {
+        _pendingRequests.clear();
+        // Token refresh failed - force logout
+        await SecureTokenService.clearAll();
+        handler.next(err);
+      } finally {
+        _isRefreshing = false;
+      }
+    } else {
+      handler.next(err);
+    }
+  }
+
+  Future<String> _refreshToken() async {
+    final refreshToken = await SecureTokenService.getRefreshToken();
+    final response = await Dio().post(
+      'https://your-api.com/auth/refresh',
+      data: {'refresh_token': refreshToken},
+    );
+    return response.data['access_token'];
+  }
+}
+```
+
+---
+
+# 9. flutter_secure_storage for Tokens
+
+## Why Not SharedPreferences?
+```
+Storage Type          | Encryption | Accessible By          | Use For
+----------------------|------------|----------------------|------------------
+SharedPreferences     | None       | Any app with root     | Settings, flags
+flutter_secure_storage| AES-256    | Only your app         | Tokens, passwords
+Keychain (iOS)        | Hardware   | Device keychain       | Refresh tokens
+Keystore (Android)    | Hardware   | TEE/StrongBox         | Auth credentials
+```
+
+## Complete Secure Storage Service
+```dart
+class SecureStorageService {
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(
+      encryptedSharedPreferences: true,
+      keyCipherAlgorithm: KeyCipherAlgorithm.RSA_ECB_PKCS1Padding,
+      storageCipherAlgorithm: StorageCipherAlgorithm.AES_GCM_NoPadding,
+    ),
+    iOptions: IOSOptions(
+      accountName: 'flutter_secure_storage',
+      accessibility: KeychainAccessibility.first_unlock_this_device,
+    ),
+  );
+
+  // Auth Tokens
+  static Future<void> setAccessToken(String token) async =>
+      await _storage.write(key: 'access_token', value: token);
+  static Future<String?> getAccessToken() async =>
+      await _storage.read(key: 'access_token');
+
+  static Future<void> setRefreshToken(String token) async =>
+      await _storage.write(key: 'refresh_token', value: token);
+  static Future<String?> getRefreshToken() async =>
+      await _storage.read(key: 'refresh_token');
+
+  static Future<void> setIdToken(String token) async =>
+      await _storage.write(key: 'id_token', value: token);
+  static Future<String?> getIdToken() async =>
+      await _storage.read(key: 'id_token');
+
+  // User Data
+  static Future<void> setUserId(String id) async =>
+      await _storage.write(key: 'user_id', value: id);
+  static Future<String?> getUserId() async =>
+      await _storage.read(key: 'user_id');
+
+  // Biometric Settings
+  static Future<void> setBiometricEnabled(bool enabled) async =>
+      await _storage.write(key: 'biometric_enabled', value: enabled.toString());
+  static Future<bool> isBiometricEnabled() async {
+    final value = await _storage.read(key: 'biometric_enabled');
+    return value == 'true';
+  }
+
+  // Session
+  static Future<void> clearSession() async {
+    await _storage.delete(key: 'access_token');
+    await _storage.delete(key: 'refresh_token');
+    await _storage.delete(key: 'id_token');
+    await _storage.delete(key: 'user_id');
+  }
+
+  static Future<void> clearAll() async {
+    await _storage.deleteAll();
+  }
+}
+```
+
+---
+
+# 10. Biometric Authentication with local_auth
+
+## Setup & Permissions
+
+### Android (android/app/src/main/AndroidManifest.xml)
+```xml
+<uses-permission android:name="android.permission.USE_FINGERPRINT"/>
+<uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+```
+
+### iOS (ios/Runner/Info.plist)
+```xml
+<key>NSFaceIDUsageDescription</key>
+<string>This app uses Face ID to secure your account</string>
+```
+
+## Biometric Service
+```dart
+import 'package:local_auth/local_auth.dart';
+import 'package:local_auth_android/local_auth_android.dart';
+import 'package:local_auth_darwin/local_auth_darwin.dart';
+
+class BiometricAuthService {
+  final LocalAuthentication _localAuth = LocalAuthentication();
+
+  // Check if device supports biometrics
+  Future<bool> isDeviceSupported() async {
+    return await _localAuth.isDeviceSupported();
+  }
+
+  // Check available biometrics
+  Future<List<BiometricType>> getAvailableBiometrics() async {
+    return await _localAuth.getAvailableBiometrics();
+  }
+
+  // Check if biometrics are enrolled
+  Future<bool> canCheckBiometrics() async {
+    return await _localAuth.canCheckBiometrics;
+  }
+
+  // Authenticate with biometrics
+  Future<bool> authenticate() async {
+    try {
+      final isAvailable = await canCheckBiometrics();
+      if (!isAvailable) return false;
+
+      return await _localAuth.authenticate(
+        localizedReason: 'Authenticate to access your account',
+        authOptions: const AuthenticationOptions(
+          stickyAuth: true,
+          biometricOnly: false, // Allow PIN/Pattern as fallback
+          sensitiveTransaction: true,
+        ),
+        localizedTitle: 'Verify Identity',
+      );
+    } catch (e) {
+      debugPrint('Biometric auth error: $e');
+      return false;
+    }
+  }
+
+  // Authenticate for sensitive action
+  Future<bool> authenticateForAction(String action) async {
+    return await _localAuth.authenticate(
+      localizedReason: 'Authenticate to $action',
+      authOptions: const AuthenticationOptions(
+        stickyAuth: true,
+        biometricOnly: true, // Require actual biometric
+      ),
+    );
+  }
+
+  // Stop authentication
+  Future<bool> stopAuthentication() async {
+    return await _localAuth.stopAuthentication();
+  }
+}
+```
+
+## Biometric-Protected Screen
+```dart
+class BiometricGuard extends StatefulWidget {
+  final Widget child;
+  const BiometricGuard({super.key, required this.child});
+
+  @override
+  State<BiometricGuard> createState() => _BiometricGuardState();
+}
+
+class _BiometricGuardState extends State<BiometricGuard> {
+  bool _isAuthenticated = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _authenticate();
+  }
+
+  Future<void> _authenticate() async {
+    final enabled = await SecureStorageService.isBiometricEnabled();
+    if (!enabled) {
+      setState(() => _isAuthenticated = true);
+      return;
+    }
+
+    final success = await BiometricAuthService().authenticate();
+    if (mounted) {
+      setState(() => _isAuthenticated = success);
+      if (!success) {
+        // Navigate back or show locked screen
+        Navigator.of(context).pop();
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_isAuthenticated) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    return widget.child;
+  }
+}
+```
+
+---
+
+# 11. OAuth 2.0 & Custom Backend Auth
+
+## OAuth 2.0 Authorization Code Flow
+```
+Step 1: App opens browser to OAuth provider
+        GET https://provider.com/oauth/authorize?
+              client_id=xxx&redirect_uri=app://callback&scope=profile
+
+Step 2: User logs in and approves
+
+Step 3: Provider redirects to app with auth code
+        app://callback?code=AUTH_CODE
+
+Step 4: App exchanges code for tokens
+        POST https://provider.com/oauth/token
+        { code, client_id, client_secret, redirect_uri }
+
+Step 5: Provider returns access_token + refresh_token
+
+Step 6: App stores tokens securely and uses access_token for API calls
+```
+
+## Custom Backend Integration
+```dart
+class CustomAuthService {
+  final Dio _dio;
+  CustomAuthService(this._dio);
+
+  // Login with custom backend
+  Future<AuthTokens> loginWithBackend(String email, String password) async {
+    final response = await _dio.post('/auth/login', data: {
+      'email': email,
+      'password': password,
+    });
+
+    final tokens = AuthTokens.fromJson(response.data);
+    await SecureTokenService.saveAccessToken(tokens.accessToken);
+    await SecureTokenService.saveRefreshToken(tokens.refreshToken);
+
+    return tokens;
+  }
+
+  // Register with custom backend
+  Future<AuthTokens> registerWithBackend({
+    required String email,
+    required String password,
+    required String name,
+  }) async {
+    final response = await _dio.post('/auth/register', data: {
+      'email': email,
+      'password': password,
+      'name': name,
+    });
+
+    final tokens = AuthTokens.fromJson(response.data);
+    await SecureTokenService.saveAccessToken(tokens.accessToken);
+    await SecureTokenService.saveRefreshToken(tokens.refreshToken);
+
+    return tokens;
+  }
+
+  // Logout from backend
+  Future<void> logoutFromBackend() async {
+    final refreshToken = await SecureTokenService.getRefreshToken();
+    if (refreshToken != null) {
+      await _dio.post('/auth/logout', data: {
+        'refresh_token': refreshToken,
+      });
+    }
+    await SecureTokenService.clearAll();
+  }
+}
+
+class AuthTokens {
+  final String accessToken;
+  final String refreshToken;
+  final int expiresIn;
+
+  AuthTokens({
+    required this.accessToken,
+    required this.refreshToken,
+    required this.expiresIn,
+  });
+
+  factory AuthTokens.fromJson(Map<String, dynamic> json) => AuthTokens(
+    accessToken: json['access_token'],
+    refreshToken: json['refresh_token'],
+    expiresIn: json['expires_in'],
+  );
+}
+```
+
+---
+
+# 12. Security Best Practices
+
+## The Security Checklist for Production
+```dart
+// 1. NEVER store passwords in plain text
+// 2. ALWAYS use HTTPS for API calls
+// 3. NEVER hardcode API keys or secrets
+// 4. ALWAYS validate input on client AND server
+// 5. USE certificate pinning for sensitive apps
+// 6. ENABLE ProGuard/R8 code obfuscation (Android)
+// 7. DISABLE debug mode in production
+// 8. USE biometric auth for sensitive actions
+// 9. IMPLEMENT session timeout and auto-logout
+// 10. LOG security events for audit trails
+```
+
+## Certificate Pinning (ssl_pinning)
+```yaml
+dependencies:
+  dio: ^5.4.3+1
+  ssl_pinning_plugin: ^2.0.0  # Or use dio certificate pinning
+```
+
+```dart
+// Pin specific certificates to prevent MITM attacks
+class PinnedDioClient {
+  static Dio create() {
+    final dio = Dio();
+
+    // Load certificate from assets
+    final cert = rootBundle.load('assets/certs/server_cert.pem');
+
+    (dio.httpClientAdapter as IOHttpClientAdapter).onHttpClientCreate =
+        (client) {
+      client.badCertificateCallback = (cert, host, port) {
+        // Verify certificate matches pinned hash
+        return cert.pem == pinnedCertificate;
+      };
+      return client;
+    };
+
+    return dio;
+  }
+}
+```
+
+## Input Sanitization
+```dart
+class InputSanitizer {
+  static String sanitizeEmail(String email) {
+    return email.trim().toLowerCase();
+  }
+
+  static String sanitizeDisplayName(String name) {
+    return name.trim().replaceAll(RegExp(r'[<>"']'), '');
+  }
+
+  static bool isValidPassword(String password) {
+    return password.length >= 8 &&
+        password.contains(RegExp(r'[A-Z]')) &&
+        password.contains(RegExp(r'[a-z]')) &&
+        password.contains(RegExp(r'[0-9]')) &&
+        password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'));
+  }
+}
+```
+
+---
+
+# 13. Hands-On Project: Secure Auth Flow
+
+## Project Overview
+Build a complete **SecureAuth Pro** app with:
+- **Firebase Auth** with Email/Password, Google, Apple
+- **AuthBloc** for state management
+- **Secure token storage** with flutter_secure_storage
+- **Biometric authentication** for app lock
+- **AuthGuard** for protected routes
+- **Password reset** and email verification
+- **Profile screen** with logout and account deletion
+
+## Complete Code
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:equatable/equatable.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:local_auth/local_auth.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  runApp(const SecureAuthApp());
+}
+
+// ============ AUTH EVENTS & STATES ============
+abstract class AuthEvent extends Equatable {
+  const AuthEvent();
+  @override List<Object?> get props => [];
+}
+
+class AuthCheckRequested extends AuthEvent {}
+class AuthEmailLoginRequested extends AuthEvent {
+  final String email; final String password;
+  const AuthEmailLoginRequested(this.email, this.password);
+  @override List<Object?> get props => [email, password];
+}
+class AuthEmailSignUpRequested extends AuthEvent {
+  final String email; final String password; final String displayName;
+  const AuthEmailSignUpRequested(this.email, this.password, this.displayName);
+}
+class AuthGoogleLoginRequested extends AuthEvent {}
+class AuthLogoutRequested extends AuthEvent {}
+class AuthUserChanged extends AuthEvent {
+  final User? user;
+  const AuthUserChanged(this.user);
+}
+
+abstract class AuthState extends Equatable {
+  const AuthState();
+  @override List<Object?> get props => [];
+}
+class AuthInitial extends AuthState {}
+class AuthLoading extends AuthState {}
+class AuthAuthenticated extends AuthState {
+  final User user;
+  const AuthAuthenticated(this.user);
+  @override List<Object?> get props => [user];
+}
+class AuthUnauthenticated extends AuthState {}
+class AuthError extends AuthState {
+  final String message;
+  const AuthError(this.message);
+  @override List<Object?> get props => [message];
+}
+class AuthNeedsEmailVerification extends AuthState {
+  final User user;
+  const AuthNeedsEmailVerification(this.user);
+}
+
+// ============ AUTH BLOC ============
+class AuthBloc extends Bloc<AuthEvent, AuthState> {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final _storage = const FlutterSecureStorage();
+  StreamSubscription<User?>? _authSubscription;
+
+  AuthBloc() : super(AuthInitial()) {
+    on<AuthCheckRequested>(_onCheckRequested);
+    on<AuthEmailLoginRequested>(_onEmailLogin);
+    on<AuthEmailSignUpRequested>(_onEmailSignUp);
+    on<AuthGoogleLoginRequested>(_onGoogleLogin);
+    on<AuthLogoutRequested>(_onLogout);
+    on<AuthUserChanged>(_onUserChanged);
+
+    _authSubscription = _auth.authStateChanges().listen((user) {
+      add(AuthUserChanged(user));
+    });
+  }
+
+  void _onUserChanged(AuthUserChanged event, Emitter<AuthState> emit) async {
+    if (event.user != null) {
+      if (!event.user!.emailVerified && event.user!.email != null) {
+        emit(AuthNeedsEmailVerification(event.user!));
+        return;
+      }
+      await _storage.write(key: 'user_id', value: event.user!.uid);
+      emit(AuthAuthenticated(event.user!));
+    } else {
+      await _storage.deleteAll();
+      emit(AuthUnauthenticated());
+    }
+  }
+
+  Future<void> _onEmailLogin(
+    AuthEmailLoginRequested event, Emitter<AuthState> emit) async {
+    emit(AuthLoading());
+    try {
+      await _auth.signInWithEmailAndPassword(
+        email: event.email.trim(),
+        password: event.password,
+      );
+    } on FirebaseAuthException catch (e) {
+      emit(AuthError(_mapError(e.code)));
+    }
+  }
+
+  Future<void> _onEmailSignUp(
+    AuthEmailSignUpRequested event, Emitter<AuthState> emit) async {
+    emit(AuthLoading());
+    try {
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: event.email.trim(),
+        password: event.password,
+      );
+      await credential.user?.updateDisplayName(event.displayName);
+      await credential.user?.sendEmailVerification();
+      emit(AuthNeedsEmailVerification(credential.user!));
+    } on FirebaseAuthException catch (e) {
+      emit(AuthError(_mapError(e.code)));
+    }
+  }
+
+  Future<void> _onGoogleLogin(
+    AuthGoogleLoginRequested event, Emitter<AuthState> emit) async {
+    emit(AuthLoading());
+    try {
+      final googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) { emit(AuthUnauthenticated()); return; }
+
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      await _auth.signInWithCredential(credential);
+    } catch (e) {
+      emit(AuthError('Google sign-in failed'));
+    }
+  }
+
+  Future<void> _onLogout(
+    AuthLogoutRequested event, Emitter<AuthState> emit) async {
+    emit(AuthLoading());
+    await GoogleSignIn().signOut();
+    await _auth.signOut();
+    await _storage.deleteAll();
+  }
+
+  Future<void> _onCheckRequested(
+    AuthCheckRequested event, Emitter<AuthState> emit) async {
+    emit(AuthLoading());
+    final user = _auth.currentUser;
+    if (user != null) {
+      if (!user.emailVerified) {
+        emit(AuthNeedsEmailVerification(user));
+      } else {
+        emit(AuthAuthenticated(user));
+      }
+    } else {
+      emit(AuthUnauthenticated());
+    }
+  }
+
+  String _mapError(String code) {
+    switch (code) {
+      case 'user-not-found': return 'No user found with this email.';
+      case 'wrong-password': return 'Incorrect password.';
+      case 'email-already-in-use': return 'Account already exists.';
+      case 'weak-password': return 'Password too weak (min 6 chars).';
+      case 'invalid-email': return 'Invalid email address.';
+      case 'user-disabled': return 'Account disabled.';
+      case 'too-many-requests': return 'Too many attempts. Try later.';
+      case 'network-request-failed': return 'Network error.';
+      default: return 'Authentication failed.';
+    }
+  }
+
+  @override Future<void> close() {
+    _authSubscription?.cancel();
+    return super.close();
+  }
+}
+
+// ============ APP ============
+class SecureAuthApp extends StatelessWidget {
+  const SecureAuthApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (_) => AuthBloc()..add(AuthCheckRequested()),
+      child: MaterialApp(
+        title: 'SecureAuth Pro',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          useMaterial3: true,
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+        ),
+        home: const AuthWrapper(),
+      ),
+    );
+  }
+}
+
+// ============ AUTH WRAPPER ============
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocConsumer<AuthBloc, AuthState>(
+      listener: (context, state) {
+        if (state is AuthError) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.message), backgroundColor: Colors.red),
+          );
+        }
+      },
+      builder: (context, state) {
+        if (state is AuthLoading) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+        if (state is AuthAuthenticated) {
+          return const BiometricLockScreen(child: HomeScreen());
+        }
+        if (state is AuthNeedsEmailVerification) {
+          return const EmailVerificationScreen();
+        }
+        return const LoginScreen();
+      },
+    );
+  }
+}
+
+// ============ LOGIN SCREEN ============
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+  @override State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isLogin = true;
+  bool _obscurePassword = true;
+  bool _isLoading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.security, size: 80, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(height: 24),
+                Text(
+                  _isLogin ? 'Welcome Back' : 'Create Account',
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 32),
+                TextFormField(
+                  controller: _emailController,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    prefixIcon: Icon(Icons.email_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (v) => v?.contains('@') ?? false ? null : 'Enter valid email',
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _passwordController,
+                  decoration: InputDecoration(
+                    labelText: 'Password',
+                    prefixIcon: const Icon(Icons.lock_outlined),
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    ),
+                    border: const OutlineInputBorder(),
+                  ),
+                  obscureText: _obscurePassword,
+                  validator: (v) => v != null && v.length >= 6 ? null : 'Min 6 characters',
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: FilledButton(
+                    onPressed: _isLoading ? null : _submit,
+                    child: _isLoading
+                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : Text(_isLogin ? 'Sign In' : 'Sign Up'),
+                  ),
+                ),
+                if (_isLogin) ...[
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () => _showResetDialog(),
+                    child: const Text('Forgot Password?'),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                const Row(
+                  children: [
+                    Expanded(child: Divider()),
+                    Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text('OR')),
+                    Expanded(child: Divider()),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => context.read<AuthBloc>().add(AuthGoogleLoginRequested()),
+                        icon: const Icon(Icons.g_mobiledata, size: 24),
+                        label: const Text('Google'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {}, // Apple sign-in
+                        icon: const Icon(Icons.apple, size: 24),
+                        label: const Text('Apple'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                TextButton(
+                  onPressed: () => setState(() => _isLogin = !_isLogin),
+                  child: Text(_isLogin
+                      ? "Don't have an account? Sign Up"
+                      : "Already have an account? Sign In"),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _submit() {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    setState(() => _isLoading = true);
+
+    if (_isLogin) {
+      context.read<AuthBloc>().add(AuthEmailLoginRequested(
+        _emailController.text,
+        _passwordController.text,
+      ));
+    } else {
+      context.read<AuthBloc>().add(AuthEmailSignUpRequested(
+        _emailController.text,
+        _passwordController.text,
+        _emailController.text.split('@').first,
+      ));
+    }
+
+    setState(() => _isLoading = false);
+  }
+
+  void _showResetDialog() {
+    final emailController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Reset Password'),
+        content: TextField(
+          controller: emailController,
+          decoration: const InputDecoration(labelText: 'Email'),
+          keyboardType: TextInputType.emailAddress,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              await FirebaseAuth.instance.sendPasswordResetEmail(email: emailController.text.trim());
+              if (mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Password reset email sent')),
+                );
+              }
+            },
+            child: const Text('Send'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+}
+
+// ============ EMAIL VERIFICATION SCREEN ============
+class EmailVerificationScreen extends StatelessWidget {
+  const EmailVerificationScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.mark_email_unread, size: 80, color: Colors.orange.shade400),
+              const SizedBox(height: 24),
+              const Text(
+                'Verify Your Email',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'We sent a verification link to your email. Please check your inbox and verify to continue.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              FilledButton(
+                onPressed: () async {
+                  await FirebaseAuth.instance.currentUser?.sendEmailVerification();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Verification email resent')),
+                  );
+                },
+                child: const Text('Resend Email'),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () => context.read<AuthBloc>().add(AuthLogoutRequested()),
+                child: const Text('Back to Login'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============ BIOMETRIC LOCK SCREEN ============
+class BiometricLockScreen extends StatefulWidget {
+  final Widget child;
+  const BiometricLockScreen({super.key, required this.child});
+
+  @override State<BiometricLockScreen> createState() => _BiometricLockScreenState();
+}
+
+class _BiometricLockScreenState extends State<BiometricLockScreen> {
+  bool _isAuthenticated = false;
+  final LocalAuthentication _localAuth = LocalAuthentication();
+
+  @override
+  void initState() {
+    super.initState();
+    _authenticate();
+  }
+
+  Future<void> _authenticate() async {
+    final canCheck = await _localAuth.canCheckBiometrics;
+    final isSupported = await _localAuth.isDeviceSupported;
+    if (!canCheck || !isSupported) {
+      setState(() => _isAuthenticated = true);
+      return;
+    }
+
+    final success = await _localAuth.authenticate(
+      localizedReason: 'Authenticate to access SecureAuth',
+      authOptions: const AuthenticationOptions(stickyAuth: true, biometricOnly: false),
+    );
+
+    if (mounted) setState(() => _isAuthenticated = success);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_isAuthenticated) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.fingerprint, size: 80),
+              const SizedBox(height: 24),
+              const Text('Authentication Required', style: TextStyle(fontSize: 20)),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: _authenticate,
+                child: const Text('Authenticate'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return widget.child;
+  }
+}
+
+// ============ HOME SCREEN ============
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = context.read<AuthBloc>().state is AuthAuthenticated
+        ? (context.read<AuthBloc>().state as AuthAuthenticated).user
+        : null;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('SecureAuth Pro'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () => context.read<AuthBloc>().add(AuthLogoutRequested()),
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 32,
+                      backgroundImage: user?.photoURL != null
+                          ? NetworkImage(user!.photoURL!)
+                          : null,
+                      child: user?.photoURL == null
+                          ? const Icon(Icons.person, size: 32)
+                          : null,
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user?.displayName ?? 'User',
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                          Text(user?.email ?? '', style: TextStyle(color: Colors.grey.shade600)),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: (user?.emailVerified ?? false)
+                                  ? Colors.green.shade100
+                                  : Colors.orange.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              (user?.emailVerified ?? false) ? 'Verified' : 'Unverified',
+                              style: TextStyle(
+                                color: (user?.emailVerified ?? false)
+                                    ? Colors.green.shade700
+                                    : Colors.orange.shade700,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text('Security Settings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            ListTile(
+              leading: const Icon(Icons.fingerprint),
+              title: const Text('Biometric Authentication'),
+              subtitle: const Text('Require fingerprint to open app'),
+              trailing: Switch(
+                value: false,
+                onChanged: (v) {},
+              ),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.password),
+              title: const Text('Change Password'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {},
+            ),
+            const Divider(),
+            ListTile(
+              leading: Icon(Icons.delete_forever, color: Colors.red.shade400),
+              title: Text('Delete Account', style: TextStyle(color: Colors.red.shade400)),
+              onTap: () => _showDeleteDialog(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete Account?'),
+        content: const Text('This will permanently delete your account and all data. This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              await FirebaseAuth.instance.currentUser?.delete();
+              if (context.mounted) {
+                context.read<AuthBloc>().add(AuthLogoutRequested());
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 14. Common Mistakes & How to Avoid Them
+
+## Mistake 1: Not Listening to Auth State Changes
+```dart
+// WRONG - One-time check, misses logout
+@override
+void initState() {
+  super.initState();
+  final user = FirebaseAuth.instance.currentUser;
+  if (user != null) { /* logged in */ }
+}
+
+// CORRECT - Stream subscription
+@override
+void initState() {
+  super.initState();
+  FirebaseAuth.instance.authStateChanges().listen((user) {
+    if (user == null) { /* navigate to login */ }
+  });
+}
+```
+
+## Mistake 2: Storing Tokens in SharedPreferences
+```dart
+// WRONG - Unencrypted, accessible to rooted devices
+final prefs = await SharedPreferences.getInstance();
+await prefs.setString('token', jwtToken);
+
+// CORRECT - Hardware-encrypted secure storage
+await SecureTokenService.saveAccessToken(jwtToken);
+```
+
+## Mistake 3: Not Handling Auth Errors
+```dart
+// WRONG - Generic error, poor UX
+try {
+  await FirebaseAuth.instance.signInWithEmailAndPassword(...);
+} catch (e) {
+  showSnackBar('Error'); // User doesn't know what went wrong
+}
+
+// CORRECT - Specific error messages
+try {
+  await FirebaseAuth.instance.signInWithEmailAndPassword(...);
+} on FirebaseAuthException catch (e) {
+  showSnackBar(_getMessageForCode(e.code));
+}
+```
+
+## Mistake 4: Forgetting to Sign Out of Google
+```dart
+// WRONG - Google session persists, auto-login next time
+await FirebaseAuth.instance.signOut();
+
+// CORRECT - Sign out of BOTH
+await GoogleSignIn().signOut();
+await FirebaseAuth.instance.signOut();
+```
+
+## Mistake 5: Not Re-authenticating for Sensitive Operations
+```dart
+// WRONG - May fail with "requires-recent-login"
+await FirebaseAuth.instance.currentUser?.delete();
+
+// CORRECT - Re-authenticate first
+final credential = EmailAuthProvider.credential(email: email, password: password);
+await user.reauthenticateWithCredential(credential);
+await user.delete();
+```
+
+## Mistake 6: Trusting Client-Side Validation Only
+```dart
+// WRONG - Client validation can be bypassed
+if (password.length >= 6) {
+  await FirebaseAuth.instance.createUserWithEmailAndPassword(...);
+}
+
+// CORRECT - Always validate on server too
+// Firebase Auth enforces rules, but your backend should validate too
+```
+
+## Mistake 7: Not Cancelling Auth Stream Subscriptions
+```dart
+// WRONG - Memory leak
+class AuthBloc extends Bloc<...> {
+  AuthBloc() {
+    FirebaseAuth.instance.authStateChanges().listen((user) {
+      // Never cancelled!
+    });
+  }
+}
+
+// CORRECT - Cancel in close()
+class AuthBloc extends Bloc<...> {
+  StreamSubscription? _sub;
+  AuthBloc() {
+    _sub = FirebaseAuth.instance.authStateChanges().listen(...);
+  }
+  @override Future<void> close() {
+    _sub?.cancel();
+    return super.close();
+  }
+}
+```
+
+---
+
+# 15. Day 17 Checklist
+
+Use this checklist to verify mastery:
+- [ ] Understands why secure auth is critical for production apps
+- [ ] Can set up Firebase project and configure Flutter app
+- [ ] Can implement email/password sign-up with validation
+- [ ] Can implement email/password sign-in
+- [ ] Can send password reset emails
+- [ ] Can implement Google Sign-In
+- [ ] Can implement Apple Sign-In
+- [ ] Can implement anonymous authentication
+- [ ] Can link anonymous accounts to permanent accounts
+- [ ] Can implement phone OTP authentication
+- [ ] Can manage auth state with Firebase authStateChanges stream
+- [ ] Can store tokens securely with flutter_secure_storage
+- [ ] Can implement automatic token refresh
+- [ ] Can implement biometric authentication with local_auth
+- [ ] Can protect routes with AuthGuard pattern
+- [ ] Can handle all Firebase Auth error codes gracefully
+- [ ] Can re-authenticate users for sensitive operations
+- [ ] Can send and verify email verification
+- [ ] Can delete user accounts safely
+- [ ] Understands OAuth 2.0 flow for custom backends
+- [ ] Built the SecureAuth Pro app with Firebase Auth
+- [ ] App has Email/Password, Google, Apple sign-in
+- [ ] App has email verification flow
+- [ ] App has password reset
+- [ ] App has biometric app lock
+- [ ] App has secure logout and account deletion
+- [ ] Pushed the project to GitHub
+
+---
+
+# Key Takeaways (Memorize These!)
+
+1. **Firebase Auth is the fastest path to production auth** - Handles email, social, phone, and anonymous auth with built-in security.
+2. **Always use flutter_secure_storage for tokens** - SharedPreferences is unencrypted. Tokens in secure storage use OS-level Keychain/Keystore.
+3. **Listen to authStateChanges, don't check once** - Firebase auth state is a stream. Always subscribe to handle login/logout in real-time.
+4. **Sign out of ALL providers** - Firebase signOut() doesn't sign out of Google. Call GoogleSignIn().signOut() too.
+5. **Re-authenticate for sensitive ops** - Deleting account or changing password requires recent login. Always re-authenticate first.
+6. **Handle EVERY FirebaseAuthException code** - Each error code needs a specific user-friendly message. Never show raw exceptions.
+7. **Apple Sign-In is mandatory for iOS** - Apple requires Sign in with Apple if you use any third-party auth. No exceptions.
+8. **Biometric auth is UX, not security** - local_auth verifies the user but doesn't encrypt data. Still store tokens securely.
+9. **Email verification prevents abuse** - Always verify emails before allowing app access to prevent fake accounts.
+10. **Token refresh should be transparent** - Users should never see a 401. Interceptors should refresh tokens silently and retry.
+
+---
+
+# Extra Practice (Do These Tonight!)
+
+1. **Multi-Factor Auth App:** Build an app that requires email + phone OTP for login. Use Firebase MFA.
+2. **Role-Based Access Control:** Create an app with admin and user roles. Use Firebase Custom Claims to enforce roles.
+3. **Social Feed with Auth:** Build a Twitter-like feed where only authenticated users can post. Use Firebase Auth + Firestore rules.
+4. **Biometric Payment Confirmation:** Create a mock payment app that requires Face ID/Touch ID to confirm transactions.
+5. **Custom JWT Backend:** Build a Node.js backend that issues JWTs. Connect your Flutter app with custom token refresh logic.
+
+---
+
+**Congratulations!** You've completed Day 17. You now master authentication and security in Flutter - from Firebase Auth integration to secure token storage, biometric authentication, and production-grade security practices.
+
+**Next Up -> Day 18: Animations (Implicit, Explicit, Hero, Lottie, Rive)**
+
+---
+
+*Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*
+*Day 17: Authentication & Security - Complete Deep Dive*
 
 *Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*
 *Day 13: State Management — Riverpod — Complete Deep Dive*
