@@ -23875,6 +23875,1993 @@ Use this checklist to verify mastery:
 
 *Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*
 *Day 15: Local Data Persistence - Complete Deep Dive*
+# Day 16: Networking & APIs
+## Complete Deep Dive
+
+**Goal:** Master connecting Flutter apps to the internet. Learn the http vs dio debate, REST API integration, JSON parsing with code generation, error handling with retry logic, interceptors, and build a production-grade GitHub User Search app with pagination, caching, and robust error states.
+
+---
+
+# Table of Contents
+1. Why Networking Architecture Matters
+2. HTTP Fundamentals for Flutter Developers
+3. http Package — The Built-in Choice
+4. dio Package — The Production Standard
+5. REST API Integration Patterns
+6. JSON Parsing: Manual vs Code Generation
+7. freezed + json_serializable — Immutable Data Classes
+8. Error Handling & Retry Logic
+9. dio Interceptors — Logging, Auth, Caching
+10. Pagination Patterns
+11. Architecture: Repository + Data Source
+12. Hands-On Project: GitHub User Search Pro
+13. Common Mistakes & How to Avoid Them
+14. Day 16 Checklist
+
+---
+
+# 1. Why Networking Architecture Matters
+
+## The Reality of Mobile Networks
+```
+User Tap -> API Request -> [2G/3G/4G/5G/WiFi] -> Server -> Response -> Parse -> UI
+                    |
+                    +-> No Internet -> Retry / Cache / Error UI
+                    +-> Slow Network -> Timeout / Loading Skeleton
+                    +-> Server Error -> 500 / 503 -> Fallback
+                    +-> Auth Expired -> 401 -> Refresh Token -> Retry
+```
+
+## What Can Go Wrong
+| Problem | Cause | Solution |
+|---|---|---|
+| App crashes on API call | Null safety violations in JSON | Code generation + null checks |
+| Slow UI on slow network | Synchronous parsing on main thread | Async/await + isolate for heavy parsing |
+| Token expires silently | No interceptor for 401 | dio interceptor + refresh token flow |
+| Duplicate requests | User double-taps button | Debounce + loading states |
+| Memory leaks | Streams not cancelled | CancelToken in dio |
+| No offline support | No cache layer | dio cache interceptor + local DB |
+
+## http vs dio: The 2026 Verdict
+| Feature | http | dio |
+|---|---|---|
+| **Ease of Use** | Simple, beginner-friendly | More setup, more power |
+| **Interceptors** | Manual | Built-in (request/response/error) |
+| **Global Config** | Per-request | Base options, global headers |
+| **File Upload/Download** | Manual multipart | Built-in FormData, progress |
+| **Cancel Tokens** | No | Yes (prevents memory leaks) |
+| **Retry Logic** | Manual | Built-in + interceptors |
+| **Cache** | Manual | Built-in cache interceptor |
+| **Transformer** | No | Yes (custom request/response handling) |
+| **When to Use** | Simple GET/POST demos | Production apps, complex APIs |
+| **2026 Recommendation** | Learning only | **Production standard** |
+
+---
+
+# 2. HTTP Fundamentals for Flutter Developers
+
+## HTTP Methods
+| Method | Use Case | Idempotent? |
+|---|---|---|
+| GET | Retrieve data | Yes |
+| POST | Create resource | No |
+| PUT | Full update | Yes |
+| PATCH | Partial update | No |
+| DELETE | Remove resource | Yes |
+
+## Status Codes You Must Know
+| Code | Meaning | Flutter Action |
+|---|---|---|
+| 200 | OK | Parse and display |
+| 201 | Created | Show success, navigate |
+| 400 | Bad Request | Show validation errors |
+| 401 | Unauthorized | Refresh token or login |
+| 403 | Forbidden | Show permission error |
+| 404 | Not Found | Show "not found" UI |
+| 429 | Too Many Requests | Retry with backoff |
+| 500 | Server Error | Show "server error" retry |
+| 503 | Service Unavailable | Retry later |
+
+## Headers Every Request Needs
+```dart
+const headers = {
+  'Content-Type': 'application/json',     // Tell server we're sending JSON
+  'Accept': 'application/json',           // Tell server we want JSON back
+  'Authorization': 'Bearer $token',       // Auth token
+  'X-Request-ID': 'uuid',               // Traceability
+};
+```
+
+---
+
+# 3. http Package — The Built-in Choice
+
+## Package Setup
+```yaml
+dependencies:
+  http: ^1.2.1
+```
+
+## Basic CRUD Operations
+```dart
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
+class HttpUserService {
+  static const String _baseUrl = 'https://jsonplaceholder.typicode.com';
+
+  // GET
+  static Future<List<dynamic>> fetchUsers() async {
+    final response = await http.get(Uri.parse('$_baseUrl/users'));
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Failed to load users: ${response.statusCode}');
+  }
+
+  // GET by ID
+  static Future<Map<String, dynamic>> fetchUser(int id) async {
+    final response = await http.get(Uri.parse('$_baseUrl/users/$id'));
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Failed to load user');
+  }
+
+  // POST
+  static Future<Map<String, dynamic>> createUser(Map<String, dynamic> user) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/users'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(user),
+    );
+    if (response.statusCode == 201) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Failed to create user');
+  }
+
+  // PUT (Full Update)
+  static Future<Map<String, dynamic>> updateUser(int id, Map<String, dynamic> user) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/users/$id'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(user),
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Failed to update user');
+  }
+
+  // DELETE
+  static Future<void> deleteUser(int id) async {
+    final response = await http.delete(Uri.parse('$_baseUrl/users/$id'));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete user');
+    }
+  }
+}
+```
+
+## Limitations of http
+- No built-in interceptors
+- No global configuration
+- No cancel tokens
+- No retry mechanism
+- Manual error handling for every call
+
+---
+
+# 4. dio Package — The Production Standard
+
+## Package Setup
+```yaml
+dependencies:
+  dio: ^5.4.3+1
+  pretty_dio_logger: ^1.3.1  # For debugging
+
+dev_dependencies:
+  retrofit_generator: ^8.1.0  # Optional: Type-safe API clients
+  build_runner: ^2.4.9
+```
+
+## dio Configuration (Global Setup)
+```dart
+import 'package:dio/dio.dart';
+import 'package:pretty_dio_logger/pretty_dio_logger.dart';
+
+class DioClient {
+  static Dio? _dio;
+
+  static Dio get instance {
+    _dio ??= _createDio();
+    return _dio!;
+  }
+
+  static Dio _createDio() {
+    final dio = Dio(
+      BaseOptions(
+        baseUrl: 'https://api.github.com',
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 10),
+        sendTimeout: const Duration(seconds: 10),
+        headers: {
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json',
+        },
+        validateStatus: (status) => status != null && status < 500,
+      ),
+    );
+
+    // Add interceptors
+    dio.interceptors.addAll([
+      PrettyDioLogger(
+        requestHeader: true,
+        requestBody: true,
+        responseBody: true,
+        responseHeader: false,
+        compact: true,
+      ),
+      _AuthInterceptor(),
+      _ErrorInterceptor(),
+    ]);
+
+    return dio;
+  }
+
+  static void setAuthToken(String token) {
+    instance.options.headers['Authorization'] = 'Bearer $token';
+  }
+
+  static void clearAuthToken() {
+    instance.options.headers.remove('Authorization');
+  }
+}
+```
+
+## CRUD with dio
+```dart
+class GitHubApiService {
+  final Dio _dio = DioClient.instance;
+
+  // GET with query parameters
+  Future<List<GitHubUser>> searchUsers(String query, {int page = 1, int perPage = 30}) async {
+    final response = await _dio.get(
+      '/search/users',
+      queryParameters: {
+        'q': query,
+        'page': page,
+        'per_page': perPage,
+      },
+    );
+
+    final items = response.data['items'] as List<dynamic>;
+    return items.map((json) => GitHubUser.fromJson(json)).toList();
+  }
+
+  // GET single user
+  Future<GitHubUserDetail> getUserDetail(String username) async {
+    final response = await _dio.get('/users/$username');
+    return GitHubUserDetail.fromJson(response.data);
+  }
+
+  // POST with FormData (file upload)
+  Future<void> uploadFile(String filePath) async {
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(filePath, filename: 'avatar.jpg'),
+      'description': 'My avatar',
+    });
+
+    await _dio.post('/upload', data: formData);
+  }
+
+  // Download with progress
+  Future<void> downloadFile(String url, String savePath) async {
+    await _dio.download(
+      url,
+      savePath,
+      onReceiveProgress: (received, total) {
+        if (total != -1) {
+          final progress = (received / total * 100).toStringAsFixed(0);
+          debugPrint('Download progress: $progress%');
+        }
+      },
+    );
+  }
+
+  // Cancelable request
+  Future<List<GitHubUser>> searchUsersCancelable(
+    String query, {
+    required CancelToken cancelToken,
+  }) async {
+    final response = await _dio.get(
+      '/search/users',
+      queryParameters: {'q': query, 'per_page': 30},
+      cancelToken: cancelToken,
+    );
+    final items = response.data['items'] as List<dynamic>;
+    return items.map((json) => GitHubUser.fromJson(json)).toList();
+  }
+}
+```
+
+---
+
+# 5. REST API Integration Patterns
+
+## Pattern 1: Direct Service Call (Simple)
+```dart
+// UI directly calls API service
+class UserListScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder(
+      future: GitHubApiService().searchUsers('flutter'),
+      builder: (context, snapshot) {
+        if (snapshot.hasData) return UserList(users: snapshot.data!);
+        if (snapshot.hasError) return ErrorWidget(error: snapshot.error);
+        return const LoadingWidget();
+      },
+    );
+  }
+}
+```
+
+## Pattern 2: Repository Pattern (Production)
+```dart
+// Domain layer - abstract
+abstract class UserRepository {
+  Future<List<GitHubUser>> searchUsers(String query, {int page = 1});
+  Future<GitHubUserDetail> getUserDetail(String username);
+}
+
+// Data layer - implementation
+class UserRepositoryImpl implements UserRepository {
+  final GitHubApiService _apiService;
+  final LocalCacheService _cacheService;
+
+  UserRepositoryImpl(this._apiService, this._cacheService);
+
+  @override
+  Future<List<GitHubUser>> searchUsers(String query, {int page = 1}) async {
+    // Try cache first
+    final cached = await _cacheService.getCachedUsers(query, page);
+    if (cached != null) return cached;
+
+    // Fetch from API
+    final users = await _apiService.searchUsers(query, page: page);
+
+    // Save to cache
+    await _cacheService.cacheUsers(query, page, users);
+
+    return users;
+  }
+
+  @override
+  Future<GitHubUserDetail> getUserDetail(String username) async {
+    return await _apiService.getUserDetail(username);
+  }
+}
+```
+
+## Pattern 3: Data Source Pattern (Clean Architecture)
+```dart
+abstract class UserRemoteDataSource {
+  Future<List<GitHubUser>> searchUsers(String query, int page);
+}
+
+abstract class UserLocalDataSource {
+  Future<List<GitHubUser>> getCachedUsers(String query, int page);
+  Future<void> cacheUsers(String query, int page, List<GitHubUser> users);
+}
+
+class UserRemoteDataSourceImpl implements UserRemoteDataSource {
+  final Dio _dio;
+  UserRemoteDataSourceImpl(this._dio);
+
+  @override
+  Future<List<GitHubUser>> searchUsers(String query, int page) async {
+    final response = await _dio.get('/search/users', queryParameters: {
+      'q': query,
+      'page': page,
+      'per_page': 30,
+    });
+    return (response.data['items'] as List)
+        .map((e) => GitHubUser.fromJson(e))
+        .toList();
+  }
+}
+```
+
+---
+
+# 6. JSON Parsing: Manual vs Code Generation
+
+## Manual Parsing (Error-Prone)
+```dart
+class GitHubUser {
+  final String login;
+  final String avatarUrl;
+  final String htmlUrl;
+
+  GitHubUser({required this.login, required this.avatarUrl, required this.htmlUrl});
+
+  // Manual - easy to make mistakes
+  factory GitHubUser.fromJson(Map<String, dynamic> json) {
+    return GitHubUser(
+      login: json['login'] ?? '',
+      avatarUrl: json['avatar_url'] ?? '',  // snake_case to camelCase manually
+      htmlUrl: json['html_url'] ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'login': login,
+      'avatar_url': avatarUrl,
+      'html_url': htmlUrl,
+    };
+  }
+}
+```
+
+## Code Generation with json_serializable (Recommended)
+```dart
+import 'package:json_annotation/json_annotation.dart';
+
+part 'github_user.g.dart'; // Generated file
+
+@JsonSerializable()
+class GitHubUser {
+  final String login;
+
+  @JsonKey(name: 'avatar_url')
+  final String avatarUrl;
+
+  @JsonKey(name: 'html_url')
+  final String htmlUrl;
+
+  @JsonKey(name: 'type')
+  final String userType;
+
+  GitHubUser({
+    required this.login,
+    required this.avatarUrl,
+    required this.htmlUrl,
+    required this.userType,
+  });
+
+  factory GitHubUser.fromJson(Map<String, dynamic> json) =>
+      _$GitHubUserFromJson(json);
+
+  Map<String, dynamic> toJson() => _$GitHubUserToJson(this);
+}
+```
+
+## Run Code Generation
+```bash
+dart run build_runner build        # One-time
+dart run build_runner watch        # Auto-regenerate on file changes
+```
+
+---
+
+# 7. freezed + json_serializable — Immutable Data Classes
+
+## Why freezed?
+- **Immutable** objects (no accidental mutations)
+- **Value equality** (== and hashCode auto-generated)
+- **CopyWith** method for easy object updates
+- **Union types** for sealed classes (loading, error, success)
+- **toString** auto-generated for debugging
+
+## Package Setup
+```yaml
+dependencies:
+  freezed_annotation: ^2.4.1
+  json_annotation: ^4.9.0
+
+dev_dependencies:
+  freezed: ^2.5.2
+  json_serializable: ^6.8.0
+  build_runner: ^2.4.9
+```
+
+## Model with freezed
+```dart
+import 'package:freezed_annotation/freezed_annotation.dart';
+
+part 'github_user.freezed.dart';
+part 'github_user.g.dart';
+
+@freezed
+class GitHubUser with _$GitHubUser {
+  const factory GitHubUser({
+    required String login,
+    @JsonKey(name: 'avatar_url') required String avatarUrl,
+    @JsonKey(name: 'html_url') required String htmlUrl,
+    @JsonKey(name: 'type') required String userType,
+    @Default(0) int id,
+  }) = _GitHubUser;
+
+  factory GitHubUser.fromJson(Map<String, dynamic> json) =>
+      _$GitHubUserFromJson(json);
+}
+
+@freezed
+class GitHubUserDetail with _$GitHubUserDetail {
+  const factory GitHubUserDetail({
+    required String login,
+    @JsonKey(name: 'avatar_url') required String avatarUrl,
+    @JsonKey(name: 'html_url') required String htmlUrl,
+    @JsonKey(name: 'name') String? displayName,
+    @JsonKey(name: 'bio') String? biography,
+    @JsonKey(name: 'public_repos') @Default(0) int publicRepos,
+    @JsonKey(name: 'public_gists') @Default(0) int publicGists,
+    @JsonKey(name: 'followers') @Default(0) int followers,
+    @JsonKey(name: 'following') @Default(0) int following,
+    @JsonKey(name: 'created_at') required DateTime createdAt,
+    @JsonKey(name: 'location') String? location,
+    @JsonKey(name: 'company') String? company,
+    @JsonKey(name: 'blog') String? blog,
+  }) = _GitHubUserDetail;
+
+  factory GitHubUserDetail.fromJson(Map<String, dynamic> json) =>
+      _$GitHubUserDetailFromJson(json);
+}
+
+// API Response wrapper
+@freezed
+class ApiResponse<T> with _$ApiResponse<T> {
+  const factory ApiResponse.loading() = ApiLoading;
+  const factory ApiResponse.data(T data) = ApiData<T>;
+  const factory ApiResponse.error(String message, {int? statusCode}) = ApiError;
+}
+```
+
+## Using freezed Models
+```dart
+// Create
+final user = GitHubUser(login: 'octocat', avatarUrl: '...', htmlUrl: '...', userType: 'User');
+
+// Copy with changes
+final updated = user.copyWith(login: 'newName');
+
+// Equality check
+final userA = GitHubUser(login: 'a', avatarUrl: '...', htmlUrl: '...', userType: 'User');
+final userB = GitHubUser(login: 'a', avatarUrl: '...', htmlUrl: '...', userType: 'User');
+print(userA == userB); // true (value equality)
+
+// JSON
+final json = user.toJson();
+final fromJson = GitHubUser.fromJson(json);
+```
+
+---
+
+# 8. Error Handling & Retry Logic
+
+## Custom Exceptions
+```dart
+abstract class AppException implements Exception {
+  final String message;
+  final int? statusCode;
+  AppException(this.message, {this.statusCode});
+
+  @override
+  String toString() => 'AppException: $message (Status: $statusCode)';
+}
+
+class NetworkException extends AppException {
+  NetworkException() : super('No internet connection');
+}
+
+class ServerException extends AppException {
+  ServerException(String message, {int? statusCode})
+      : super(message, statusCode: statusCode);
+}
+
+class UnauthorizedException extends AppException {
+  UnauthorizedException() : super('Session expired. Please login again.', statusCode: 401);
+}
+
+class NotFoundException extends AppException {
+  NotFoundException() : super('Resource not found', statusCode: 404);
+}
+
+class RateLimitException extends AppException {
+  RateLimitException() : super('Too many requests. Please try again later.', statusCode: 429);
+}
+```
+
+## dio Error Interceptor
+```dart
+class _ErrorInterceptor extends Interceptor {
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) async {
+    switch (err.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        throw NetworkException();
+
+      case DioExceptionType.badResponse:
+        final statusCode = err.response?.statusCode;
+        final message = err.response?.data?['message'] ?? 'Unknown error';
+
+        switch (statusCode) {
+          case 400:
+            throw ServerException(message, statusCode: statusCode);
+          case 401:
+            throw UnauthorizedException();
+          case 404:
+            throw NotFoundException();
+          case 429:
+            throw RateLimitException();
+          case 500:
+          case 503:
+            throw ServerException('Server error. Please try again later.', statusCode: statusCode);
+          default:
+            throw ServerException(message, statusCode: statusCode);
+        }
+
+      case DioExceptionType.connectionError:
+        throw NetworkException();
+
+      default:
+        throw ServerException('Something went wrong');
+    }
+  }
+}
+```
+
+## Retry Logic with Exponential Backoff
+```dart
+class RetryInterceptor extends Interceptor {
+  final int maxRetries;
+  final Duration baseDelay;
+
+  RetryInterceptor({this.maxRetries = 3, this.baseDelay = const Duration(seconds: 1)});
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) async {
+    if (_shouldRetry(err) && err.requestOptions.extra['retry_count'] != maxRetries) {
+      final retryCount = (err.requestOptions.extra['retry_count'] ?? 0) + 1;
+      final delay = baseDelay * retryCount; // Exponential backoff
+
+      debugPrint('Retrying request (attempt $retryCount) after ${delay.inSeconds}s...');
+      await Future.delayed(delay);
+
+      try {
+        final response = await DioClient.instance.fetch(
+          err.requestOptions..extra['retry_count'] = retryCount,
+        );
+        handler.resolve(response);
+      } catch (e) {
+        handler.next(err);
+      }
+    } else {
+      handler.next(err);
+    }
+  }
+
+  bool _shouldRetry(DioException err) {
+    return err.type == DioExceptionType.connectionTimeout ||
+           err.type == DioExceptionType.receiveTimeout ||
+           (err.response?.statusCode ?? 0) >= 500;
+  }
+}
+```
+
+---
+
+# 9. dio Interceptors — Logging, Auth, Caching
+
+## Auth Interceptor (Token Refresh)
+```dart
+class _AuthInterceptor extends Interceptor {
+  bool _isRefreshing = false;
+  final List<Function> _pendingRequests = [];
+
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
+    final token = await SecureStorageService.getAuthToken();
+    if (token != null) {
+      options.headers['Authorization'] = 'Bearer $token';
+    }
+    handler.next(options);
+  }
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) async {
+    if (err.response?.statusCode == 401) {
+      final originalRequest = err.requestOptions;
+
+      if (_isRefreshing) {
+        // Queue request while token is being refreshed
+        _pendingRequests.add(() async {
+          final token = await SecureStorageService.getAuthToken();
+          originalRequest.headers['Authorization'] = 'Bearer $token';
+          final response = await DioClient.instance.fetch(originalRequest);
+          handler.resolve(response);
+        });
+        return;
+      }
+
+      _isRefreshing = true;
+
+      try {
+        // Refresh token
+        final newToken = await _refreshToken();
+        await SecureStorageService.setAuthToken(newToken);
+
+        // Retry original request
+        originalRequest.headers['Authorization'] = 'Bearer $newToken';
+        final response = await DioClient.instance.fetch(originalRequest);
+
+        // Execute pending requests
+        for (final request in _pendingRequests) {
+          await request();
+        }
+        _pendingRequests.clear();
+
+        handler.resolve(response);
+      } catch (e) {
+        // Refresh failed - logout user
+        await SecureStorageService.clearAll();
+        _pendingRequests.clear();
+        handler.next(err);
+      } finally {
+        _isRefreshing = false;
+      }
+    } else {
+      handler.next(err);
+    }
+  }
+
+  Future<String> _refreshToken() async {
+    final refreshToken = await SecureStorageService.getRefreshToken();
+    final response = await Dio().post(
+      'https://api.example.com/auth/refresh',
+      data: {'refresh_token': refreshToken},
+    );
+    return response.data['access_token'];
+  }
+}
+```
+
+## Cache Interceptor
+```dart
+class CacheInterceptor extends Interceptor {
+  final Map<String, Response> _cache = {};
+  final Duration cacheDuration;
+
+  CacheInterceptor({this.cacheDuration = const Duration(minutes: 5)});
+
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    if (options.method == 'GET' && options.extra['cache'] == true) {
+      final cacheKey = '${options.path}?${options.queryParameters}';
+      final cached = _cache[cacheKey];
+
+      if (cached != null) {
+        final age = DateTime.now().difference(cached.extra['cached_at'] as DateTime);
+        if (age < cacheDuration) {
+          debugPrint('Cache hit: $cacheKey');
+          return handler.resolve(cached);
+        }
+      }
+    }
+    handler.next(options);
+  }
+
+  @override
+  void onResponse(Response response, ResponseInterceptorHandler handler) {
+    if (response.requestOptions.method == 'GET' &&
+        response.requestOptions.extra['cache'] == true) {
+      final cacheKey = '${response.requestOptions.path}?${response.requestOptions.queryParameters}';
+      response.extra['cached_at'] = DateTime.now();
+      _cache[cacheKey] = response;
+      debugPrint('Cache stored: $cacheKey');
+    }
+    handler.next(response);
+  }
+}
+```
+
+---
+
+# 10. Pagination Patterns
+
+## Pattern 1: Offset-Based Pagination (Page + PerPage)
+```dart
+class PaginatedResponse<T> {
+  final List<T> items;
+  final int currentPage;
+  final int totalPages;
+  final int totalItems;
+  final bool hasMore;
+
+  PaginatedResponse({
+    required this.items,
+    required this.currentPage,
+    required this.totalPages,
+    required this.totalItems,
+    required this.hasMore,
+  });
+}
+
+// Usage
+Future<PaginatedResponse<GitHubUser>> searchUsersPaginated(
+  String query, {
+  required int page,
+  int perPage = 30,
+}) async {
+  final response = await dio.get('/search/users', queryParameters: {
+    'q': query,
+    'page': page,
+    'per_page': perPage,
+  });
+
+  final totalCount = response.data['total_count'] as int;
+  final items = (response.data['items'] as List)
+      .map((e) => GitHubUser.fromJson(e))
+      .toList();
+
+  return PaginatedResponse(
+    items: items,
+    currentPage: page,
+    totalPages: (totalCount / perPage).ceil(),
+    totalItems: totalCount,
+    hasMore: items.length == perPage,
+  );
+}
+```
+
+## Pattern 2: Cursor-Based Pagination (Infinite Scroll)
+```dart
+class CursorPaginatedResponse<T> {
+  final List<T> items;
+  final String? nextCursor;
+  final bool hasMore;
+
+  CursorPaginatedResponse({
+    required this.items,
+    this.nextCursor,
+    required this.hasMore,
+  });
+}
+
+// Usage with ListView.builder
+class PaginatedListScreen<T> extends StatefulWidget {
+  final Future<CursorPaginatedResponse<T>> Function(String? cursor) fetchPage;
+  final Widget Function(T item) itemBuilder;
+
+  const PaginatedListScreen({
+    super.key,
+    required this.fetchPage,
+    required this.itemBuilder,
+  });
+
+  @override
+  State<PaginatedListScreen> createState() => _PaginatedListScreenState<T>();
+}
+
+class _PaginatedListScreenState<T> extends State<PaginatedListScreen<T>> {
+  final List<T> _items = [];
+  String? _nextCursor;
+  bool _isLoading = false;
+  bool _hasMore = true;
+  final _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMore();
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      _loadMore();
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_isLoading || !_hasMore) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final response = await widget.fetchPage(_nextCursor);
+      setState(() {
+        _items.addAll(response.items);
+        _nextCursor = response.nextCursor;
+        _hasMore = response.hasMore;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      controller: _scrollController,
+      itemCount: _items.length + (_hasMore ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index >= _items.length) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return widget.itemBuilder(_items[index]);
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+}
+```
+
+---
+
+# 11. Architecture: Repository + Data Source
+
+## Complete Architecture Diagram
+```
+Presentation Layer (UI)
+    |
+    v
+State Management (Riverpod/BLoC)
+    |
+    v
+Use Cases (Optional, Clean Architecture)
+    |
+    v
+Repository (Abstract + Implementation)
+    |
+    +-> Remote Data Source (dio + API)
+    +-> Local Data Source (Hive/sqflite Cache)
+```
+
+## Full Implementation
+```dart
+// Domain - Entities
+class UserEntity {
+  final String id;
+  final String username;
+  final String avatarUrl;
+
+  UserEntity({required this.id, required this.username, required this.avatarUrl});
+}
+
+// Domain - Repository Interface
+abstract class UserRepository {
+  Future<List<UserEntity>> searchUsers(String query, int page);
+  Future<UserEntity> getUserDetail(String username);
+}
+
+// Data - Models (DTOs)
+class GitHubUserModel {
+  final String login;
+  final String avatarUrl;
+  final int id;
+
+  GitHubUserModel({required this.login, required this.avatarUrl, required this.id});
+
+  factory GitHubUserModel.fromJson(Map<String, dynamic> json) => GitHubUserModel(
+    login: json['login'],
+    avatarUrl: json['avatar_url'],
+    id: json['id'],
+  );
+
+  UserEntity toEntity() => UserEntity(
+    id: id.toString(),
+    username: login,
+    avatarUrl: avatarUrl,
+  );
+}
+
+// Data - Remote Data Source
+abstract class UserRemoteDataSource {
+  Future<List<GitHubUserModel>> searchUsers(String query, int page);
+}
+
+class UserRemoteDataSourceImpl implements UserRemoteDataSource {
+  final Dio _dio;
+  UserRemoteDataSourceImpl(this._dio);
+
+  @override
+  Future<List<GitHubUserModel>> searchUsers(String query, int page) async {
+    final response = await _dio.get('/search/users', queryParameters: {
+      'q': query,
+      'page': page,
+      'per_page': 30,
+    });
+    return (response.data['items'] as List)
+        .map((e) => GitHubUserModel.fromJson(e))
+        .toList();
+  }
+}
+
+// Data - Repository Implementation
+class UserRepositoryImpl implements UserRepository {
+  final UserRemoteDataSource _remoteDataSource;
+
+  UserRepositoryImpl(this._remoteDataSource);
+
+  @override
+  Future<List<UserEntity>> searchUsers(String query, int page) async {
+    final models = await _remoteDataSource.searchUsers(query, page);
+    return models.map((m) => m.toEntity()).toList();
+  }
+
+  @override
+  Future<UserEntity> getUserDetail(String username) async {
+    // Implementation...
+    throw UnimplementedError();
+  }
+}
+```
+
+---
+
+# 12. Hands-On Project: GitHub User Search Pro
+
+## Project Overview
+Build a complete **GitHub User Search** app with:
+- **dio** for API calls with global configuration
+- **freezed + json_serializable** for type-safe models
+- **Search with debounce** (wait for user to stop typing)
+- **Pagination** with infinite scroll
+- **Error handling** with retry and user-friendly messages
+- **Pull-to-refresh** and loading skeletons
+- **User detail screen** with rich profile data
+- **Cancel tokens** to prevent memory leaks
+
+## Complete Code
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
+import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:intl/intl.dart';
+
+part 'main.freezed.dart';
+part 'main.g.dart';
+
+void main() {
+  runApp(
+    const ProviderScope(
+      child: GitHubSearchApp(),
+    ),
+  );
+}
+
+// ============ DIO CONFIGURATION ============
+final dioProvider = Provider<Dio>((ref) {
+  final dio = Dio(
+    BaseOptions(
+      baseUrl: 'https://api.github.com',
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 10),
+      headers: {
+        'Accept': 'application/vnd.github.v3+json',
+      },
+      validateStatus: (status) => status != null && status < 500,
+    ),
+  );
+
+  dio.interceptors.addAll([
+    LogInterceptor(
+      requestHeader: true,
+      requestBody: true,
+      responseBody: true,
+      responseHeader: false,
+    ),
+    _ErrorInterceptor(),
+  ]);
+
+  return dio;
+});
+
+class _ErrorInterceptor extends Interceptor {
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    final statusCode = err.response?.statusCode;
+    final message = err.response?.data?['message'] ?? 'An error occurred';
+
+    switch (statusCode) {
+      case 403:
+        if (message.contains('rate limit')) {
+          throw Exception('GitHub API rate limit exceeded. Please try again later.');
+        }
+        break;
+      case 404:
+        throw Exception('User not found');
+      case 422:
+        throw Exception('Invalid search query');
+      default:
+        throw Exception(message);
+    }
+    handler.next(err);
+  }
+}
+
+// ============ FREEZED MODELS ============
+@freezed
+class GitHubUser with _$GitHubUser {
+  const factory GitHubUser({
+    required String login,
+    @JsonKey(name: 'avatar_url') required String avatarUrl,
+    @JsonKey(name: 'html_url') required String htmlUrl,
+    @JsonKey(name: 'type') required String userType,
+    @Default(0) int id,
+  }) = _GitHubUser;
+
+  factory GitHubUser.fromJson(Map<String, dynamic> json) =>
+      _$GitHubUserFromJson(json);
+}
+
+@freezed
+class GitHubUserDetail with _$GitHubUserDetail {
+  const factory GitHubUserDetail({
+    required String login,
+    @JsonKey(name: 'avatar_url') required String avatarUrl,
+    @JsonKey(name: 'html_url') required String htmlUrl,
+    @JsonKey(name: 'name') String? displayName,
+    @JsonKey(name: 'bio') String? biography,
+    @JsonKey(name: 'public_repos') @Default(0) int publicRepos,
+    @JsonKey(name: 'public_gists') @Default(0) int publicGists,
+    @JsonKey(name: 'followers') @Default(0) int followers,
+    @JsonKey(name: 'following') @Default(0) int following,
+    @JsonKey(name: 'created_at') required DateTime createdAt,
+    @JsonKey(name: 'location') String? location,
+    @JsonKey(name: 'company') String? company,
+    @JsonKey(name: 'blog') String? blog,
+    @JsonKey(name: 'twitter_username') String? twitterUsername,
+  }) = _GitHubUserDetail;
+
+  factory GitHubUserDetail.fromJson(Map<String, dynamic> json) =>
+      _$GitHubUserDetailFromJson(json);
+}
+
+@freezed
+class SearchState with _$SearchState {
+  const factory SearchState.initial() = SearchInitial;
+  const factory SearchState.loading() = SearchLoading;
+  const factory SearchState.data({
+    required List<GitHubUser> users,
+    required int page,
+    required bool hasMore,
+    required String query,
+  }) = SearchData;
+  const factory SearchState.error(String message) = SearchError;
+}
+
+// ============ API SERVICE ============
+class GitHubApiService {
+  final Dio _dio;
+  GitHubApiService(this._dio);
+
+  Future<List<GitHubUser>> searchUsers(
+    String query, {
+    required int page,
+    CancelToken? cancelToken,
+  }) async {
+    if (query.trim().isEmpty) return [];
+
+    final response = await _dio.get(
+      '/search/users',
+      queryParameters: {
+        'q': query.trim(),
+        'page': page,
+        'per_page': 30,
+      },
+      cancelToken: cancelToken,
+    );
+
+    final items = response.data['items'] as List<dynamic>? ?? [];
+    return items.map((json) => GitHubUser.fromJson(json)).toList();
+  }
+
+  Future<GitHubUserDetail> getUserDetail(String username) async {
+    final response = await _dio.get('/users/$username');
+    return GitHubUserDetail.fromJson(response.data);
+  }
+}
+
+// ============ RIVERPOD PROVIDERS ============
+final githubApiServiceProvider = Provider<GitHubApiService>((ref) {
+  return GitHubApiService(ref.watch(dioProvider));
+});
+
+final searchControllerProvider = StateNotifierProvider.autoDispose<
+    SearchController, SearchState>((ref) {
+  return SearchController(ref.watch(githubApiServiceProvider));
+});
+
+class SearchController extends StateNotifier<SearchState> {
+  final GitHubApiService _apiService;
+  CancelToken? _cancelToken;
+
+  SearchController(this._apiService) : super(const SearchState.initial());
+
+  Future<void> search(String query) async {
+    if (query.trim().isEmpty) {
+      state = const SearchState.initial();
+      return;
+    }
+
+    // Cancel previous request
+    _cancelToken?.cancel('New search initiated');
+    _cancelToken = CancelToken();
+
+    state = const SearchState.loading();
+
+    try {
+      final users = await _apiService.searchUsers(
+        query,
+        page: 1,
+        cancelToken: _cancelToken,
+      );
+
+      state = SearchState.data(
+        users: users,
+        page: 1,
+        hasMore: users.length == 30,
+        query: query,
+      );
+    } catch (e) {
+      if (e is! DioException || e.type != DioExceptionType.cancel) {
+        state = SearchState.error(e.toString().replaceAll('Exception: ', ''));
+      }
+    }
+  }
+
+  Future<void> loadMore() async {
+    final current = state;
+    if (current is! SearchData || !current.hasMore) return;
+
+    _cancelToken = CancelToken();
+
+    try {
+      final newUsers = await _apiService.searchUsers(
+        current.query,
+        page: current.page + 1,
+        cancelToken: _cancelToken,
+      );
+
+      state = current.copyWith(
+        users: [...current.users, ...newUsers],
+        page: current.page + 1,
+        hasMore: newUsers.length == 30,
+      );
+    } catch (e) {
+      // Keep existing data, just stop loading more
+      state = current.copyWith(hasMore: false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _cancelToken?.cancel('Controller disposed');
+    super.dispose();
+  }
+}
+
+// ============ APP ============
+class GitHubSearchApp extends StatelessWidget {
+  const GitHubSearchApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'GitHub Search Pro',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+      ),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.deepPurple,
+          brightness: Brightness.dark,
+        ),
+      ),
+      themeMode: ThemeMode.system,
+      home: const SearchScreen(),
+    );
+  }
+}
+
+// ============ SEARCH SCREEN ============
+class SearchScreen extends ConsumerStatefulWidget {
+  const SearchScreen({super.key});
+
+  @override
+  ConsumerState<SearchScreen> createState() => _SearchScreenState();
+}
+
+class _SearchScreenState extends ConsumerState<SearchScreen> {
+  final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      ref.read(searchControllerProvider.notifier).loadMore();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final searchState = ref.watch(searchControllerProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('GitHub Search'),
+        centerTitle: true,
+        elevation: 0,
+      ),
+      body: Column(
+        children: [
+          // Search Bar
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search GitHub users...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                          ref.read(searchControllerProvider.notifier)
+                              .search('');
+                        },
+                      )
+                    : null,
+                filled: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              onChanged: (value) {
+                // Debounce search
+                Future.delayed(const Duration(milliseconds: 500), () {
+                  if (_searchController.text == value && mounted) {
+                    ref.read(searchControllerProvider.notifier).search(value);
+                  }
+                });
+              },
+            ),
+          ),
+
+          // Results
+          Expanded(
+            child: searchState.when(
+              initial: () => _InitialState(),
+              loading: () => _LoadingState(),
+              data: (users, page, hasMore, query) => _UserList(
+                users: users,
+                hasMore: hasMore,
+                scrollController: _scrollController,
+                onRefresh: () => ref
+                    .read(searchControllerProvider.notifier)
+                    .search(query),
+              ),
+              error: (message) => _ErrorState(
+                message: message,
+                onRetry: () => ref
+                    .read(searchControllerProvider.notifier)
+                    .search(_searchController.text),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+}
+
+// ============ UI STATES ============
+class _InitialState extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.search,
+            size: 80,
+            color: Colors.grey.shade400,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Search for GitHub users',
+            style: TextStyle(
+              fontSize: 18,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Try "flutter", "dart", or "google"',
+            style: TextStyle(color: Colors.grey.shade500),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LoadingState extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: 8,
+      itemBuilder: (context, index) => _UserCardSkeleton(),
+    );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _ErrorState({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UserList extends StatelessWidget {
+  final List<GitHubUser> users;
+  final bool hasMore;
+  final ScrollController scrollController;
+  final VoidCallback onRefresh;
+
+  const _UserList({
+    required this.users,
+    required this.hasMore,
+    required this.scrollController,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return RefreshIndicator(
+      onRefresh: () async => onRefresh(),
+      child: ListView.builder(
+        controller: scrollController,
+        padding: const EdgeInsets.all(16),
+        itemCount: users.length + (hasMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index >= users.length) {
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          return _UserCard(user: users[index]);
+        },
+      ),
+    );
+  }
+}
+
+// ============ USER CARD ============
+class _UserCard extends StatelessWidget {
+  final GitHubUser user;
+  const _UserCard({required this.user});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(12),
+        leading: Hero(
+          tag: 'avatar_${user.login}',
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: CachedNetworkImage(
+              imageUrl: user.avatarUrl,
+              width: 56,
+              height: 56,
+              fit: BoxFit.cover,
+              placeholder: (context, url) => Container(
+                width: 56,
+                height: 56,
+                color: Colors.grey.shade300,
+              ),
+              errorWidget: (context, url, error) => Container(
+                width: 56,
+                height: 56,
+                color: Colors.grey.shade300,
+                child: const Icon(Icons.person),
+              ),
+            ),
+          ),
+        ),
+        title: Text(
+          user.login,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Text(
+          user.userType,
+          style: TextStyle(color: Colors.grey.shade600),
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => UserDetailScreen(username: user.login),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ============ SKELETON LOADING ============
+class _UserCardSkeleton extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey.shade300,
+      highlightColor: Colors.grey.shade100,
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        child: ListTile(
+          contentPadding: const EdgeInsets.all(12),
+          leading: Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          title: Container(
+            height: 16,
+            width: 120,
+            color: Colors.white,
+          ),
+          subtitle: Container(
+            height: 12,
+            width: 80,
+            margin: const EdgeInsets.only(top: 8),
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============ USER DETAIL SCREEN ============
+class UserDetailScreen extends ConsumerWidget {
+  final String username;
+  const UserDetailScreen({super.key, required this.username});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final detailAsync = ref.watch(userDetailProvider(username));
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(username),
+        centerTitle: true,
+      ),
+      body: detailAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, _) => _ErrorState(
+          message: err.toString(),
+          onRetry: () => ref.invalidate(userDetailProvider(username)),
+        ),
+        data: (user) => _UserDetailContent(user: user),
+      ),
+    );
+  }
+}
+
+final userDetailProvider = FutureProvider.family<GitHubUserDetail, String>(
+  (ref, username) async {
+    final service = ref.watch(githubApiServiceProvider);
+    return await service.getUserDetail(username);
+  },
+);
+
+class _UserDetailContent extends StatelessWidget {
+  final GitHubUserDetail user;
+  const _UserDetailContent({required this.user});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          // Avatar
+          Hero(
+            tag: 'avatar_${user.login}',
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: colorScheme.primary, width: 3),
+                image: DecorationImage(
+                  image: CachedNetworkImageProvider(user.avatarUrl),
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Name
+          Text(
+            user.displayName ?? user.login,
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          if (user.biography != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              user.biography!,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+            ),
+          ],
+          const SizedBox(height: 24),
+
+          // Stats Grid
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _StatCard(label: 'Repositories', value: user.publicRepos),
+              _StatCard(label: 'Followers', value: user.followers),
+              _StatCard(label: 'Following', value: user.following),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // Info Cards
+          if (user.company != null)
+            _InfoTile(icon: Icons.business, label: 'Company', value: user.company!),
+          if (user.location != null)
+            _InfoTile(icon: Icons.location_on, label: 'Location', value: user.location!),
+          if (user.blog != null && user.blog!.isNotEmpty)
+            _InfoTile(icon: Icons.link, label: 'Website', value: user.blog!),
+          if (user.twitterUsername != null)
+            _InfoTile(
+              icon: Icons.alternate_email,
+              label: 'Twitter',
+              value: '@${user.twitterUsername}',
+            ),
+          _InfoTile(
+            icon: Icons.calendar_today,
+            label: 'Joined',
+            value: DateFormat('MMMM d, yyyy').format(user.createdAt),
+          ),
+
+          const SizedBox(height: 24),
+
+          // View on GitHub Button
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () {
+                // Launch URL (would use url_launcher package)
+              },
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('View on GitHub'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final String label;
+  final int value;
+  const _StatCard({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Container(
+        width: 100,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text(
+              NumberFormat.compact().format(value),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  const _InfoTile({required this.icon, required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon, color: Colors.grey.shade600),
+      title: Text(value),
+      subtitle: Text(label, style: TextStyle(color: Colors.grey.shade500)),
+    );
+  }
+}
+```
+
+---
+
+# 13. Common Mistakes & How to Avoid Them
+
+## Mistake 1: Not Using a Base URL
+```dart
+// WRONG - Repeated strings, hard to maintain
+final response = await dio.get('https://api.example.com/v1/users');
+final response2 = await dio.get('https://api.example.com/v1/posts');
+
+// CORRECT - BaseOptions with baseUrl
+final dio = Dio(BaseOptions(baseUrl: 'https://api.example.com/v1'));
+final response = await dio.get('/users');
+final response2 = await dio.get('/posts');
+```
+
+## Mistake 2: Parsing JSON on the Main Thread for Large Data
+```dart
+// WRONG - Blocks UI for large JSON
+final users = jsonDecode(hugeResponseBody).map((e) => User.fromJson(e)).toList();
+
+// CORRECT - Use isolate for heavy parsing
+import 'package:flutter/foundation.dart';
+
+final users = await compute((String body) {
+  return jsonDecode(body).map((e) => User.fromJson(e)).toList();
+}, hugeResponseBody);
+```
+
+## Mistake 3: Not Cancelling Requests on Widget Dispose
+```dart
+// WRONG - Memory leak, setState after dispose
+class _MyScreenState extends State<MyScreen> {
+  @override
+  void initState() {
+    super.initState();
+    dio.get('/users').then((response) {
+      setState(() { users = response.data; }); // CRASH if disposed!
+    });
+  }
+}
+
+// CORRECT - Use CancelToken and check mounted
+class _MyScreenState extends State<MyScreen> {
+  final _cancelToken = CancelToken();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    try {
+      final response = await dio.get('/users', cancelToken: _cancelToken);
+      if (mounted) setState(() { users = response.data; });
+    } catch (e) {
+      if (!mounted || e is DioException && e.type == DioExceptionType.cancel) return;
+      // Handle error
+    }
+  }
+
+  @override
+  void dispose() {
+    _cancelToken.cancel('Widget disposed');
+    super.dispose();
+  }
+}
+```
+
+## Mistake 4: Using dynamic Everywhere
+```dart
+// WRONG - No type safety, runtime errors
+final response = await dio.get('/users');
+final user = response.data['items'][0]; // Could be null, could be wrong type
+final name = user['name']; // dynamic - no autocomplete, no safety
+
+// CORRECT - Use generated models with freezed
+final response = await dio.get('/search/users');
+final users = (response.data['items'] as List)
+    .map((e) => GitHubUser.fromJson(e))
+    .toList();
+final name = users.first.login; // String - type safe, autocomplete works
+```
+
+## Mistake 5: Not Handling Timeout
+```dart
+// WRONG - Request hangs forever on bad network
+final dio = Dio(); // Default: no timeout
+
+// CORRECT - Always set timeouts
+final dio = Dio(
+  BaseOptions(
+    connectTimeout: Duration(seconds: 10),
+    receiveTimeout: Duration(seconds: 10),
+    sendTimeout: Duration(seconds: 10),
+  ),
+);
+```
+
+## Mistake 6: Storing API Keys in Code
+```dart
+// WRONG - Easy to extract from APK/IPA
+const apiKey = 'sk-live-1234567890abcdef';
+
+// CORRECT - Use environment variables or secure storage
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+final apiKey = dotenv.env['API_KEY'];
+// OR store in flutter_secure_storage
+```
+
+## Mistake 7: Not Checking Response Status
+```dart
+// WRONG - Assumes success
+final response = await dio.get('/users');
+return response.data; // Could be 404, 500, etc.
+
+// CORRECT - Validate status or use interceptors
+final response = await dio.get('/users');
+if (response.statusCode == 200) {
+  return response.data;
+}
+throw Exception('Failed: ${response.statusCode}');
+
+// OR use validateStatus in BaseOptions
+BaseOptions(validateStatus: (status) => status != null && status < 500)
+```
+
+---
+
+# 14. Day 16 Checklist
+
+Use this checklist to verify mastery:
+- [ ] Understands HTTP methods (GET, POST, PUT, PATCH, DELETE)
+- [ ] Knows common status codes and their meanings
+- [ ] Can set up and use the http package for simple requests
+- [ ] Can configure dio with BaseOptions, timeouts, and headers
+- [ ] Can perform GET, POST, PUT, DELETE with dio
+- [ ] Can upload files using FormData
+- [ ] Can download files with progress tracking
+- [ ] Understands the Repository + Data Source pattern
+- [ ] Can parse JSON manually for simple cases
+- [ ] Can set up freezed + json_serializable for type-safe models
+- [ ] Can run build_runner to generate code
+- [ ] Can handle network errors gracefully
+- [ ] Can implement retry logic with exponential backoff
+- [ ] Can use dio interceptors for logging
+- [ ] Can implement token refresh in an interceptor
+- [ ] Can implement request caching with interceptors
+- [ ] Can implement offset-based pagination
+- [ ] Can implement cursor-based pagination with infinite scroll
+- [ ] Can use CancelToken to prevent memory leaks
+- [ ] Can debounce search requests
+- [ ] Built the GitHub User Search app with dio
+- [ ] App has search with debounce and loading skeletons
+- [ ] App has pagination with infinite scroll
+- [ ] App has error handling with retry
+- [ ] App has pull-to-refresh
+- [ ] App has user detail screen with rich data
+- [ ] Pushed the project to GitHub
+
+---
+
+# Key Takeaways (Memorize These!)
+
+1. **dio is the production standard** - Use http only for learning. dio gives you interceptors, cancel tokens, global config, and retry logic out of the box.
+2. **Always set timeouts** - Default is no timeout. Always configure connect, receive, and send timeouts to prevent hanging requests.
+3. **Use freezed + json_serializable** - Never parse JSON manually in production. Code generation gives you type safety, null safety, and copyWith methods.
+4. **Cancel tokens prevent memory leaks** - Always cancel dio requests when widgets dispose or new searches start.
+5. **Repository pattern separates concerns** - UI -> State Management -> Repository -> Remote/Local Data Sources. Never call APIs directly from widgets.
+6. **Interceptors are superpowers** - Log requests, refresh tokens, cache responses, add headers globally - all in one place.
+7. **Handle every error case** - No internet, timeout, 401, 404, 500, rate limit. Each needs a specific user-friendly message.
+8. **Debounce search inputs** - Wait 300-500ms after the user stops typing before firing API requests. Prevents spam and saves bandwidth.
+9. **Never hardcode API keys** - Use environment variables (flutter_dotenv) or secure storage. Keys in code are easily extracted from APKs.
+10. **Use compute() for heavy JSON parsing** - Large API responses can block the UI thread. Parse in an isolate for smooth 60fps.
+
+---
+
+# Extra Practice (Do These Tonight!)
+
+1. **Weather App with Real API:** Connect the Day 13 Weather App to OpenWeatherMap API. Implement caching with dio interceptors, error retry, and offline mode with last-known data.
+2. **News Reader with Pagination:** Build a news app using NewsAPI. Implement infinite scroll, search with debounce, category filters, and article caching.
+3. **E-Commerce Product Catalog:** Connect to a fake store API (fakestoreapi.com). Implement product listing with pagination, search, filters, and a shopping cart that syncs to a backend.
+4. **Social Media Feed:** Build a Twitter-like feed with pull-to-refresh, infinite pagination, like/unlike actions (POST), and image upload with FormData.
+5. **Multi-API Dashboard:** Build a dashboard that fetches data from 3 different APIs simultaneously using Future.wait(). Show combined loading states and partial error handling.
+
+---
+
+**Congratulations!** You've completed Day 16. You now master networking in Flutter - from simple HTTP requests to production-grade API architectures with dio, interceptors, pagination, error handling, and type-safe code generation.
+
+**Next Up -> Day 17: Authentication & Security (Firebase Auth, JWT, Biometric)**
+
+---
+
+*Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*
+*Day 16: Networking & APIs - Complete Deep Dive*
 
 *Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*
 *Day 13: State Management — Riverpod — Complete Deep Dive*
