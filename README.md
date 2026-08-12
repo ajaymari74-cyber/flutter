@@ -29596,6 +29596,1821 @@ Use this checklist to verify mastery:
 **Next Up → Day 19: Custom Painter, RenderObjects & Advanced UI**
 
 ---
+# Day 19: Custom Painter, RenderObjects & Advanced UI
+# Complete Deep Dive
+
+**Goal:** Master advanced UI techniques in Flutter. Build custom widgets from scratch using CustomPaint & Canvas, create complex clipping paths, leverage Slivers for scrollable layouts, and understand the rendering pipeline with RenderBox fundamentals.
+
+---
+
+# Table of Contents
+1. Why Advanced UI Matters in 2026
+2. Flutter's Rendering Pipeline Mental Model
+3. CustomPaint & CustomPainter Deep Dive
+4. Canvas, Paint, Path — The Drawing Trinity
+5. ClipPath & Custom Clipping
+6. Slivers & CustomScrollView
+7. SliverAppBar, SliverList, SliverGrid, SliverToBoxAdapter
+8. RenderBox Basics (Optional Advanced)
+9. Performance & Best Practices
+10. Hands-On Project: Custom Dashboard UI
+11. Common Mistakes & How to Avoid Them
+12. Day 19 Checklist
+
+---
+
+# 1. Why Advanced UI Matters in 2026
+
+## The UI Differentiation Landscape
+| UI Technique | Impact | When to Use |
+|:---|:---|:---|
+| **CustomPaint** | Unique brand identity | Charts, graphs, signature pads, game elements |
+| **ClipPath** | Visual hierarchy | Profile pictures with custom shapes, masked images |
+| **Slivers** | Scroll performance | Large lists, parallax headers, sticky sections |
+| **Custom RenderBox** | Pixel-perfect control | Complex layouts that standard widgets can't achieve |
+
+## When Standard Widgets Aren't Enough
+- **Data Visualization:** Stock charts, health metrics, custom progress rings
+- **Brand Identity:** Unique shapes, custom loaders, signature capture
+- **Performance:** Slivers lazily build only visible items in massive lists
+- **Games & Interactive:** Drawing apps, puzzle pieces, custom gestures
+
+---
+
+# 2. Flutter's Rendering Pipeline Mental Model
+
+## The Three Trees
+```
+Widget Tree          Element Tree           Render Tree
+(Blueprint)          (Lifecycle)            (Pixels)
+    |                      |                      |
+CustomPaint  ----->  SingleChildRenderObjectElement
+    |                      |                      |
+    |                      |              RenderCustomPaint
+    |                      |                      |
+    |                      |              -> paints on Canvas
+    |                      |                      |
+    v                      v                      v
+  "What"               "Where/When"           "How (pixels)"
+```
+
+## The Painting Flow
+```
+1. Widget instructs what to draw
+         |
+2. RenderObject creates a Layer
+         |
+3. PaintingContext provides Canvas
+         |
+4. CustomPainter receives Canvas + Size
+         |
+5. Canvas executes draw commands (drawCircle, drawPath, etc.)
+         |
+6. Skia/Impeller renders to GPU
+```
+
+## Key Concepts
+| Concept | Role | Analogy |
+|:---|:---|:---|
+| **Widget** | Configuration, immutable | Blueprint of a house |
+| **Element** | Mounts widgets, manages lifecycle | Construction manager |
+| **RenderObject** | Handles layout, painting, hit-testing | The actual built house |
+| **Canvas** | Drawing surface (Skia/Impeller) | Artist's canvas |
+| **Paint** | Brush configuration (color, stroke, fill) | Paintbrush with settings |
+| **Path** | Vector outline to draw/fill | Stencil or outline |
+
+---
+
+# 3. CustomPaint & CustomPainter Deep Dive
+
+## The Anatomy of CustomPaint
+```dart
+CustomPaint(
+  painter: MyBackgroundPainter(),      // Paints BELOW child
+  foregroundPainter: MyOverlayPainter(), // Paints ABOVE child
+  size: Size.infinite,                 // Or let parent constrain
+  child: MyWidget(),                   // Optional: widget to paint around
+)
+```
+
+## Complete CustomPainter Template
+```dart
+import 'package:flutter/material.dart';
+import 'dart:math' as math;
+
+class GradientArcPainter extends CustomPainter {
+  final double progress; // 0.0 to 1.0
+  final Color startColor;
+  final Color endColor;
+  final double strokeWidth;
+
+  GradientArcPainter({
+    required this.progress,
+    required this.startColor,
+    required this.endColor,
+    this.strokeWidth = 12,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.min(size.width, size.height) / 2 - strokeWidth;
+
+    // Background arc (gray track)
+    final trackPaint = Paint()
+      ..color = Colors.grey.shade200
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2, // Start at top (12 o'clock)
+      2 * math.pi,  // Full circle
+      false,
+      trackPaint,
+    );
+
+    // Progress arc with gradient
+    final gradient = SweepGradient(
+      startAngle: -math.pi / 2,
+      endAngle: 1.5 * math.pi,
+      colors: [startColor, endColor],
+    );
+
+    final progressPaint = Paint()
+      ..shader = gradient.createShader(
+        Rect.fromCircle(center: center, radius: radius),
+      )
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2,
+      2 * math.pi * progress,
+      false,
+      progressPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant GradientArcPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+           oldDelegate.startColor != startColor ||
+           oldDelegate.endColor != endColor;
+  }
+}
+```
+
+## Animated Circular Progress Widget
+```dart
+class AnimatedCircularProgress extends StatefulWidget {
+  final double targetProgress;
+  final Color startColor;
+  final Color endColor;
+
+  const AnimatedCircularProgress({
+    super.key,
+    required this.targetProgress,
+    required this.startColor,
+    required this.endColor,
+  });
+
+  @override
+  State<AnimatedCircularProgress> createState() => _AnimatedCircularProgressState();
+}
+
+class _AnimatedCircularProgressState extends State<AnimatedCircularProgress>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+    _animation = Tween<double>(begin: 0, end: widget.targetProgress).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    );
+    _controller.forward();
+  }
+
+  @override
+  void didUpdateWidget(covariant AnimatedCircularProgress oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.targetProgress != widget.targetProgress) {
+      _animation = Tween<double>(
+        begin: _animation.value,
+        end: widget.targetProgress,
+      ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+      _controller.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return CustomPaint(
+          size: const Size(200, 200),
+          painter: GradientArcPainter(
+            progress: _animation.value,
+            startColor: widget.startColor,
+            endColor: widget.endColor,
+            strokeWidth: 16,
+          ),
+          child: Center(
+            child: Text(
+              '${(_animation.value * 100).toInt()}%',
+              style: const TextStyle(
+                fontSize: 36,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+```
+
+---
+
+# 4. Canvas, Paint, Path — The Drawing Trinity
+
+## Canvas Drawing Methods Reference
+| Method | Draws | Example Use |
+|:---|:---|:---|
+| `drawCircle` | Filled/stroked circle | Avatars, dots, progress rings |
+| `drawRect` | Rectangle | Bars, backgrounds, borders |
+| `drawRRect` | Rounded rectangle | Cards, buttons with radius |
+| `drawOval` | Ellipse | Pills, orbits, eye shapes |
+| `drawArc` | Arc segment | Gauges, pie charts, loaders |
+| `drawPath` | Custom vector path | Any complex shape, signatures |
+| `drawLine` | Straight line | Grids, axes, dividers |
+| `drawPoints` | Multiple points | Scatter plots, stars |
+| `drawImage` | Bitmap image | Custom image masking |
+| `drawText` | Text on canvas | Watermarks, chart labels |
+
+## Paint Configuration
+```dart
+final paint = Paint()
+  ..color = Colors.blue
+  ..style = PaintingStyle.fill      // or .stroke
+  ..strokeWidth = 4.0
+  ..strokeCap = StrokeCap.round     // butt, round, square
+  ..strokeJoin = StrokeJoin.miter   // miter, round, bevel
+  ..isAntiAlias = true              // Smooth edges
+  ..shader = gradient.createShader(bounds)  // Gradient fill
+  ..maskFilter = MaskFilter.blur(BlurStyle.normal, 4); // Shadow
+```
+
+## Path Commands
+```dart
+final path = Path()
+  ..moveTo(50, 50)      // Start point
+  ..lineTo(100, 100)    // Straight line
+  ..quadraticBezierTo(150, 50, 200, 100)  // Quadratic curve
+  ..cubicTo(250, 150, 300, 50, 350, 100)  // Cubic Bezier
+  ..arcToPoint(Offset(400, 50), radius: const Radius.circular(50))
+  ..close();            // Close the path
+
+canvas.drawPath(path, paint);
+```
+
+## Complete Bar Chart Painter
+```dart
+class BarChartPainter extends CustomPainter {
+  final List<double> data;
+  final List<Color> colors;
+  final double barWidth;
+  final double spacing;
+
+  BarChartPainter({
+    required this.data,
+    required this.colors,
+    this.barWidth = 30,
+    this.spacing = 16,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (data.isEmpty) return;
+
+    final maxValue = data.reduce(math.max);
+    final chartHeight = size.height - 40; // Leave space for labels
+    final totalBarWidth = data.length * barWidth + (data.length - 1) * spacing;
+    final startX = (size.width - totalBarWidth) / 2;
+
+    for (int i = 0; i < data.length; i++) {
+      final value = data[i];
+      final barHeight = (value / maxValue) * chartHeight;
+      final x = startX + i * (barWidth + spacing);
+      final y = size.height - barHeight - 20;
+
+      // Bar rect
+      final barRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, y, barWidth, barHeight),
+        const Radius.circular(8),
+      );
+
+      // Gradient for each bar
+      final gradient = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          colors[i % colors.length],
+          colors[i % colors.length].withOpacity(0.6),
+        ],
+      );
+
+      final barPaint = Paint()
+        ..shader = gradient.createShader(barRect.outerRect)
+        ..style = PaintingStyle.fill;
+
+      canvas.drawRRect(barRect, barPaint);
+
+      // Value label on top
+      final textSpan = TextSpan(
+        text: value.toStringAsFixed(0),
+        style: TextStyle(
+          color: colors[i % colors.length],
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      );
+      final textPainter = TextPainter(
+        text: textSpan,
+        textDirection: TextDirection.ltr,
+      );
+      textPainter.layout();
+      textPainter.paint(
+        canvas,
+        Offset(x + (barWidth - textPainter.width) / 2, y - 20),
+      );
+    }
+
+    // Baseline
+    final baselinePaint = Paint()
+      ..color = Colors.grey.shade300
+      ..strokeWidth = 1;
+    canvas.drawLine(
+      Offset(0, size.height - 20),
+      Offset(size.width, size.height - 20),
+      baselinePaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant BarChartPainter oldDelegate) {
+    return oldDelegate.data != data;
+  }
+}
+```
+
+## Wave Painter (Sine Wave)
+```dart
+class WavePainter extends CustomPainter {
+  final double wavePhase;
+  final Color waveColor;
+  final double amplitude;
+
+  WavePainter({
+    required this.wavePhase,
+    required this.waveColor,
+    this.amplitude = 20,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path();
+    path.moveTo(0, size.height / 2);
+
+    for (double x = 0; x <= size.width; x++) {
+      final y = size.height / 2 +
+          math.sin((x / size.width * 2 * math.pi) + wavePhase) * amplitude;
+      path.lineTo(x, y);
+    }
+
+    path.lineTo(size.width, size.height);
+    path.lineTo(0, size.height);
+    path.close();
+
+    final paint = Paint()
+      ..color = waveColor.withOpacity(0.3)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant WavePainter oldDelegate) {
+    return oldDelegate.wavePhase != wavePhase;
+  }
+}
+```
+
+---
+
+# 5. ClipPath & Custom Clipping
+
+## Built-in Clippers
+```dart
+// ClipOval - Circular mask
+ClipOval(
+  child: Image.network('https://picsum.photos/300'),
+)
+
+// ClipRRect - Rounded corners
+ClipRRect(
+  borderRadius: BorderRadius.circular(20),
+  child: Image.network('https://picsum.photos/300'),
+)
+
+// ClipRect - Rectangular mask
+ClipRect(
+  child: Image.network('https://picsum.photos/300'),
+)
+```
+
+## Custom ClipPath — Hexagon Avatar
+```dart
+class HexagonClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.min(size.width, size.height) / 2;
+
+    for (int i = 0; i < 6; i++) {
+      final angle = (i * 60 - 30) * math.pi / 180;
+      final x = center.dx + radius * math.cos(angle);
+      final y = center.dy + radius * math.sin(angle);
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
+}
+
+// Usage
+ClipPath(
+  clipper: HexagonClipper(),
+  child: Image.network(
+    'https://i.pravatar.cc/300',
+    width: 120,
+    height: 120,
+    fit: BoxFit.cover,
+  ),
+)
+```
+
+## Star Clipper
+```dart
+class StarClipper extends CustomClipper<Path> {
+  final int points;
+  final double innerRadiusRatio;
+
+  StarClipper({this.points = 5, this.innerRadiusRatio = 0.5});
+
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    final center = Offset(size.width / 2, size.height / 2);
+    final outerRadius = math.min(size.width, size.height) / 2;
+    final innerRadius = outerRadius * innerRadiusRatio;
+
+    for (int i = 0; i < points * 2; i++) {
+      final radius = i.isEven ? outerRadius : innerRadius;
+      final angle = (i * math.pi / points) - math.pi / 2;
+      final x = center.dx + radius * math.cos(angle);
+      final y = center.dy + radius * math.sin(angle);
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(covariant StarClipper oldClipper) {
+    return oldClipper.points != points ||
+           oldClipper.innerRadiusRatio != innerRadiusRatio;
+  }
+}
+```
+
+## Clip Behavior
+| Behavior | Description | Performance |
+|:---|:---|:---|
+| `Clip.hardEdge` | Sharp edges, no anti-alias | Fastest |
+| `Clip.antiAlias` | Smooth edges | Balanced |
+| `Clip.antiAliasWithSaveLayer` | Smooth + offscreen buffer | Slowest, use sparingly |
+| `Clip.none` | No clipping | Fastest (default) |
+
+---
+
+# 6. Slivers & CustomScrollView
+
+## Why Slivers?
+Standard `ListView` and `GridView` are actually wrappers around slivers. Using slivers directly gives you:
+- **Mixed layouts:** List + Grid + Header in one scrollable
+- **Parallax effects:** SliverAppBar that expands/collapses
+- **Sticky headers:** SliverPersistentHeader that pins
+- **Performance:** Only visible items are built
+
+## Sliver Architecture
+```
+CustomScrollView
+    |
+    +-- SliverAppBar (collapsible header)
+    +-- SliverToBoxAdapter (single widget)
+    +-- SliverList (variable height items)
+    +-- SliverFixedExtentList (fixed height items)
+    +-- SliverGrid (grid layout)
+    +-- SliverPadding (spacing)
+    +-- SliverPersistentHeader (sticky section)
+```
+
+## Complete CustomScrollView Example
+```dart
+class SliverDashboard extends StatelessWidget {
+  const SliverDashboard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
+          // Collapsible App Bar with background image
+          SliverAppBar(
+            expandedHeight: 250,
+            floating: false,
+            pinned: true,
+            stretch: true,
+            flexibleSpace: FlexibleSpaceBar(
+              title: const Text('Analytics Dashboard'),
+              background: Image.network(
+                'https://picsum.photos/800/400',
+                fit: BoxFit.cover,
+              ),
+              stretchModes: const [
+                StretchMode.zoomBackground,
+                StretchMode.blurBackground,
+              ],
+            ),
+          ),
+
+          // Stats cards row
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  _buildStatCard('Revenue', '\$42K', Colors.green),
+                  const SizedBox(width: 12),
+                  _buildStatCard('Users', '1.2K', Colors.blue),
+                  const SizedBox(width: 12),
+                  _buildStatCard('Orders', '856', Colors.orange),
+                ],
+              ),
+            ),
+          ),
+
+          // Section header
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _SectionHeaderDelegate('Recent Activity'),
+          ),
+
+          // Activity list
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.primaries[index % Colors.primaries.length],
+                    child: Text('${index + 1}'),
+                  ),
+                  title: Text('Activity Item ${index + 1}'),
+                  subtitle: Text('${DateTime.now().subtract(Duration(hours: index))}'),
+                );
+              },
+              childCount: 20,
+            ),
+          ),
+
+          // Grid section
+          SliverPadding(
+            padding: const EdgeInsets.all(16),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 1.2,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  return Card(
+                    color: Colors.primaries[index % Colors.primaries.length].shade100,
+                    child: Center(
+                      child: Text(
+                        'Grid $index',
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  );
+                },
+                childCount: 6,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatCard(String title, String value, Color color) {
+    return Expanded(
+      child: Card(
+        elevation: 2,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
+              const SizedBox(height: 4),
+              Text(title, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Sticky Section Header Delegate
+class _SectionHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final String title;
+
+  _SectionHeaderDelegate(this.title);
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      alignment: Alignment.centerLeft,
+      child: Text(
+        title,
+        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  @override
+  double get maxExtent => 50;
+
+  @override
+  double get minExtent => 50;
+
+  @override
+  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) => false;
+}
+```
+
+---
+
+# 7. SliverAppBar, SliverList, SliverGrid, SliverToBoxAdapter
+
+## SliverAppBar Configuration Matrix
+| Property | Effect | Common Value |
+|:---|:---|:---|
+| `expandedHeight` | Height when fully open | `200.0` |
+| `collapsedHeight` | Minimum height | `kToolbarHeight` |
+| `floating` | Appears on scroll down | `true` / `false` |
+| `pinned` | Stays at top when collapsed | `true` / `false` |
+| `snap` | Snaps open/closed | `true` (requires floating) |
+| `stretch` | Pull to stretch background | `true` |
+
+## SliverList vs SliverFixedExtentList
+```dart
+// Variable height items (slower, measures each child)
+SliverList(
+  delegate: SliverChildBuilderDelegate(
+    (context, index) => Container(height: 50 + (index % 3) * 20),
+    childCount: 100,
+  ),
+)
+
+// Fixed height items (faster, skips measurement)
+SliverFixedExtentList(
+  itemExtent: 80, // All items are 80px tall
+  delegate: SliverChildBuilderDelegate(
+    (context, index) => ListTile(title: Text('Item $index')),
+    childCount: 100,
+  ),
+)
+```
+
+## SliverGrid Patterns
+```dart
+// Fixed cross-axis count
+SliverGrid(
+  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+    crossAxisCount: 2,
+    mainAxisSpacing: 10,
+    crossAxisSpacing: 10,
+    childAspectRatio: 0.8,
+  ),
+  delegate: SliverChildBuilderDelegate(...),
+)
+
+// Max cross-axis extent (responsive)
+SliverGrid(
+  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+    maxCrossAxisExtent: 200, // Each item max 200px wide
+    mainAxisSpacing: 10,
+    crossAxisSpacing: 10,
+  ),
+  delegate: SliverChildBuilderDelegate(...),
+)
+```
+
+## Nested Slivers with TabBar
+```dart
+class NestedSliverTabs extends StatelessWidget {
+  const NestedSliverTabs({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        body: NestedScrollView(
+          headerSliverBuilder: (context, innerBoxIsScrolled) {
+            return [
+              SliverAppBar(
+                expandedHeight: 200,
+                pinned: true,
+                flexibleSpace: FlexibleSpaceBar(
+                  title: const Text('Nested Scroll'),
+                  background: Image.network('https://picsum.photos/800/300', fit: BoxFit.cover),
+                ),
+              ),
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _TabBarDelegate(
+                  const TabBar(
+                    tabs: [Tab(text: 'Feed'), Tab(text: 'Photos'), Tab(text: 'About')],
+                  ),
+                ),
+              ),
+            ];
+          },
+          body: TabBarView(
+            children: [
+              _buildFeedTab(),
+              _buildPhotosTab(),
+              _buildAboutTab(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeedTab() {
+    return CustomScrollView(
+      slivers: [
+        SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) => ListTile(title: Text('Feed item $index')),
+            childCount: 50,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPhotosTab() {
+    return CustomScrollView(
+      slivers: [
+        SliverGrid(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 2,
+            mainAxisSpacing: 2,
+          ),
+          delegate: SliverChildBuilderDelegate(
+            (context, index) => Image.network(
+              'https://picsum.photos/200?random=$index',
+              fit: BoxFit.cover,
+            ),
+            childCount: 30,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAboutTab() {
+    return const Center(child: Text('About content here'));
+  }
+}
+
+class _TabBarDelegate extends SliverPersistentHeaderDelegate {
+  final TabBar tabBar;
+  _TabBarDelegate(this.tabBar);
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(color: Theme.of(context).scaffoldBackgroundColor, child: tabBar);
+  }
+
+  @override
+  double get maxExtent => tabBar.preferredSize.height;
+  @override
+  double get minExtent => tabBar.preferredSize.height;
+  @override
+  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) => false;
+}
+```
+
+---
+
+# 8. RenderBox Basics (Optional Advanced)
+
+## When to Use RenderBox
+- Custom layout logic that widgets can't express
+- Optimized hit-testing for complex shapes
+- Direct control over intrinsic dimensions
+
+## Simple RenderBox Example
+```dart
+import 'package:flutter/rendering.dart';
+
+class CircleRenderBox extends RenderBox {
+  Color color;
+  double radius;
+
+  CircleRenderBox({required this.color, required this.radius});
+
+  @override
+  void performLayout() {
+    size = constraints.constrain(Size(radius * 2, radius * 2));
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final canvas = context.canvas;
+    final paint = Paint()..color = color;
+    canvas.drawCircle(offset + Offset(size.width / 2, size.height / 2), radius, paint);
+  }
+
+  @override
+  bool hitTestSelf(Offset position) {
+    final center = Offset(size.width / 2, size.height / 2);
+    return (position - center).distance <= radius;
+  }
+}
+
+// Widget wrapper
+class CircleWidget extends LeafRenderObjectWidget {
+  final Color color;
+  final double radius;
+
+  const CircleWidget({super.key, required this.color, required this.radius});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return CircleRenderBox(color: color, radius: radius);
+  }
+
+  @override
+  void updateRenderObject(BuildContext context, CircleRenderBox renderObject) {
+    renderObject.color = color;
+    renderObject.radius = radius;
+  }
+}
+```
+
+## RenderBox Lifecycle
+```
+1. Widget creates RenderObject
+        |
+2. performLayout() calculates size
+        |
+3. paint() draws to canvas
+        |
+4. hitTest() handles touch
+        |
+5. updateRenderObject() updates properties
+```
+
+---
+
+# 9. Performance & Best Practices
+
+## CustomPaint Performance Rules
+| Rule | Impact | Why |
+|:---|:---|:---|
+| **Implement shouldRepaint correctly** | Avoids unnecessary redraws | Compare old vs new properties |
+| **Use `const` Paint objects** | Reduces object creation | Paint is expensive to construct |
+| **Cache Path objects** | Faster animation frames | Path computation is CPU intensive |
+| **Avoid text in paint()** | Text layout is slow | Use widgets for text when possible |
+| **Use `isComplex: true`** | Enables raster caching | Flutter caches the layer as a bitmap |
+| **Clip only when necessary** | Clipping is expensive | Each clip creates a new layer |
+
+## Sliver Performance
+```dart
+// ✅ GOOD: Use SliverFixedExtentList when heights are uniform
+SliverFixedExtentList(itemExtent: 80, delegate: ...)
+
+// ✅ GOOD: Use SliverPrototypeExtentList with a prototype
+SliverPrototypeExtentList(
+  prototypeItem: const ListTile(title: Text('Prototype')),
+  delegate: ...,
+)
+
+// ❌ BAD: SliverList with wildly varying heights causes jank
+SliverList(delegate: SliverChildBuilderDelegate(...))
+```
+
+## RepaintBoundary for Complex Painters
+```dart
+RepaintBoundary(
+  child: CustomPaint(
+    painter: ComplexChartPainter(),
+    size: const Size(300, 200),
+  ),
+)
+```
+
+---
+
+# 10. Hands-On Project: Custom Dashboard UI
+
+## Project Overview
+Build **FlutterCanvas Dashboard** — a production-grade analytics dashboard with:
+- CustomPaint circular progress with gradient arcs
+- Bar chart with animated entry
+- Hexagon avatar clipper
+- SliverAppBar with parallax background
+- Sticky section headers
+- SliverGrid for metric cards
+- Wave animation background
+
+## Complete App Code
+
+```dart
+import 'package:flutter/material.dart';
+import 'dart:math' as math;
+
+void main() {
+  runApp(const FlutterCanvasApp());
+}
+
+// ==================== APP ROOT ====================
+class FlutterCanvasApp extends StatelessWidget {
+  const FlutterCanvasApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'FlutterCanvas Dashboard',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+      ),
+      home: const DashboardScreen(),
+    );
+  }
+}
+
+// ==================== DASHBOARD SCREEN ====================
+class DashboardScreen extends StatefulWidget {
+  const DashboardScreen({super.key});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _waveController;
+
+  @override
+  void initState() {
+    super.initState();
+    _waveController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _waveController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
+          // Parallax App Bar
+          SliverAppBar(
+            expandedHeight: 280,
+            floating: false,
+            pinned: true,
+            stretch: true,
+            backgroundColor: Colors.indigo,
+            flexibleSpace: FlexibleSpaceBar(
+              title: const Text('FlutterCanvas', style: TextStyle(fontWeight: FontWeight.bold)),
+              background: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.network(
+                    'https://picsum.photos/800/500',
+                    fit: BoxFit.cover,
+                  ),
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.indigo.withOpacity(0.8),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Animated wave overlay
+                  AnimatedBuilder(
+                    animation: _waveController,
+                    builder: (context, child) {
+                      return CustomPaint(
+                        painter: WavePainter(
+                          wavePhase: _waveController.value * 2 * math.pi,
+                          waveColor: Colors.white,
+                          amplitude: 15,
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+              stretchModes: const [
+                StretchMode.zoomBackground,
+                StretchMode.blurBackground,
+              ],
+            ),
+          ),
+
+          // Profile Section with Hexagon
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  _buildHexagonProfile(),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Alex Designer',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    'UI/UX Engineer',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Progress Rings
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildProgressRing('Design', 0.85, Colors.pink, Colors.purple),
+                  _buildProgressRing('Code', 0.72, Colors.blue, Colors.cyan),
+                  _buildProgressRing('Deploy', 0.93, Colors.green, Colors.teal),
+                ],
+              ),
+            ),
+          ),
+
+          const SliverToBoxAdapter(child: SizedBox(height: 32)),
+
+          // Bar Chart Section
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Card(
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Weekly Performance',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: 200,
+                        child: CustomPaint(
+                          size: const Size(double.infinity, 200),
+                          painter: BarChartPainter(
+                            data: const [45, 72, 58, 90, 65, 85, 78],
+                            colors: const [
+                              Colors.red,
+                              Colors.orange,
+                              Colors.yellow,
+                              Colors.green,
+                              Colors.blue,
+                              Colors.indigo,
+                              Colors.purple,
+                            ],
+                            barWidth: 24,
+                            spacing: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          const SliverToBoxAdapter(child: SizedBox(height: 24)),
+
+          // Sticky Header
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _StickyHeaderDelegate('Recent Projects'),
+          ),
+
+          // Project List
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  child: ListTile(
+                    leading: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.primaries[index % Colors.primaries.length].shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.folder,
+                        color: Colors.primaries[index % Colors.primaries.length],
+                      ),
+                    ),
+                    title: Text('Project ${index + 1}'),
+                    subtitle: Text('Last updated ${index + 1} days ago'),
+                    trailing: const Icon(Icons.chevron_right),
+                  ),
+                );
+              },
+              childCount: 15,
+            ),
+          ),
+
+          // Grid Section
+          SliverPadding(
+            padding: const EdgeInsets.all(16),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 1.0,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  return ClipPath(
+                    clipper: StarClipper(points: 4, innerRadiusRatio: 0.3),
+                    child: Container(
+                      color: Colors.primaries[index % Colors.primaries.length],
+                      child: Center(
+                        child: Text(
+                          'Tool ${index + 1}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+                childCount: 4,
+              ),
+            ),
+          ),
+
+          const SliverToBoxAdapter(child: SizedBox(height: 40)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHexagonProfile() {
+    return ClipPath(
+      clipper: HexagonClipper(),
+      child: Container(
+        width: 120,
+        height: 120,
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.indigo, width: 3),
+        ),
+        child: Image.network(
+          'https://i.pravatar.cc/300',
+          fit: BoxFit.cover,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProgressRing(String label, double progress, Color start, Color end) {
+    return Column(
+      children: [
+        SizedBox(
+          width: 100,
+          height: 100,
+          child: AnimatedCircularProgress(
+            targetProgress: progress,
+            startColor: start,
+            endColor: end,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+      ],
+    );
+  }
+}
+
+// ==================== GRADIENT ARC PAINTER ====================
+class GradientArcPainter extends CustomPainter {
+  final double progress;
+  final Color startColor;
+  final Color endColor;
+  final double strokeWidth;
+
+  GradientArcPainter({
+    required this.progress,
+    required this.startColor,
+    required this.endColor,
+    this.strokeWidth = 12,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.min(size.width, size.height) / 2 - strokeWidth;
+
+    // Background track
+    final trackPaint = Paint()
+      ..color = Colors.grey.shade200
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2,
+      2 * math.pi,
+      false,
+      trackPaint,
+    );
+
+    // Progress arc
+    final gradient = SweepGradient(
+      startAngle: -math.pi / 2,
+      endAngle: 1.5 * math.pi,
+      colors: [startColor, endColor],
+    );
+
+    final progressPaint = Paint()
+      ..shader = gradient.createShader(Rect.fromCircle(center: center, radius: radius))
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2,
+      2 * math.pi * progress,
+      false,
+      progressPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant GradientArcPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+           oldDelegate.startColor != startColor ||
+           oldDelegate.endColor != endColor;
+  }
+}
+
+// ==================== ANIMATED CIRCULAR PROGRESS ====================
+class AnimatedCircularProgress extends StatefulWidget {
+  final double targetProgress;
+  final Color startColor;
+  final Color endColor;
+
+  const AnimatedCircularProgress({
+    super.key,
+    required this.targetProgress,
+    required this.startColor,
+    required this.endColor,
+  });
+
+  @override
+  State<AnimatedCircularProgress> createState() => _AnimatedCircularProgressState();
+}
+
+class _AnimatedCircularProgressState extends State<AnimatedCircularProgress>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+    _animation = Tween<double>(begin: 0, end: widget.targetProgress).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    );
+    _controller.forward();
+  }
+
+  @override
+  void didUpdateWidget(covariant AnimatedCircularProgress oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.targetProgress != widget.targetProgress) {
+      _animation = Tween<double>(
+        begin: _animation.value,
+        end: widget.targetProgress,
+      ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+      _controller.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return CustomPaint(
+          size: const Size(100, 100),
+          painter: GradientArcPainter(
+            progress: _animation.value,
+            startColor: widget.startColor,
+            endColor: widget.endColor,
+            strokeWidth: 10,
+          ),
+          child: Center(
+            child: Text(
+              '${(_animation.value * 100).toInt()}%',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ==================== BAR CHART PAINTER ====================
+class BarChartPainter extends CustomPainter {
+  final List<double> data;
+  final List<Color> colors;
+  final double barWidth;
+  final double spacing;
+
+  BarChartPainter({
+    required this.data,
+    required this.colors,
+    this.barWidth = 24,
+    this.spacing = 12,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (data.isEmpty) return;
+
+    final maxValue = data.reduce(math.max);
+    final chartHeight = size.height - 40;
+    final totalBarWidth = data.length * barWidth + (data.length - 1) * spacing;
+    final startX = (size.width - totalBarWidth) / 2;
+
+    for (int i = 0; i < data.length; i++) {
+      final value = data[i];
+      final barHeight = (value / maxValue) * chartHeight;
+      final x = startX + i * (barWidth + spacing);
+      final y = size.height - barHeight - 20;
+
+      final barRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, y, barWidth, barHeight),
+        const Radius.circular(6),
+      );
+
+      final gradient = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [colors[i % colors.length], colors[i % colors.length].withOpacity(0.6)],
+      );
+
+      final barPaint = Paint()
+        ..shader = gradient.createShader(barRect.outerRect)
+        ..style = PaintingStyle.fill;
+
+      canvas.drawRRect(barRect, barPaint);
+
+      final textSpan = TextSpan(
+        text: value.toStringAsFixed(0),
+        style: TextStyle(
+          color: colors[i % colors.length],
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      );
+      final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
+      textPainter.layout();
+      textPainter.paint(
+        canvas,
+        Offset(x + (barWidth - textPainter.width) / 2, y - 18),
+      );
+    }
+
+    final baselinePaint = Paint()
+      ..color = Colors.grey.shade300
+      ..strokeWidth = 1;
+    canvas.drawLine(
+      Offset(0, size.height - 20),
+      Offset(size.width, size.height - 20),
+      baselinePaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant BarChartPainter oldDelegate) {
+    return oldDelegate.data != data;
+  }
+}
+
+// ==================== WAVE PAINTER ====================
+class WavePainter extends CustomPainter {
+  final double wavePhase;
+  final Color waveColor;
+  final double amplitude;
+
+  WavePainter({
+    required this.wavePhase,
+    required this.waveColor,
+    this.amplitude = 20,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path();
+    path.moveTo(0, size.height * 0.8);
+
+    for (double x = 0; x <= size.width; x++) {
+      final y = size.height * 0.8 +
+          math.sin((x / size.width * 4 * math.pi) + wavePhase) * amplitude;
+      path.lineTo(x, y);
+    }
+
+    path.lineTo(size.width, size.height);
+    path.lineTo(0, size.height);
+    path.close();
+
+    final paint = Paint()
+      ..color = waveColor.withOpacity(0.2)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant WavePainter oldDelegate) {
+    return oldDelegate.wavePhase != wavePhase;
+  }
+}
+
+// ==================== HEXAGON CLIPPER ====================
+class HexagonClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.min(size.width, size.height) / 2;
+
+    for (int i = 0; i < 6; i++) {
+      final angle = (i * 60 - 30) * math.pi / 180;
+      final x = center.dx + radius * math.cos(angle);
+      final y = center.dy + radius * math.sin(angle);
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
+}
+
+// ==================== STAR CLIPPER ====================
+class StarClipper extends CustomClipper<Path> {
+  final int points;
+  final double innerRadiusRatio;
+
+  StarClipper({this.points = 5, this.innerRadiusRatio = 0.5});
+
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    final center = Offset(size.width / 2, size.height / 2);
+    final outerRadius = math.min(size.width, size.height) / 2;
+    final innerRadius = outerRadius * innerRadiusRatio;
+
+    for (int i = 0; i < points * 2; i++) {
+      final radius = i.isEven ? outerRadius : innerRadius;
+      final angle = (i * math.pi / points) - math.pi / 2;
+      final x = center.dx + radius * math.cos(angle);
+      final y = center.dy + radius * math.sin(angle);
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(covariant StarClipper oldClipper) {
+    return oldClipper.points != points || oldClipper.innerRadiusRatio != innerRadiusRatio;
+  }
+}
+
+// ==================== STICKY HEADER DELEGATE ====================
+class _StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final String title;
+
+  _StickyHeaderDelegate(this.title);
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      alignment: Alignment.centerLeft,
+      child: Text(
+        title,
+        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  @override
+  double get maxExtent => 50;
+
+  @override
+  double get minExtent => 50;
+
+  @override
+  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) => false;
+}
+```
+
+---
+
+# 11. Common Mistakes & How to Avoid Them
+
+## Mistake 1: Not Implementing shouldRepaint
+```dart
+// ❌ WRONG - Always repaints, even when nothing changed
+@override
+bool shouldRepaint(covariant MyPainter oldDelegate) {
+  return true; // Wasteful!
+}
+
+// ✅ CORRECT - Only repaint when properties change
+@override
+bool shouldRepaint(covariant MyPainter oldDelegate) {
+  return oldDelegate.progress != progress ||
+         oldDelegate.color != color;
+}
+```
+
+## Mistake 2: Creating Paint Objects in paint()
+```dart
+// ❌ WRONG - Creates new Paint every frame
+@override
+void paint(Canvas canvas, Size size) {
+  final paint = Paint()..color = Colors.red; // Allocated every frame!
+  canvas.drawCircle(center, radius, paint);
+}
+
+// ✅ CORRECT - Reuse Paint object
+final _paint = Paint()..color = Colors.red;
+
+@override
+void paint(Canvas canvas, Size size) {
+  canvas.drawCircle(center, radius, _paint);
+}
+```
+
+## Mistake 3: Using SliverList for Uniform Heights
+```dart
+// ❌ WRONG - Slower, measures every child
+SliverList(delegate: SliverChildBuilderDelegate(...))
+
+// ✅ CORRECT - Much faster, skips measurement
+SliverFixedExtentList(itemExtent: 80, delegate: ...)
+```
+
+## Mistake 4: Forgetting Clip Behavior
+```dart
+// ❌ WRONG - Default Clip.none may overflow
+ClipPath(clipper: MyClipper(), child: Image.network(...))
+
+// ✅ CORRECT - Explicit clip behavior
+ClipPath(
+  clipper: MyClipper(),
+  clipBehavior: Clip.antiAlias,
+  child: Image.network(...),
+)
+```
+
+## Mistake 5: Drawing Text on Canvas Instead of Widgets
+```dart
+// ❌ WRONG - TextPainter in paint() is slow and complex
+@override
+void paint(Canvas canvas, Size size) {
+  final textPainter = TextPainter(...)..layout();
+  textPainter.paint(canvas, offset);
+}
+
+// ✅ CORRECT - Use widgets for text, CustomPaint for graphics
+Stack(
+  children: [
+    CustomPaint(painter: MyGraphicsPainter()),
+    Positioned(child: Text('Label')), // Widget text is optimized
+  ],
+)
+```
+
+## Mistake 6: Not Using RepaintBoundary for Complex Painters
+```dart
+// ❌ WRONG - Repaints entire screen when CustomPaint updates
+Column(
+  children: [
+    CustomPaint(painter: ExpensiveChart()),
+    ListView(...), // This repaints too!
+  ],
+)
+
+// ✅ CORRECT - Isolate expensive painters
+RepaintBoundary(
+  child: CustomPaint(painter: ExpensiveChart()),
+)
+```
+
+---
+
+# 12. Day 19 Checklist
+
+Use this checklist to verify mastery:
+
+- [ ] Understands Flutter's three-tree architecture (Widget, Element, Render)
+- [ ] Can create a CustomPainter with Canvas, Paint, and Path
+- [ ] Can draw circles, rectangles, arcs, and custom paths on canvas
+- [ ] Understands the difference between PaintingStyle.fill and .stroke
+- [ ] Can implement shouldRepaint for performance optimization
+- [ ] Can create custom ClipPath with CustomClipper
+- [ ] Can build hexagon, star, and other custom shape clippers
+- [ ] Understands ClipBehavior options (hardEdge, antiAlias, etc.)
+- [ ] Can build a CustomScrollView with multiple sliver types
+- [ ] Can implement SliverAppBar with parallax and stretch effects
+- [ ] Can use SliverList, SliverGrid, and SliverToBoxAdapter
+- [ ] Can create sticky headers with SliverPersistentHeader
+- [ ] Understands when to use SliverFixedExtentList vs SliverList
+- [ ] Can build NestedScrollView with tabs inside slivers
+- [ ] Understands basic RenderBox concepts (performLayout, paint, hitTest)
+- [ ] Knows when to use RepaintBoundary for performance
+- [ ] Avoids creating Paint objects inside paint() method
+- [ ] Built the FlutterCanvas Dashboard app
+- [ ] App has CustomPaint progress rings with gradients
+- [ ] App has animated bar chart
+- [ ] App has hexagon avatar clipper
+- [ ] App has parallax SliverAppBar with wave animation
+- [ ] App has sticky section headers
+- [ ] App has SliverGrid with custom star clipper
+- [ ] Pushed the project to GitHub
+
+---
+
+# Key Takeaways (Memorize These!)
+
+1. **CustomPaint is a widget wrapper around a painter** — The `CustomPainter` receives a `Canvas` and `Size`. Draw commands execute directly via Skia/Impeller.
+
+2. **Always implement shouldRepaint correctly** — Returning `true` always causes unnecessary repaints. Compare old and new delegate properties.
+
+3. **Reuse Paint objects, don't create them in paint()** — `Paint()` allocation every frame causes GC pressure. Create once, reuse always.
+
+4. **ClipPath shapes anything, but costs performance** — Each clip creates a new layer. Use `Clip.hardEdge` for speed, `Clip.antiAlias` for quality.
+
+5. **Slivers are the engine behind ListView and GridView** — Using them directly unlocks parallax, sticky headers, and mixed layouts in one scrollable.
+
+6. **SliverFixedExtentList is faster than SliverList** — When all items have the same height, Flutter skips expensive measurement calculations.
+
+7. **NestedScrollView connects outer slivers to inner scrollables** — Essential for TabBarView inside a collapsing header.
+
+8. **RenderBox is the lowest-level widget building block** — Only use when widgets and CustomPaint can't achieve what you need.
+
+9. **RepaintBoundary isolates heavy painters** — Wrap complex CustomPaint widgets to prevent full-tree repaints on animation.
+
+10. **Canvas text is slow — prefer widget text** — `TextPainter` inside `paint()` is computationally expensive. Overlay widgets for labels.
+
+---
+
+# Extra Practice (Do These Tonight!)
+
+1. **Signature Pad App:** Build a drawing app where users can sign or sketch. Save the Path as an image using `RenderRepaintBoundary` and `toImage()`.
+
+2. **Interactive Pie Chart:** Create a tappable pie chart where each slice expands on selection using `CustomPaint` and `GestureDetector` with path hit-testing.
+
+3. **Parallax Photo Gallery:** Build a scrollable gallery where background images move slower than foreground content using `SliverAppBar` with `StretchMode.zoomBackground`.
+
+4. **Custom Shaped Bottom Nav:** Create a bottom navigation bar with a curved notch in the center using `ClipPath` and a custom `CustomPainter` for the notch shape.
+
+5. **Particle System:** Build a confetti or snow particle system using `CustomPaint` with `AnimationController`. Each particle has position, velocity, and lifecycle.
+
+---
+
+**Congratulations!** You've completed Day 19. You now master advanced Flutter UI — from custom painting with Canvas and Path to complex scrollable layouts with Slivers and the rendering pipeline fundamentals.
+
+**Next Up → Day 20: Native Features & Platform Channels**
+
+---
+
+*Generated for 30Days Flutter: Zero to Hero (2026 Edition)*  
+*Day 19: Custom Painter, RenderObjects & Advanced UI — Complete Deep Dive*
+
 
 *Generated for 30Days Flutter: Zero to Hero (2026 Edition)*  
 *Day 18: Animations — Complete Deep Dive*
