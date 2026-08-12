@@ -27928,3 +27928,1674 @@ Use this checklist to verify mastery:
 
 *Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*
 *Day 13: State Management — Riverpod — Complete Deep Dive*
+  # Day 18: Animations
+# Complete Deep Dive
+
+**Goal:** Master both implicit and explicit animations in Flutter. Build delightful user experiences using AnimatedContainer, AnimationController, Hero transitions, staggered animations, and integrate Rive & Lottie for production-grade motion design.
+
+---
+
+# Table of Contents
+1. Why Animations Are Essential in 2026
+2. Animation Architecture & Mental Model
+3. Implicit Animations (Zero-Boilerplate)
+4. Explicit Animations (Full Control)
+5. Hero Animations for Seamless Transitions
+6. AnimatedBuilder & AnimatedWidget
+7. Staggered Animations
+8. Rive & Lottie Integration
+9. Micro-interactions & UX Patterns
+10. Performance & Best Practices
+11. Hands-On Project: Animated UI Kit
+12. Common Mistakes & How to Avoid Them
+13. Day 18 Checklist
+
+---
+
+# 1. Why Animations Are Essential in 2026
+
+## The Psychology of Motion
+| Animation Purpose | User Impact | Example |
+|:---|:---|:---|
+| **State Change Feedback** | Reduces cognitive load | Button press, toggle switch |
+| **Spatial Awareness** | Users understand where they are | Page transitions, navigation |
+| **Loading Perception** | Time feels shorter | Skeleton screens, progress indicators |
+| **Error Recovery** | Softens negative experiences | Shake animation on invalid input |
+| **Brand Personality** | Creates emotional connection | Custom splash animations |
+
+## Flutter's Animation Advantage
+- **60fps/120fps Support:** Flutter renders directly to the GPU, bypassing platform bridges
+- **Unified Codebase:** Same animation code works on mobile, web, and desktop
+- **Widget-Based:** Everything is a widget — including animations
+- **Layered Architecture:** From one-line implicit animations to complex custom painters
+
+---
+
+# 2. Animation Architecture & Mental Model
+
+## The Animation Spectrum
+```
+Implicit Animations          Explicit Animations           Custom Renderers
+(Declarative)                (Imperative)                  (Low-Level)
+    |                              |                             |
+AnimatedContainer          AnimationController          CustomPainter
+AnimatedOpacity            Tween + Curve                RenderBox
+AnimatedAlign              AnimatedBuilder              Canvas.drawPath
+    |                              |                             |
+   Easy                        Full Control                Pixel Perfect
+```
+
+## Core Concepts
+| Concept | Definition | Analogy |
+|:---|:---|:---|
+| **AnimationController** | The "director" that drives the animation | Movie director calling "action" |
+| **Tween** | Defines start and end values | A roadmap from Point A to Point B |
+| **Curve** | Controls acceleration/deceleration | Easing function — ease-in, bounce, elastic |
+| **Duration** | How long the animation runs | Movie runtime |
+| **Builder** | Rebuilds widget tree on each frame | Actor performing scene by scene |
+
+## The Animation Value Flow
+```
+AnimationController (0.0 → 1.0)
+         |
+         v
+      Curve (easeInOut)
+         |
+         v
+      Tween<Color>(begin: Red, end: Blue)
+         |
+         v
+      AnimatedBuilder rebuilds widget
+         |
+         v
+      UI Updates at 60fps
+```
+
+---
+
+# 3. Implicit Animations (Zero-Boilerplate)
+
+Implicit animations are the fastest way to add motion. Just change a property and Flutter animates automatically.
+
+## AnimatedContainer
+The Swiss Army knife of implicit animations.
+
+```dart
+class AnimatedProfileCard extends StatefulWidget {
+  const AnimatedProfileCard({super.key});
+
+  @override
+  State<AnimatedProfileCard> createState() => _AnimatedProfileCardState();
+}
+
+class _AnimatedProfileCardState extends State<AnimatedProfileCard> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => setState(() => _isExpanded = !_isExpanded),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOutCubic,
+        width: _isExpanded ? 350 : 200,
+        height: _isExpanded ? 400 : 200,
+        decoration: BoxDecoration(
+          color: _isExpanded ? Colors.indigo.shade100 : Colors.white,
+          borderRadius: BorderRadius.circular(_isExpanded ? 24 : 16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(_isExpanded ? 0.3 : 0.1),
+              blurRadius: _isExpanded ? 30 : 10,
+              offset: Offset(0, _isExpanded ? 20 : 5),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeInOut,
+              width: _isExpanded ? 120 : 80,
+              height: _isExpanded ? 120 : 80,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.indigo,
+                  width: _isExpanded ? 4 : 2,
+                ),
+                image: const DecorationImage(
+                  image: NetworkImage('https://i.pravatar.cc/300'),
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+            if (_isExpanded) ...[
+              const SizedBox(height: 16),
+              const Text(
+                'Alex Developer',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const Text('Flutter Engineer', style: TextStyle(color: Colors.grey)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+```
+
+## AnimatedOpacity & AnimatedCrossFade
+```dart
+class FadeTransitionDemo extends StatefulWidget {
+  const FadeTransitionDemo({super.key});
+
+  @override
+  State<FadeTransitionDemo> createState() => _FadeTransitionDemoState();
+}
+
+class _FadeTransitionDemoState extends State<FadeTransitionDemo> {
+  bool _showFirst = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        AnimatedCrossFade(
+          duration: const Duration(milliseconds: 400),
+          firstCurve: Curves.easeInOut,
+          secondCurve: Curves.easeInOut,
+          sizeCurve: Curves.easeInOut,
+          firstChild: Container(
+            width: 200,
+            height: 200,
+            color: Colors.blue,
+            child: const Center(child: Icon(Icons.lock, color: Colors.white, size: 50)),
+          ),
+          secondChild: Container(
+            width: 200,
+            height: 200,
+            color: Colors.green,
+            child: const Center(child: Icon(Icons.lock_open, color: Colors.white, size: 50)),
+          ),
+          crossFadeState: _showFirst ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+        ),
+        const SizedBox(height: 20),
+        AnimatedOpacity(
+          opacity: _showFirst ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 500),
+          child: const Text('Secure Mode Active', style: TextStyle(fontSize: 18)),
+        ),
+        ElevatedButton(
+          onPressed: () => setState(() => _showFirst = !_showFirst),
+          child: Text(_showFirst ? 'Unlock' : 'Lock'),
+        ),
+      ],
+    );
+  }
+}
+```
+
+## Implicit Animation Widgets Reference
+| Widget | Animates | Use Case |
+|:---|:---|:---|
+| `AnimatedContainer` | Size, color, border, shadow | Cards, panels, buttons |
+| `AnimatedOpacity` | Transparency | Fade in/out, loading states |
+| `AnimatedAlign` | Position within parent | Reordering items |
+| `AnimatedPadding` | Padding values | Expanding sections |
+| `AnimatedPositioned` | Stack position | Floating elements |
+| `AnimatedDefaultTextStyle` | Text style | Headline transitions |
+| `AnimatedScale` | Scale transform | Press effects, pop-ups |
+| `AnimatedRotation` | Rotation transform | Loading spinners, icons |
+| `AnimatedSlide` | Offset position | Slide-in menus, toasts |
+
+---
+
+# 4. Explicit Animations (Full Control)
+
+When implicit animations aren't enough, you need AnimationController.
+
+## AnimationController Fundamentals
+```dart
+class ExplicitAnimationDemo extends StatefulWidget {
+  const ExplicitAnimationDemo({super.key});
+
+  @override
+  State<ExplicitAnimationDemo> createState() => _ExplicitAnimationDemoState();
+}
+
+class _ExplicitAnimationDemoState extends State<ExplicitAnimationDemo>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _sizeAnimation;
+  late Animation<Color?> _colorAnimation;
+  late Animation<double> _curveAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+
+    // Curved animation wraps the controller
+    _curveAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.elasticOut,
+      reverseCurve: Curves.easeInBack,
+    );
+
+    // Tween defines the value range
+    _sizeAnimation = Tween<double>(begin: 50, end: 200).animate(_curveAnimation);
+    _colorAnimation = ColorTween(begin: Colors.red, end: Colors.blue).animate(_controller);
+
+    _controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        _controller.reverse();
+      } else if (status == AnimationStatus.dismissed) {
+        _controller.forward();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        if (_controller.isAnimating) {
+          _controller.stop();
+        } else {
+          _controller.forward();
+        }
+      },
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return Container(
+            width: _sizeAnimation.value,
+            height: _sizeAnimation.value,
+            decoration: BoxDecoration(
+              color: _colorAnimation.value,
+              borderRadius: BorderRadius.circular(_sizeAnimation.value / 4),
+            ),
+            child: const Center(
+              child: Icon(Icons.touch_app, color: Colors.white, size: 40),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+```
+
+## Animation Status Lifecycle
+```
+ dismissed → forward → completed → reverse → dismissed
+    ↑___________________________________________|
+```
+
+| Status | Meaning | Trigger |
+|:---|:---|:---|
+| `dismissed` | At beginning (value = 0.0) | Initial state or reverse finished |
+| `forward` | Playing forward | `.forward()` called |
+| `completed` | At end (value = 1.0) | `.forward()` finished |
+| `reverse` | Playing backward | `.reverse()` called |
+
+## Common Curves Visualized
+| Curve | Visual | Use Case |
+|:---|:---|:---|
+| `Curves.linear` | ➡️ Straight line | Mechanical movement |
+| `Curves.easeIn` | 🐢→🐇 Slow start, fast end | Objects entering screen |
+| `Curves.easeOut` | 🐇→🐢 Fast start, slow end | Objects leaving screen |
+| `Curves.easeInOut` | 🐢→🐇→🐢 Smooth both ends | General purpose |
+| `Curves.bounceOut` | ⬇️🪃 Bounces at end | Playful UI elements |
+| `Curves.elasticOut` | ⬇️〰️ Spring overshoot | Attention-grabbing |
+| `Curves.decelerate` | 🚀→🛩️ Rapid deceleration | Scroll fling physics |
+
+---
+
+# 5. Hero Animations for Seamless Transitions
+
+Hero animations create shared element transitions between screens.
+
+## Basic Hero Implementation
+```dart
+// Screen A: Product List
+class ProductListScreen extends StatelessWidget {
+  const ProductListScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Products')),
+      body: ListView.builder(
+        itemCount: 10,
+        itemBuilder: (context, index) {
+          return ListTile(
+            leading: Hero(
+              tag: 'product-image-$index',
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(
+                  'https://picsum.photos/100?random=$index',
+                  width: 50,
+                  height: 50,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+            title: Text('Product $index'),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ProductDetailScreen(index: index),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// Screen B: Product Detail
+class ProductDetailScreen extends StatelessWidget {
+  final int index;
+  const ProductDetailScreen({super.key, required this.index});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 300,
+            flexibleSpace: FlexibleSpaceBar(
+              background: Hero(
+                tag: 'product-image-$index',
+                child: Image.network(
+                  'https://picsum.photos/400?random=$index',
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Hero(
+                    tag: 'product-title-$index',
+                    child: Material(
+                      color: Colors.transparent,
+                      child: Text(
+                        'Product $index',
+                        style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Detailed description goes here...'),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+```
+
+## Hero Flight Building (Advanced)
+```dart
+Hero(
+  tag: 'avatar',
+  flightShuttleBuilder: (
+    BuildContext flightContext,
+    Animation<double> animation,
+    HeroFlightDirection flightDirection,
+    BuildContext fromHeroContext,
+    BuildContext toHeroContext,
+  ) {
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, child) {
+        return Transform.rotate(
+          angle: animation.value * 2 * 3.14159,
+          child: toHeroContext.widget,
+        );
+      },
+    );
+  },
+  child: const CircleAvatar(
+    radius: 40,
+    backgroundImage: NetworkImage('https://i.pravatar.cc/300'),
+  ),
+)
+```
+
+---
+
+# 6. AnimatedBuilder & AnimatedWidget
+
+## AnimatedBuilder (Performance Optimized)
+```dart
+class PulseEffect extends StatefulWidget {
+  const PulseEffect({super.key});
+
+  @override
+  State<PulseEffect> createState() => _PulseEffectState();
+}
+
+class _PulseEffectState extends State<PulseEffect>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: 1.0 + (_controller.value * 0.2),
+          child: Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.pink.withOpacity(1 - _controller.value),
+              border: Border.all(
+                color: Colors.pink,
+                width: 2 + (_controller.value * 4),
+              ),
+            ),
+            child: const Icon(Icons.favorite, color: Colors.white, size: 40),
+          ),
+        );
+      },
+    );
+  }
+}
+```
+
+## AnimatedWidget (Reusable Animation Widget)
+```dart
+class SpinningContainer extends AnimatedWidget {
+  const SpinningContainer({super.key, required AnimationController controller})
+      : super(listenable: controller);
+
+  Animation<double> get _progress => listenable as Animation<double>;
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.rotate(
+      angle: _progress.value * 2 * 3.14159,
+      child: Container(
+        width: 100,
+        height: 100,
+        color: Colors.teal,
+        child: const Icon(Icons.refresh, color: Colors.white, size: 50),
+      ),
+    );
+  }
+}
+
+// Usage
+SpinningContainer(controller: _controller)
+```
+
+## When to Use What?
+| Approach | Best For | Performance |
+|:---|:---|:---|
+| `AnimatedBuilder` | Complex widget trees, external animation | ⭐⭐⭐ Excellent |
+| `AnimatedWidget` | Reusable animated components | ⭐⭐⭐ Excellent |
+| `setState` in animation | Simple prototypes only | ⭐ Poor (rebuilds everything) |
+
+---
+
+# 7. Staggered Animations
+
+Staggered animations create cascading effects where elements animate in sequence.
+
+```dart
+class StaggeredListAnimation extends StatefulWidget {
+  const StaggeredListAnimation({super.key});
+
+  @override
+  State<StaggeredListAnimation> createState() => _StaggeredListAnimationState();
+}
+
+class _StaggeredListAnimationState extends State<StaggeredListAnimation>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  final int itemCount = 5;
+  final List<String> items = ['Inbox', 'Starred', 'Sent', 'Drafts', 'Trash'];
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    );
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: ListView.builder(
+        itemCount: itemCount,
+        itemBuilder: (context, index) {
+          final double start = index * 0.1;
+          final double end = start + 0.4;
+
+          final Animation<double> opacity = Tween<double>(begin: 0, end: 1).animate(
+            CurvedAnimation(
+              parent: _controller,
+              curve: Interval(start, end, curve: Curves.easeOut),
+            ),
+          );
+
+          final Animation<Offset> slide = Tween<Offset>(
+            begin: const Offset(0.5, 0),
+            end: Offset.zero,
+          ).animate(
+            CurvedAnimation(
+              parent: _controller,
+              curve: Interval(start, end, curve: Curves.easeOutCubic),
+            ),
+          );
+
+          return AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              return Opacity(
+                opacity: opacity.value,
+                child: Transform.translate(
+                  offset: slide.value * 100,
+                  child: child,
+                ),
+              );
+            },
+            child: Card(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: ListTile(
+                leading: Icon(_getIcon(index)),
+                title: Text(items[index]),
+                trailing: const Icon(Icons.chevron_right),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  IconData _getIcon(int index) {
+    return [Icons.inbox, Icons.star, Icons.send, Icons.drafts, Icons.delete][index];
+  }
+}
+```
+
+## Interval Curve Explained
+```
+Controller Timeline (0.0 to 1.0)
+|----Item 1----|     (0.0 - 0.4)
+    |----Item 2----|  (0.1 - 0.5)
+        |----Item 3----|  (0.2 - 0.6)
+            |----Item 4----|  (0.3 - 0.7)
+                |----Item 5----|  (0.4 - 0.8)
+```
+
+---
+
+# 8. Rive & Lottie Integration
+
+## Lottie (JSON-based Animations)
+
+**pubspec.yaml:**
+```yaml
+dependencies:
+  lottie: ^3.1.2
+```
+
+**Usage:**
+```dart
+import 'package:lottie/lottie.dart';
+
+class LottieExample extends StatelessWidget {
+  const LottieExample({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // From network
+        Lottie.network(
+          'https://assets10.lottiefiles.com/packages/lf20_jcikwtux.json',
+          height: 200,
+          repeat: true,
+          reverse: true,
+          animate: true,
+        ),
+        // From assets
+        Lottie.asset(
+          'assets/animations/success.json',
+          controller: _animationController,
+          onLoaded: (composition) {
+            _animationController.duration = composition.duration;
+            _animationController.forward();
+          },
+        ),
+      ],
+    );
+  }
+}
+```
+
+## Rive (Interactive Vector Animations)
+
+**pubspec.yaml:**
+```yaml
+dependencies:
+  rive: ^0.13.9
+```
+
+**Usage:**
+```dart
+import 'package:rive/rive.dart';
+
+class RiveLoginButton extends StatefulWidget {
+  const RiveLoginButton({super.key});
+
+  @override
+  State<RiveLoginButton> createState() => _RiveLoginButtonState();
+}
+
+class _RiveLoginButtonState extends State<RiveLoginButton> {
+  StateMachineController? _controller;
+  SMITrigger? _successTrigger;
+  SMITrigger? _failTrigger;
+
+  void _onRiveInit(Artboard artboard) {
+    _controller = StateMachineController.fromArtboard(
+      artboard,
+      'State Machine 1',
+    );
+    if (_controller != null) {
+      artboard.addController(_controller!);
+      _successTrigger = _controller!.findInput<bool>('success') as SMITrigger?;
+      _failTrigger = _controller!.findInput<bool>('fail') as SMITrigger?;
+    }
+  }
+
+  void _playSuccess() => _successTrigger?.fire();
+  void _playFail() => _failTrigger?.fire();
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        // Simulate login check
+        Future.delayed(const Duration(seconds: 2), () {
+          _playSuccess();
+        });
+      },
+      child: SizedBox(
+        height: 150,
+        child: RiveAnimation.asset(
+          'assets/animations/login_button.riv',
+          onInit: _onRiveInit,
+        ),
+      ),
+    );
+  }
+}
+```
+
+## Lottie vs Rive
+| Feature | Lottie | Rive |
+|:---|:---|:---|
+| **Format** | JSON (After Effects export) | .riv (Rive editor) |
+| **Interactivity** | Limited (play/pause/loop) | Full state machines |
+| **File Size** | Larger | Smaller, optimized |
+| **Runtime Edit** | No | Yes (bones, constraints) |
+| **Use Case** | Splash screens, loaders | Interactive characters, game UI |
+| **Learning Curve** | Low (designer exports) | Medium (need Rive editor) |
+
+---
+
+# 9. Micro-interactions & UX Patterns
+
+## Button Press Effect
+```dart
+class AnimatedButton extends StatefulWidget {
+  final VoidCallback onPressed;
+  final String label;
+
+  const AnimatedButton({super.key, required this.onPressed, required this.label});
+
+  @override
+  State<AnimatedButton> createState() => _AnimatedButtonState();
+}
+
+class _AnimatedButtonState extends State<AnimatedButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 150),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.95).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => _controller.forward(),
+      onTapUp: (_) {
+        _controller.reverse();
+        widget.onPressed();
+      },
+      onTapCancel: () => _controller.reverse(),
+      child: AnimatedBuilder(
+        animation: _scale,
+        builder: (context, child) {
+          return Transform.scale(
+            scale: _scale.value,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Text(
+                widget.label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+}
+```
+
+## Skeleton Loading Shimmer
+```dart
+class ShimmerLoading extends StatefulWidget {
+  final Widget child;
+  const ShimmerLoading({super.key, required this.child});
+
+  @override
+  State<ShimmerLoading> createState() => _ShimmerLoadingState();
+}
+
+class _ShimmerLoadingState extends State<ShimmerLoading>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController.unbounded(vsync: this)
+      ..repeat(min: -0.5, max: 1.5, period: const Duration(milliseconds: 1500));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return ShaderMask(
+          shaderCallback: (bounds) {
+            return LinearGradient(
+              colors: const [
+                Color(0xFFE0E0E0),
+                Color(0xFFF5F5F5),
+                Color(0xFFE0E0E0),
+              ],
+              stops: const [0.0, 0.5, 1.0],
+              transform: _SlideGradientTransform(_controller.value),
+            ).createShader(bounds);
+          },
+          child: widget.child,
+        );
+      },
+    );
+  }
+}
+
+class _SlideGradientTransform extends GradientTransform {
+  final double percent;
+  const _SlideGradientTransform(this.percent);
+
+  @override
+  Matrix4? transform(Rect bounds, {TextDirection? textDirection}) {
+    return Matrix4.translationValues(bounds.width * percent, 0, 0);
+  }
+}
+```
+
+---
+
+# 10. Performance & Best Practices
+
+## The Golden Rules
+| Rule | Why It Matters |
+|:---|:---|
+| **Always dispose controllers** | Prevents memory leaks and Ticker crashes |
+| **Use `const` widgets inside animations** | Reduces unnecessary rebuilds |
+| **Prefer `AnimatedBuilder` over `setState`** | Rebuilds only the animated widget, not the whole screen |
+| **Use `TickerProviderStateMixin` carefully** | One ticker per screen; use `SingleTickerProviderStateMixin` when possible |
+| **Avoid animating heavy widgets** | Don't animate `ListView` with 1000 items; animate containers instead |
+| **Use `RepaintBoundary` for complex animations** | Isolates painting to prevent full-tree repaints |
+
+## Performance Widgets
+```dart
+// Wrap complex animated widgets
+RepaintBoundary(
+  child: AnimatedBuilder(
+    animation: _controller,
+    builder: (context, child) {
+      return CustomPaint(
+        size: const Size(200, 200),
+        painter: MyComplexPainter(_controller.value),
+      );
+    },
+  ),
+)
+```
+
+## Animation Anti-Patterns
+```dart
+// ❌ BAD: Animating inside build with setState
+@override
+Widget build(BuildContext context) {
+  return GestureDetector(
+    onTap: () {
+      setState(() => _width = 200); // Triggers full rebuild every frame if animated
+    },
+    child: AnimatedContainer(...), // This is fine, but don't wrap in setState loop
+  );
+}
+
+// ✅ GOOD: Let the animation system handle it
+AnimationController _controller;
+// Controller drives the animation independently of setState
+```
+
+---
+
+# 11. Hands-On Project: Animated UI Kit
+
+## Project Overview
+Build **FlutterMotion Kit** — a complete animated UI library with:
+- Animated login screen with staggered entry
+- Hero transitions between product list and detail
+- Interactive buttons with micro-interactions
+- Lottie loading states
+- Custom page transitions
+- Biometric shimmer lock (reuse Day 17 concept)
+
+## Complete App Code
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:lottie/lottie.dart';
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(statusBarColor: Colors.transparent),
+  );
+  runApp(const FlutterMotionApp());
+}
+
+// ==================== APP ROOT ====================
+class FlutterMotionApp extends StatelessWidget {
+  const FlutterMotionApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'FlutterMotion Kit',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+      ),
+      home: const WelcomeScreen(),
+    );
+  }
+}
+
+// ==================== WELCOME SCREEN ====================
+class WelcomeScreen extends StatefulWidget {
+  const WelcomeScreen({super.key});
+
+  @override
+  State<WelcomeScreen> createState() => _WelcomeScreenState();
+}
+
+class _WelcomeScreenState extends State<WelcomeScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    );
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Background gradient
+          AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              return Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color.lerp(Colors.deepPurple, Colors.purple, _controller.value)!,
+                      Color.lerp(Colors.indigo, Colors.blue, _controller.value)!,
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+          // Content
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Spacer(),
+                  // Logo with scale animation
+                  TweenAnimationBuilder(
+                    tween: Tween<double>(begin: 0, end: 1),
+                    duration: const Duration(milliseconds: 800),
+                    curve: Curves.elasticOut,
+                    builder: (context, value, child) {
+                      return Transform.scale(
+                        scale: value,
+                        child: Container(
+                          width: 120,
+                          height: 120,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(30),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.2),
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.animation,
+                            size: 60,
+                            color: Colors.deepPurple,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 40),
+                  // Staggered text
+                  _buildStaggeredText('FlutterMotion', 0.2, 32, FontWeight.bold),
+                  const SizedBox(height: 12),
+                  _buildStaggeredText('Animation UI Kit', 0.4, 18, FontWeight.normal),
+                  const Spacer(),
+                  // Animated button
+                  TweenAnimationBuilder(
+                    tween: Tween<Offset>(
+                      begin: const Offset(0, 100),
+                      end: Offset.zero,
+                    ),
+                    duration: const Duration(milliseconds: 800),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, offset, child) {
+                      return Transform.translate(
+                        offset: offset,
+                        child: AnimatedButton(
+                          label: 'Get Started',
+                          onPressed: () => Navigator.push(
+                            context,
+                            PageRouteBuilder(
+                              pageBuilder: (_, animation, __) {
+                                return FadeTransition(
+                                  opacity: animation,
+                                  child: const DashboardScreen(),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStaggeredText(
+    String text,
+    double delay,
+    double fontSize,
+    FontWeight weight,
+  ) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final interval = Interval(delay, delay + 0.4, curve: Curves.easeOut);
+        final opacity = interval.transform(_controller.value).clamp(0.0, 1.0);
+        final slide = Tween<Offset>(
+          begin: const Offset(0, 30),
+          end: Offset.zero,
+        ).transform(interval.transform(_controller.value));
+
+        return Opacity(
+          opacity: opacity,
+          child: Transform.translate(
+            offset: slide,
+            child: Text(
+              text,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: fontSize,
+                fontWeight: weight,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ==================== ANIMATED BUTTON ====================
+class AnimatedButton extends StatefulWidget {
+  final VoidCallback onPressed;
+  final String label;
+
+  const AnimatedButton({super.key, required this.onPressed, required this.label});
+
+  @override
+  State<AnimatedButton> createState() => _AnimatedButtonState();
+}
+
+class _AnimatedButtonState extends State<AnimatedButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 150),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.95).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => _controller.forward(),
+      onTapUp: (_) {
+        _controller.reverse();
+        widget.onPressed();
+      },
+      onTapCancel: () => _controller.reverse(),
+      child: AnimatedBuilder(
+        animation: _scale,
+        builder: (context, child) {
+          return Transform.scale(
+            scale: _scale.value,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Text(
+                widget.label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.deepPurple,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ==================== DASHBOARD SCREEN ====================
+class DashboardScreen extends StatefulWidget {
+  const DashboardScreen({super.key});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _listController;
+
+  @override
+  void initState() {
+    super.initState();
+    _listController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+    _listController.forward();
+  }
+
+  @override
+  void dispose() {
+    _listController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey.shade50,
+      appBar: AppBar(
+        title: const Text('Animation Components'),
+        backgroundColor: Colors.deepPurple,
+        foregroundColor: Colors.white,
+      ),
+      body: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: 6,
+        itemBuilder: (context, index) {
+          final double start = index * 0.1;
+          final double end = start + 0.5;
+
+          final Animation<double> opacity = Tween<double>(begin: 0, end: 1).animate(
+            CurvedAnimation(
+              parent: _listController,
+              curve: Interval(start, end, curve: Curves.easeOut),
+            ),
+          );
+
+          final Animation<Offset> slide = Tween<Offset>(
+            begin: const Offset(0, 0.3),
+            end: Offset.zero,
+          ).animate(
+            CurvedAnimation(
+              parent: _listController,
+              curve: Interval(start, end, curve: Curves.easeOutCubic),
+            ),
+          );
+
+          return AnimatedBuilder(
+            animation: _listController,
+            builder: (context, child) {
+              return Opacity(
+                opacity: opacity.value,
+                child: Transform.translate(
+                  offset: Offset(0, slide.value.dy * 50),
+                  child: child,
+                ),
+              );
+            },
+            child: _buildComponentCard(index),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildComponentCard(int index) {
+    final items = [
+      ('Hero Transitions', Icons.image, Colors.orange),
+      ('Implicit Animations', Icons.auto_awesome, Colors.pink),
+      ('Explicit Controls', Icons.tune, Colors.teal),
+      ('Micro Interactions', Icons.touch_app, Colors.indigo),
+      ('Staggered Lists', Icons.format_list_numbered, Colors.green),
+      ('Loading States', Icons.hourglass_top, Colors.blue),
+    ];
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        leading: Hero(
+          tag: 'icon-$index',
+          child: Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: items[index].$3.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(items[index].$2, color: items[index].$3),
+          ),
+        ),
+        title: Text(
+          items[index].$1,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _navigateToDetail(index, items[index]),
+      ),
+    );
+  }
+
+  void _navigateToDetail(int index, (String, IconData, Color) item) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ComponentDetailScreen(index: index, item: item),
+      ),
+    );
+  }
+}
+
+// ==================== COMPONENT DETAIL ====================
+class ComponentDetailScreen extends StatelessWidget {
+  final int index;
+  final (String, IconData, Color) item;
+
+  const ComponentDetailScreen({super.key, required this.index, required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 250,
+            pinned: true,
+            flexibleSpace: FlexibleSpaceBar(
+              title: Text(item.$1),
+              background: Container(
+                color: item.$3.withOpacity(0.8),
+                child: Center(
+                  child: Hero(
+                    tag: 'icon-$index',
+                    child: Icon(item.$2, size: 100, color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Interactive Demo',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildDemoWidget(index),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDemoWidget(int index) {
+    switch (index) {
+      case 0:
+        return const Center(child: Text('Hero transition demo complete!'));
+      case 1:
+        return const ImplicitDemoWidget();
+      case 2:
+        return const ExplicitAnimationDemo();
+      case 3:
+        return const AnimatedButton(label: 'Press Me', onPressed: null);
+      case 4:
+        return const StaggeredListAnimation();
+      case 5:
+        return Container(
+          height: 200,
+          alignment: Alignment.center,
+          child: const CircularProgressIndicator(),
+        );
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+}
+
+// ==================== IMPLICIT DEMO ====================
+class ImplicitDemoWidget extends StatefulWidget {
+  const ImplicitDemoWidget({super.key});
+
+  @override
+  State<ImplicitDemoWidget> createState() => _ImplicitDemoWidgetState();
+}
+
+class _ImplicitDemoWidgetState extends State<ImplicitDemoWidget> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: GestureDetector(
+        onTap: () => setState(() => _isExpanded = !_isExpanded),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 600),
+          curve: Curves.easeInOutBack,
+          width: _isExpanded ? 300 : 150,
+          height: _isExpanded ? 300 : 150,
+          decoration: BoxDecoration(
+            color: _isExpanded ? Colors.pink : Colors.purple,
+            borderRadius: BorderRadius.circular(_isExpanded ? 40 : 20),
+            boxShadow: [
+              BoxShadow(
+                color: (_isExpanded ? Colors.pink : Colors.purple).withOpacity(0.4),
+                blurRadius: _isExpanded ? 40 : 10,
+                offset: Offset(0, _isExpanded ? 20 : 5),
+              ),
+            ],
+          ),
+          child: Center(
+            child: AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 400),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: _isExpanded ? 24 : 16,
+                fontWeight: FontWeight.bold,
+              ),
+              child: const Text('Tap Me!'),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 12. Common Mistakes & How to Avoid Them
+
+## Mistake 1: Forgetting to Dispose Controllers
+```dart
+// ❌ WRONG - Memory leak and Ticker crash
+class MyWidget extends StatefulWidget {
+  @override
+  State<MyWidget> createState() => _MyWidgetState();
+}
+
+class _MyWidgetState extends State<MyWidget> with TickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: Duration(seconds: 1));
+  }
+  // Missing dispose!
+}
+
+// ✅ CORRECT - Always clean up
+@override
+void dispose() {
+  _controller.dispose();
+  super.dispose();
+}
+```
+
+## Mistake 2: Using setState Inside Animation Loop
+```dart
+// ❌ WRONG - Rebuilds entire tree every frame
+_controller.addListener(() {
+  setState(() {}); // Rebuilds everything!
+});
+
+// ✅ CORRECT - Use AnimatedBuilder
+AnimatedBuilder(
+  animation: _controller,
+  builder: (context, child) {
+    return Transform.rotate(angle: _controller.value, child: child);
+  },
+  child: const ExpensiveWidget(), // This doesn't rebuild!
+)
+```
+
+## Mistake 3: Animating Without Curves
+```dart
+// ❌ WRONG - Linear feels robotic
+AnimationController(duration: Duration(seconds: 1), vsync: this);
+
+// ✅ CORRECT - Add easing for natural feel
+CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
+```
+
+## Mistake 4: Hero Tag Collisions
+```dart
+// ❌ WRONG - Duplicate tags cause crash
+ListView.builder(
+  itemBuilder: (context, index) {
+    return Hero(tag: 'image', child: Image.network(...)); // Same tag!
+  },
+)
+
+// ✅ CORRECT - Unique tags
+Hero(tag: 'image-$index', child: Image.network(...))
+```
+
+## Mistake 5: Not Using SingleTickerProviderStateMixin
+```dart
+// ❌ WRONG - Wastes resources
+class _MyState extends State<MyWidget> with TickerProviderStateMixin {
+  // Only need one ticker, but using multi-ticker mixin
+}
+
+// ✅ CORRECT - Use single when possible
+class _MyState extends State<MyWidget> with SingleTickerProviderStateMixin {
+  // Efficient for single animation
+}
+```
+
+---
+
+# 13. Day 18 Checklist
+
+Use this checklist to verify mastery:
+
+- [ ] Understands difference between implicit and explicit animations
+- [ ] Can implement AnimatedContainer with multiple property changes
+- [ ] Can use AnimatedOpacity for fade in/out effects
+- [ ] Can implement AnimatedCrossFade for widget swapping
+- [ ] Understands AnimationController lifecycle (forward, reverse, repeat)
+- [ ] Can create custom Tweens for any data type (Color, Size, Offset)
+- [ ] Can apply Curves to animations for natural motion
+- [ ] Can implement Hero animations between screens
+- [ ] Can use AnimatedBuilder for performance-optimized animations
+- [ ] Can create staggered list animations with Interval curves
+- [ ] Can integrate Lottie animations from assets and network
+- [ ] Can integrate basic Rive animations
+- [ ] Can build micro-interactions (button presses, toggles)
+- [ ] Understands when to use implicit vs explicit animations
+- [ ] Always disposes AnimationControllers
+- [ ] Built the FlutterMotion Kit app with multiple animation types
+- [ ] App has staggered entry animations
+- [ ] App has Hero transitions
+- [ ] App has interactive button animations
+- [ ] Pushed the project to GitHub
+
+---
+
+# Key Takeaways (Memorize These!)
+
+1. **Implicit animations are for simple property changes** — Use AnimatedContainer, AnimatedOpacity when you just need to tween between two values.
+
+2. **Explicit animations give full control** — Use AnimationController + Tween when you need to control timing, sequencing, or complex interactions.
+
+3. **Always dispose your controllers** — Forgetting `.dispose()` causes memory leaks and Ticker crashes when navigating away.
+
+4. **Use AnimatedBuilder, not setState** — Rebuild only what animates. Keep expensive widgets outside the builder.
+
+5. **Hero tags must be unique** — Duplicate Hero tags cause runtime exceptions. Always include the index or ID.
+
+6. **Curves make animations feel natural** — Linear motion feels robotic. Ease-in-out is your safest default curve.
+
+7. **Stagger with Interval curves** — Use Interval within CurvedAnimation to create cascading effects with a single controller.
+
+8. **Lottie for complex, Rive for interactive** — Lottie plays After Effects animations; Rive allows runtime state manipulation.
+
+9. **Performance: const + RepaintBoundary** — Mark static children as `const` and wrap complex animations in RepaintBoundary.
+
+10. **Motion has meaning** — Every animation should communicate something (state change, hierarchy, spatial relationship). Never animate just because you can.
+
+---
+
+# Extra Practice (Do These Tonight!)
+
+1. **Animated Chart App:** Build a bar chart where bars grow from bottom with staggered animations. Use AnimatedContainer for bar heights.
+
+2. **Pull-to-Refresh Animation:** Create a custom refresh indicator with a rotating icon that morphs into a checkmark on completion.
+
+3. **Page Transition Library:** Build a package of custom PageRoute transitions: slide, scale, fade, cube rotation.
+
+4. **Animated Bottom Navigation:** Create a bottom nav where the active item scales up, changes color, and has a sliding indicator below it.
+
+5. **Confetti Celebration:** Trigger a confetti burst using CustomPainter and particle physics when user completes a task.
+
+---
+
+**Congratulations!** You've completed Day 18. You now master Flutter animations — from simple implicit tweens to complex explicit sequences, Hero transitions, and production-ready Lottie/Rive integration.
+
+**Next Up → Day 19: Custom Painter, RenderObjects & Advanced UI**
+
+---
+
+*Generated for 30Days Flutter: Zero to Hero (2026 Edition)*  
+*Day 18: Animations — Complete Deep Dive*
