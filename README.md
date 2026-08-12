@@ -31411,6 +31411,2078 @@ Use this checklist to verify mastery:
 *Generated for 30Days Flutter: Zero to Hero (2026 Edition)*  
 *Day 19: Custom Painter, RenderObjects & Advanced UI — Complete Deep Dive*
 
+# Day 20: Native Features & Platform Channels
+# Complete Deep Dive
+
+**Goal:** Master device hardware access and native platform integration in Flutter. Implement camera capture, file picking, GPS geolocation, Google Maps, local notifications, device sensors, and build cross-platform bridges using MethodChannel and EventChannel.
+
+---
+
+# Table of Contents
+1. Why Native Features Are Essential in 2026
+2. Native Access Architecture Overview
+3. Camera & Image Picker (image_picker)
+4. File Picker & Document Handling
+5. Geolocation & Maps (google_maps_flutter)
+6. Local Notifications (flutter_local_notifications)
+7. Sensors & Hardware Access
+8. Platform Channels — MethodChannel & EventChannel
+9. Permission Handling Best Practices
+10. Performance & Best Practices
+11. Hands-On Project: Location-Based Photo Journal
+12. Common Mistakes & How to Avoid Them
+13. Day 20 Checklist
+
+---
+
+# 1. Why Native Features Are Essential in 2026
+
+## The Mobile-First Reality
+| Feature | User Expectation | Without It |
+|:---|:---|:---|
+| **Camera** | Capture photos/videos instantly | App feels like a web wrapper |
+| **GPS/Maps** | Location-aware content, navigation | Static, disconnected experience |
+| **Notifications** | Timely alerts, reminders | Users forget your app exists |
+| **File Access** | Share, edit, save documents | Broken workflow, user frustration |
+| **Sensors** | Fitness tracking, auto-rotate, shake | Limited interactivity |
+
+## The Native vs Flutter Divide
+Flutter runs in a **single isolate** (Dart VM) but needs to talk to **platform-specific APIs** (Android Java/Kotlin, iOS Swift/Objective-C). This bridge is called **Platform Channels**.
+
+```
+Flutter Layer (Dart)          Platform Layer (Native)
+     |                                |
+  Widget Tree                    Android Activity
+     |                                |
+  Dart Code  <--MethodChannel-->  Java/Kotlin
+     |                                |
+  Dart Code  <--EventChannel-->   iOS UIViewController
+     |                                |
+  Dart Code  <--Pigeon-->         Swift/ObjC
+```
+
+---
+
+# 2. Native Access Architecture Overview
+
+## The Communication Flow
+```
+Dart Side                              Native Side
+---------                              -----------
+MethodChannel.invokeMethod()  ----->   MethodCallHandler
+     |                                      |
+     |<-----  Result (async)  ------        |
+     |                                      |
+EventChannel.receiveBroadcastStream() <--  EventSink
+     |                                      |
+     |<-----  Stream of events  -----       |
+```
+
+## Package Ecosystem Strategy
+| Approach | Use Case | Example |
+|:---|:---|:---|
+| **Official Plugin** | Common feature, well-maintained | `image_picker`, `google_maps_flutter` |
+| **Community Plugin** | Niche feature, vetted package | `flutter_local_notifications`, `geolocator` |
+| **Platform Channel** | No plugin exists, custom native code | Custom hardware SDK, proprietary API |
+
+## Permission Model (Android 13+ / iOS 16+)
+```
+User Action → Check Permission → Request if Needed → Handle Result
+     |              |                    |                  |
+     |           Granted?            Denied?          Permanently Denied?
+     |              |                    |                  |
+     |           Proceed          Explain Rationale    Open App Settings
+     |              |                    |
+     |         Execute          Show Dialog → Request Again
+```
+
+---
+
+# 3. Camera & Image Picker (image_picker)
+
+## Setup
+
+**pubspec.yaml:**
+```yaml
+dependencies:
+  image_picker: ^1.1.2
+  permission_handler: ^11.3.1
+```
+
+**Android (android/app/src/main/AndroidManifest.xml):**
+```xml
+<uses-permission android:name="android.permission.CAMERA" />
+<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+```
+
+**iOS (ios/Runner/Info.plist):**
+```xml
+<key>NSCameraUsageDescription</key>
+<string>This app needs camera access to capture photos</string>
+<key>NSPhotoLibraryUsageDescription</key>
+<string>This app needs photo library access to select images</string>
+<key>NSPhotoLibraryAddUsageDescription</key>
+<string>This app needs access to save photos to your library</string>
+<key>NSMicrophoneUsageDescription</key>
+<string>This app needs microphone access for video recording</string>
+```
+
+## Complete Image Service
+```dart
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
+
+class ImagePickerService {
+  final ImagePicker _picker = ImagePicker();
+
+  /// Pick image from gallery
+  Future<File?> pickImageFromGallery() async {
+    final status = await Permission.photos.request();
+    if (status.isDenied || status.isPermanentlyDenied) {
+      throw Exception('Photo library permission denied');
+    }
+
+    final XFile? image = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1920,
+      maxHeight: 1080,
+      imageQuality: 85, // Compress to 85% quality
+    );
+    return image != null ? File(image.path) : null;
+  }
+
+  /// Capture image from camera
+  Future<File?> captureImageFromCamera() async {
+    final status = await Permission.camera.request();
+    if (status.isDenied || status.isPermanentlyDenied) {
+      throw Exception('Camera permission denied');
+    }
+
+    final XFile? image = await _picker.pickImage(
+      source: ImageSource.camera,
+      maxWidth: 1920,
+      maxHeight: 1080,
+      imageQuality: 85,
+      preferredCameraDevice: CameraDevice.rear,
+    );
+    return image != null ? File(image.path) : null;
+  }
+
+  /// Pick multiple images
+  Future<List<File>> pickMultipleImages({int limit = 10}) async {
+    final status = await Permission.photos.request();
+    if (status.isDenied) throw Exception('Permission denied');
+
+    final List<XFile> images = await _picker.pickMultiImage(
+      maxWidth: 1920,
+      maxHeight: 1080,
+      imageQuality: 85,
+      limit: limit,
+    );
+    return images.map((e) => File(e.path)).toList();
+  }
+
+  /// Capture video
+  Future<File?> captureVideo() async {
+    final status = await Permission.camera.request();
+    if (status.isDenied) throw Exception('Camera permission denied');
+
+    final XFile? video = await _picker.pickVideo(
+      source: ImageSource.camera,
+      maxDuration: const Duration(minutes: 5),
+    );
+    return video != null ? File(video.path) : null;
+  }
+
+  /// Pick video from gallery
+  Future<File?> pickVideoFromGallery() async {
+    final status = await Permission.photos.request();
+    if (status.isDenied) throw Exception('Permission denied');
+
+    final XFile? video = await _picker.pickVideo(
+      source: ImageSource.gallery,
+      maxDuration: const Duration(minutes: 30),
+    );
+    return video != null ? File(video.path) : null;
+  }
+}
+```
+
+## Image Preview Widget with Hero
+```dart
+class ImagePreviewScreen extends StatelessWidget {
+  final File imageFile;
+  final String heroTag;
+
+  const ImagePreviewScreen({
+    super.key,
+    required this.imageFile,
+    required this.heroTag,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Center(
+        child: Hero(
+          tag: heroTag,
+          child: InteractiveViewer(
+            minScale: 0.5,
+            maxScale: 4.0,
+            child: Image.file(imageFile, fit: BoxFit.contain),
+          ),
+        ),
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 4. File Picker & Document Handling
+
+## Setup
+
+**pubspec.yaml:**
+```yaml
+dependencies:
+  file_picker: ^8.0.5
+  open_file: ^3.3.2
+  path_provider: ^2.1.3
+```
+
+## Complete File Service
+```dart
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
+
+class FileService {
+  /// Pick any file type
+  Future<PlatformFile?> pickFile({List<String>? allowedExtensions}) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: allowedExtensions != null ? FileType.custom : FileType.any,
+      allowedExtensions: allowedExtensions,
+      allowMultiple: false,
+      withData: true, // Read file bytes into memory
+    );
+    return result?.files.first;
+  }
+
+  /// Pick multiple files
+  Future<List<PlatformFile>> pickMultipleFiles() async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      withData: true,
+    );
+    return result?.files ?? [];
+  }
+
+  /// Open file with system app
+  Future<OpenResult> openFile(String path) async {
+    return await OpenFile.open(path);
+  }
+
+  /// Save file to app documents directory
+  Future<File> saveToAppDirectory(PlatformFile file) async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final destination = File('${appDir.path}/${file.name}');
+    if (file.bytes != null) {
+      return await destination.writeAsBytes(file.bytes!);
+    }
+    return await File(file.path!).copy(destination.path);
+  }
+
+  /// Get app directories
+  Future<Map<String, Directory>> getDirectories() async {
+    return {
+      'documents': await getApplicationDocumentsDirectory(),
+      'temporary': await getTemporaryDirectory(),
+      'downloads': await getDownloadsDirectory() ?? await getApplicationDocumentsDirectory(),
+    };
+  }
+
+  /// Create directory
+  Future<Directory> createDirectory(String name) async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final newDir = Directory('${appDir.path}/$name');
+    if (!await newDir.exists()) {
+      await newDir.create(recursive: true);
+    }
+    return newDir;
+  }
+
+  /// List files in directory
+  Future<List<FileSystemEntity>> listFiles(String path) async {
+    final dir = Directory(path);
+    if (await dir.exists()) {
+      return await dir.list().toList();
+    }
+    return [];
+  }
+
+  /// Delete file
+  Future<void> deleteFile(String path) async {
+    final file = File(path);
+    if (await file.exists()) {
+      await file.delete();
+    }
+  }
+}
+```
+
+---
+
+# 5. Geolocation & Maps (google_maps_flutter)
+
+## Setup
+
+**pubspec.yaml:**
+```yaml
+dependencies:
+  google_maps_flutter: ^2.7.0
+  geolocator: ^12.0.0
+  geocoding: ^3.0.0
+```
+
+**Android (android/app/src/main/AndroidManifest.xml):**
+```xml
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+<uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
+<application
+    android:label="Your App"
+    android:name="${applicationName}"
+    android:icon="@mipmap/ic_launcher">
+
+    <meta-data
+        android:name="com.google.android.geo.API_KEY"
+        android:value="YOUR_ANDROID_API_KEY" />
+</application>
+```
+
+**iOS (ios/Runner/AppDelegate.swift):**
+```swift
+import UIKit
+import Flutter
+import GoogleMaps
+
+@UIApplicationMain
+@objc class AppDelegate: FlutterAppDelegate {
+  override func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+  ) -> Bool {
+    GMSServices.provideAPIKey("YOUR_IOS_API_KEY")
+    GeneratedPluginRegistrant.register(with: self)
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+}
+```
+
+**iOS (ios/Runner/Info.plist):**
+```xml
+<key>NSLocationWhenInUseUsageDescription</key>
+<string>This app needs location access to show your position on the map</string>
+<key>NSLocationAlwaysUsageDescription</key>
+<string>This app needs background location for tracking</string>
+```
+
+## Complete Location Service
+```dart
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
+
+class LocationService {
+  /// Check and request location permission
+  Future<bool> handlePermission() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      throw Exception('Location services are disabled');
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        throw Exception('Location permission denied');
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      throw Exception('Location permission permanently denied. Please enable in settings.');
+    }
+
+    return true;
+  }
+
+  /// Get current position
+  Future<Position> getCurrentPosition() async {
+    await handlePermission();
+    return await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+  }
+
+  /// Get last known position (fast, may be stale)
+  Future<Position?> getLastKnownPosition() async {
+    return await Geolocator.getLastKnownPosition();
+  }
+
+  /// Stream of position updates
+  Stream<Position> getPositionStream() {
+    return Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10, // Update every 10 meters
+      ),
+    );
+  }
+
+  /// Get address from coordinates (reverse geocoding)
+  Future<String> getAddressFromCoordinates(double lat, double lng) async {
+    try {
+      List<Placemark> placemarks = await placemarkFromCoordinates(lat, lng);
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+        return '${place.street}, ${place.locality}, ${place.country}';
+      }
+      return 'Unknown location';
+    } catch (e) {
+      return 'Could not determine address';
+    }
+  }
+
+  /// Get coordinates from address (forward geocoding)
+  Future<List<Location>> getCoordinatesFromAddress(String address) async {
+    return await locationFromAddress(address);
+  }
+
+  /// Calculate distance between two points (in meters)
+  double calculateDistance(double startLat, double startLng, double endLat, double endLng) {
+    return Geolocator.distanceBetween(startLat, startLng, endLat, endLng);
+  }
+
+  /// Open device location settings
+  Future<void> openLocationSettings() async {
+    await Geolocator.openLocationSettings();
+  }
+
+  /// Open app settings
+  Future<void> openAppSettings() async {
+    await Geolocator.openAppSettings();
+  }
+}
+```
+
+## Google Maps Widget
+```dart
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+
+class MapScreen extends StatefulWidget {
+  final LatLng? initialPosition;
+
+  const MapScreen({super.key, this.initialPosition});
+
+  @override
+  State<MapScreen> createState() => _MapScreenState();
+}
+
+class _MapScreenState extends State<MapScreen> {
+  GoogleMapController? _mapController;
+  LatLng? _currentPosition;
+  final Set<Marker> _markers = {};
+  final LocationService _locationService = LocationService();
+
+  static const CameraPosition _defaultPosition = CameraPosition(
+    target: LatLng(37.7749, -122.4194), // San Francisco
+    zoom: 12,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeLocation();
+  }
+
+  Future<void> _initializeLocation() async {
+    try {
+      final position = await _locationService.getCurrentPosition();
+      final latLng = LatLng(position.latitude, position.longitude);
+      setState(() {
+        _currentPosition = latLng;
+        _markers.add(
+          Marker(
+            markerId: const MarkerId('current_location'),
+            position: latLng,
+            infoWindow: const InfoWindow(title: 'You are here'),
+            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          ),
+        );
+      });
+      _mapController?.animateCamera(CameraUpdate.newLatLng(latLng));
+    } catch (e) {
+      debugPrint('Location error: $e');
+    }
+  }
+
+  void _onMapCreated(GoogleMapController controller) {
+    _mapController = controller;
+    if (_currentPosition != null) {
+      controller.animateCamera(CameraUpdate.newLatLng(_currentPosition!));
+    }
+  }
+
+  void _addMarker(LatLng position) {
+    setState(() {
+      _markers.add(
+        Marker(
+          markerId: MarkerId('marker_${_markers.length}'),
+          position: position,
+          infoWindow: InfoWindow(
+            title: 'Marker ${_markers.length}',
+            snippet: '${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}',
+          ),
+          onTap: () => _showMarkerDetails(position),
+        ),
+      );
+    });
+  }
+
+  void _showMarkerDetails(LatLng position) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Location Details', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Text('Latitude: ${position.latitude}'),
+            Text('Longitude: ${position.longitude}'),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _mapController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Map Explorer')),
+      body: GoogleMap(
+        mapType: MapType.normal,
+        initialCameraPosition: _defaultPosition,
+        onMapCreated: _onMapCreated,
+        markers: _markers,
+        myLocationEnabled: true,
+        myLocationButtonEnabled: true,
+        zoomControlsEnabled: true,
+        mapToolbarEnabled: true,
+        onTap: _addMarker,
+        onLongPress: (position) => _addMarker(position),
+      ),
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FloatingActionButton.small(
+            heroTag: 'zoom_in',
+            onPressed: () => _mapController?.animateCamera(CameraUpdate.zoomIn()),
+            child: const Icon(Icons.add),
+          ),
+          const SizedBox(height: 8),
+          FloatingActionButton.small(
+            heroTag: 'zoom_out',
+            onPressed: () => _mapController?.animateCamera(CameraUpdate.zoomOut()),
+            child: const Icon(Icons.remove),
+          ),
+          const SizedBox(height: 8),
+          FloatingActionButton(
+            heroTag: 'my_location',
+            onPressed: _initializeLocation,
+            child: const Icon(Icons.my_location),
+          ),
+        ],
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 6. Local Notifications (flutter_local_notifications)
+
+## Setup
+
+**pubspec.yaml:**
+```yaml
+dependencies:
+  flutter_local_notifications: ^17.2.1
+  timezone: ^0.9.4
+```
+
+**Android (android/app/src/main/AndroidManifest.xml):**
+```xml
+<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+<uses-permission android:name="android.permission.VIBRATE" />
+<uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+<application ...>
+    <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
+    <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+    <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+        <intent-filter>
+            <action android:name="android.intent.action.BOOT_COMPLETED"/>
+            <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+            <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+            <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+        </intent-filter>
+    </receiver>
+</application>
+```
+
+**iOS (ios/Runner/AppDelegate.swift):**
+```swift
+import flutter_local_notifications
+
+@UIApplicationMain
+@objc class AppDelegate: FlutterAppDelegate {
+  override func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+  ) -> Bool {
+    FlutterLocalNotificationsPlugin.setPluginRegistrantCallback { (registry) in
+      GeneratedPluginRegistrant.register(with: registry)
+    }
+
+    if #available(iOS 10.0, *) {
+      UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
+    }
+
+    GeneratedPluginRegistrant.register(with: self)
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+}
+```
+
+## Complete Notification Service
+```dart
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz;
+import 'package:timezone/data/latest.dart' as tz_data;
+
+class NotificationService {
+  static final FlutterLocalNotificationsPlugin _notifications =
+      FlutterLocalNotificationsPlugin();
+
+  static bool _initialized = false;
+
+  /// Initialize notification channels
+  static Future<void> initialize() async {
+    if (_initialized) return;
+
+    tz_data.initializeTimeZones();
+
+    const AndroidInitializationSettings androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    const DarwinInitializationSettings iosSettings = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+
+    const InitializationSettings initSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
+
+    await _notifications.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: _onNotificationTap,
+    );
+
+    // Create Android notification channel
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'high_importance_channel',
+      'High Importance Notifications',
+      description: 'This channel is used for important notifications',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+    );
+
+    await _notifications
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+
+    _initialized = true;
+  }
+
+  static void _onNotificationTap(NotificationResponse response) {
+    debugPrint('Notification tapped: ${response.payload}');
+  }
+
+  /// Show instant notification
+  static Future<void> showNotification({
+    required int id,
+    required String title,
+    required String body,
+    String? payload,
+  }) async {
+    await _notifications.show(
+      id,
+      title,
+      body,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'high_importance_channel',
+          'High Importance Notifications',
+          channelDescription: 'Important app notifications',
+          importance: Importance.high,
+          priority: Priority.high,
+          showWhen: true,
+          icon: '@mipmap/ic_launcher',
+          largeIcon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+      payload: payload,
+    );
+  }
+
+  /// Schedule notification
+  static Future<void> scheduleNotification({
+    required int id,
+    required String title,
+    required String body,
+    required DateTime scheduledDate,
+    String? payload,
+  }) async {
+    await _notifications.zonedSchedule(
+      id,
+      title,
+      body,
+      tz.TZDateTime.from(scheduledDate, tz.local),
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'scheduled_channel',
+          'Scheduled Notifications',
+          channelDescription: 'Scheduled reminder notifications',
+        ),
+        iOS: DarwinNotificationDetails(),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      payload: payload,
+    );
+  }
+
+  /// Show progress notification
+  static Future<void> showProgressNotification({
+    required int id,
+    required String title,
+    required int progress,
+    required int maxProgress,
+  }) async {
+    await _notifications.show(
+      id,
+      title,
+      '$progress% complete',
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          'progress_channel',
+          'Progress Notifications',
+          channelDescription: 'Shows download/upload progress',
+          importance: Importance.low,
+          priority: Priority.low,
+          onlyAlertOnce: true,
+          showProgress: true,
+          maxProgress: maxProgress,
+          progress: progress,
+          indeterminate: progress == 0,
+        ),
+      ),
+    );
+  }
+
+  /// Cancel specific notification
+  static Future<void> cancelNotification(int id) async {
+    await _notifications.cancel(id);
+  }
+
+  /// Cancel all notifications
+  static Future<void> cancelAll() async {
+    await _notifications.cancelAll();
+  }
+
+  /// Get pending notifications
+  static Future<List<PendingNotificationRequest>> getPendingNotifications() async {
+    return await _notifications.pendingNotificationRequests();
+  }
+}
+```
+
+---
+
+# 7. Sensors & Hardware Access
+
+## Available Sensors
+| Sensor | Package | Use Case |
+|:---|:---|:---|
+| **Accelerometer** | `sensors_plus` | Shake to refresh, step counter |
+| **Gyroscope** | `sensors_plus` | Rotation detection, game controls |
+| **Magnetometer** | `sensors_plus` | Compass, metal detector |
+| **Barometer** | `sensors_plus` | Altitude, weather prediction |
+| **Proximity** | `proximity_sensor` | Auto screen off during calls |
+| **Light** | `light_sensor` | Auto brightness adjustment |
+| **Battery** | `battery_plus` | Battery level, charging state |
+| **Connectivity** | `connectivity_plus` | WiFi, mobile, offline detection |
+
+## Complete Sensor Service
+```dart
+import 'package:sensors_plus/sensors_plus.dart';
+import 'package:battery_plus/battery_plus.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'dart:math' as math;
+
+class SensorService {
+  final Battery _battery = Battery();
+  final Connectivity _connectivity = Connectivity();
+
+  /// Accelerometer stream (x, y, z in m/s²)
+  Stream<AccelerometerEvent> get accelerometerStream => accelerometerEvents;
+
+  /// Gyroscope stream (x, y, z in rad/s)
+  Stream<GyroscopeEvent> get gyroscopeStream => gyroscopeEvents;
+
+  /// Magnetometer stream (x, y, z in μT)
+  Stream<MagnetometerEvent> get magnetometerStream => magnetometerEvents;
+
+  /// Shake detection stream
+  Stream<bool> get shakeStream {
+    return accelerometerEvents.map((event) {
+      final magnitude = math.sqrt(
+        event.x * event.x + event.y * event.y + event.z * event.z,
+      );
+      return magnitude > 20; // Shake threshold
+    }).where((isShaking) => isShaking);
+  }
+
+  /// Get current battery level (0-100)
+  Future<int> getBatteryLevel() async {
+    return await _battery.batteryLevel;
+  }
+
+  /// Battery state stream (charging, discharging, full)
+  Stream<BatteryState> get batteryStateStream => _battery.onBatteryStateChanged;
+
+  /// Connectivity stream (wifi, mobile, none)
+  Stream<List<ConnectivityResult>> get connectivityStream =>
+      _connectivity.onConnectivityChanged;
+
+  /// Check current connectivity
+  Future<List<ConnectivityResult>> checkConnectivity() async {
+    return await _connectivity.checkConnectivity();
+  }
+
+  /// Check if device is online
+  Future<bool> isOnline() async {
+    final results = await _connectivity.checkConnectivity();
+    return !results.contains(ConnectivityResult.none);
+  }
+
+  /// Compass heading from magnetometer + accelerometer
+  Stream<double> get compassHeadingStream {
+    return magnetometerEvents.map((event) {
+      final heading = math.atan2(event.y, event.x) * (180 / math.pi);
+      return heading < 0 ? heading + 360 : heading;
+    });
+  }
+}
+```
+
+## Shake Detector Widget
+```dart
+class ShakeDetector extends StatefulWidget {
+  final VoidCallback onShake;
+  final Widget child;
+  final double shakeThreshold;
+
+  const ShakeDetector({
+    super.key,
+    required this.onShake,
+    required this.child,
+    this.shakeThreshold = 20.0,
+  });
+
+  @override
+  State<ShakeDetector> createState() => _ShakeDetectorState();
+}
+
+class _ShakeDetectorState extends State<ShakeDetector> {
+  DateTime? _lastShake;
+  StreamSubscription<AccelerometerEvent>? _subscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscription = accelerometerEvents.listen(_handleAccelerometer);
+  }
+
+  void _handleAccelerometer(AccelerometerEvent event) {
+    final magnitude = math.sqrt(
+      event.x * event.x + event.y * event.y + event.z * event.z,
+    );
+
+    if (magnitude > widget.shakeThreshold) {
+      final now = DateTime.now();
+      if (_lastShake == null || now.difference(_lastShake!) > const Duration(seconds: 2)) {
+        _lastShake = now;
+        widget.onShake();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+```
+
+---
+
+# 8. Platform Channels — MethodChannel & EventChannel
+
+## When to Use Platform Channels
+- **No plugin exists** for your hardware/SDK
+- **Custom native library** integration (proprietary SDK)
+- **Platform-specific UI** that can't be built in Flutter
+- **Background execution** that Dart isolates can't handle
+
+## MethodChannel (Request/Response)
+
+**Dart Side:**
+```dart
+import 'package:flutter/services.dart';
+
+class BatteryChannel {
+  static const MethodChannel _channel = MethodChannel('com.example/battery');
+
+  /// Call native method and get result
+  static Future<int> getNativeBatteryLevel() async {
+    try {
+      final int level = await _channel.invokeMethod('getBatteryLevel');
+      return level;
+    } on PlatformException catch (e) {
+      throw Exception('Failed to get battery level: ${e.message}');
+    } on MissingPluginException catch (e) {
+      throw Exception('Plugin not implemented: ${e.message}');
+    }
+  }
+
+  /// Call with arguments
+  static Future<String> greetUser(String name) async {
+    final String result = await _channel.invokeMethod('greet', {'name': name});
+    return result;
+  }
+}
+```
+
+**Android Side (MainActivity.kt):**
+```kotlin
+package com.example.flutter_app
+
+import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
+import android.content.Context
+import android.content.Context.BATTERY_SERVICE
+import android.os.BatteryManager
+
+class MainActivity: FlutterActivity() {
+    private val CHANNEL = "com.example/battery"
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler {
+            call, result ->
+            when (call.method) {
+                "getBatteryLevel" -> {
+                    val batteryLevel = getBatteryLevel()
+                    if (batteryLevel != -1) {
+                        result.success(batteryLevel)
+                    } else {
+                        result.error("UNAVAILABLE", "Battery level not available.", null)
+                    }
+                }
+                "greet" -> {
+                    val name = call.argument<String>("name") ?: "User"
+                    result.success("Hello from Android, $name!")
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun getBatteryLevel(): Int {
+        val batteryManager = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+        return batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+    }
+}
+```
+
+**iOS Side (AppDelegate.swift):**
+```swift
+import UIKit
+import Flutter
+
+@UIApplicationMain
+@objc class AppDelegate: FlutterAppDelegate {
+    override func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+    ) -> Bool {
+        let controller = window?.rootViewController as! FlutterViewController
+        let batteryChannel = FlutterMethodChannel(
+            name: "com.example/battery",
+            binaryMessenger: controller.binaryMessenger
+        )
+
+        batteryChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
+            switch call.method {
+            case "getBatteryLevel":
+                let device = UIDevice.current
+                device.isBatteryMonitoringEnabled = true
+                if device.batteryState == .unknown {
+                    result(FlutterError(code: "UNAVAILABLE", message: "Battery info unavailable", details: nil))
+                } else {
+                    result(Int(device.batteryLevel * 100))
+                }
+            case "greet":
+                let args = call.arguments as? Dictionary<String, Any>
+                let name = args?["name"] as? String ?? "User"
+                result("Hello from iOS, \(name)!")
+            default:
+                result(FlutterMethodNotImplemented)
+            }
+        }
+
+        GeneratedPluginRegistrant.register(with: self)
+        return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    }
+}
+```
+
+## EventChannel (Stream of Events)
+
+**Dart Side:**
+```dart
+class SensorChannel {
+  static const EventChannel _channel = EventChannel('com.example/sensors');
+
+  static Stream<Map<String, dynamic>> get sensorStream {
+    return _channel.receiveBroadcastStream().map((event) {
+      return Map<String, dynamic>.from(event);
+    });
+  }
+}
+```
+
+**Android Side:**
+```kotlin
+import io.flutter.plugin.common.EventChannel
+import io.flutter.plugin.common.EventChannel.EventSink
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+
+class SensorStreamHandler(private val context: Context) : EventChannel.StreamHandler, SensorEventListener {
+    private var eventSink: EventSink? = null
+    private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    private val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+
+    override fun onListen(arguments: Any?, events: EventSink?) {
+        eventSink = events
+        sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_NORMAL)
+    }
+
+    override fun onCancel(arguments: Any?) {
+        sensorManager.unregisterListener(this)
+        eventSink = null
+    }
+
+    override fun onSensorChanged(event: SensorEvent?) {
+        event?.let {
+            val data = mapOf(
+                "x" to it.values[0],
+                "y" to it.values[1],
+                "z" to it.values[2]
+            )
+            eventSink?.success(data)
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+}
+
+// In MainActivity.kt:
+EventChannel(flutterEngine.dartExecutor.binaryMessenger, "com.example/sensors")
+    .setStreamHandler(SensorStreamHandler(this))
+```
+
+## Pigeon (Type-Safe Platform Channels)
+For production apps, use **Pigeon** for type-safe, generated code:
+
+```yaml
+dev_dependencies:
+  pigeon: ^20.0.0
+```
+
+```dart
+// Define API in Dart
+@HostApi()
+abstract class BatteryApi {
+  int getBatteryLevel();
+  String greetUser(String name);
+}
+```
+
+Pigeon generates Kotlin/Swift boilerplate automatically.
+
+---
+
+# 9. Permission Handling Best Practices
+
+## The Permission Flow
+```dart
+class PermissionService {
+  /// Request multiple permissions at once
+  static Future<Map<Permission, PermissionStatus>> requestPermissions(
+    List<Permission> permissions,
+  ) async {
+    return await permissions.request();
+  }
+
+  /// Check if permission is permanently denied
+  static Future<bool> isPermanentlyDenied(Permission permission) async {
+    return await permission.status.isPermanentlyDenied;
+  }
+
+  /// Show rationale dialog before requesting
+  static Future<bool> showRationaleDialog(
+    BuildContext context, {
+    required String title,
+    required String description,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(description),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Grant Permission'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  /// Open app settings
+  static Future<void> openSettings() async {
+    await openAppSettings();
+  }
+
+  /// Complete permission flow with rationale
+  static Future<bool> requestWithRationale(
+    BuildContext context,
+    Permission permission, {
+    required String title,
+    required String description,
+  }) async {
+    final status = await permission.status;
+
+    if (status.isGranted) return true;
+    if (status.isPermanentlyDenied) {
+      final shouldOpen = await showRationaleDialog(
+        context,
+        title: '$title Required',
+        description: 'This permission was permanently denied. Please enable it in app settings.',
+      );
+      if (shouldOpen) await openSettings();
+      return false;
+    }
+
+    final shouldRequest = await showRationaleDialog(
+      context,
+      title: title,
+      description: description,
+    );
+
+    if (!shouldRequest) return false;
+
+    final result = await permission.request();
+    return result.isGranted;
+  }
+}
+```
+
+---
+
+# 10. Performance & Best Practices
+
+## Native Feature Performance Rules
+| Rule | Impact | Why |
+|:---|:---|:---|
+| **Request permissions lazily** | Better UX | Don't ask at app launch; ask at point of need |
+| **Dispose stream subscriptions** | Prevents memory leaks | Always cancel sensor/location streams |
+| **Cache location results** | Faster UX | Last known position is instant vs GPS lock |
+| **Batch notifications** | Less battery drain | Group updates instead of firing individually |
+| **Use background execution carefully** | Battery life | iOS/Android both restrict background heavily |
+| **Compress images before upload** | Network efficiency | Use image_picker's imageQuality parameter |
+
+## Platform Channel Best Practices
+| Practice | Benefit |
+|:---|:---|
+| Use plugins over custom channels | Less code, tested, maintained |
+| Handle `MissingPluginException` | Graceful degradation on web/desktop |
+| Keep channel names unique | Format: `com.company.app/feature` |
+| Use Pigeon for complex APIs | Type safety, generated code, less boilerplate |
+| Don't block native threads | Use coroutines (Kotlin) / dispatch queues (Swift) |
+
+---
+
+# 11. Hands-On Project: Location-Based Photo Journal
+
+## Project Overview
+Build **GeoJournal** — a location-based photo journal app with:
+- Camera capture with GPS metadata
+- Google Maps with photo markers
+- Local notifications for daily reminders
+- File management for photo storage
+- Shake-to-refresh for journal entries
+- Battery-aware background sync
+
+## Complete App Code
+
+```dart
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:sensors_plus/sensors_plus.dart';
+import 'dart:math' as math;
+import 'dart:convert';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService.initialize();
+  runApp(const GeoJournalApp());
+}
+
+// ==================== DATA MODELS ====================
+class JournalEntry {
+  final String id;
+  final String imagePath;
+  final double latitude;
+  final double longitude;
+  final String address;
+  final DateTime timestamp;
+  final String? note;
+
+  JournalEntry({
+    required this.id,
+    required this.imagePath,
+    required this.latitude,
+    required this.longitude,
+    required this.address,
+    required this.timestamp,
+    this.note,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'imagePath': imagePath,
+    'latitude': latitude,
+    'longitude': longitude,
+    'address': address,
+    'timestamp': timestamp.toIso8601String(),
+    'note': note,
+  };
+
+  factory JournalEntry.fromJson(Map<String, dynamic> json) => JournalEntry(
+    id: json['id'],
+    imagePath: json['imagePath'],
+    latitude: json['latitude'],
+    longitude: json['longitude'],
+    address: json['address'],
+    timestamp: DateTime.parse(json['timestamp']),
+    note: json['note'],
+  );
+}
+
+// ==================== STORAGE SERVICE ====================
+class JournalStorage {
+  static Future<Directory> get _journalDir async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final journalDir = Directory('${appDir.path}/journal');
+    if (!await journalDir.exists()) {
+      await journalDir.create(recursive: true);
+    }
+    return journalDir;
+  }
+
+  static Future<File> saveImage(File sourceImage) async {
+    final dir = await _journalDir;
+    final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final destination = File('${dir.path}/$fileName');
+    return await sourceImage.copy(destination.path);
+  }
+
+  static Future<void> saveEntry(JournalEntry entry) async {
+    final dir = await _journalDir;
+    final file = File('${dir.path}/${entry.id}.json');
+    await file.writeAsString(jsonEncode(entry.toJson()));
+  }
+
+  static Future<List<JournalEntry>> loadEntries() async {
+    final dir = await _journalDir;
+    final files = await dir.list().toList();
+    final entries = <JournalEntry>[];
+
+    for (final file in files) {
+      if (file is File && file.path.endsWith('.json')) {
+        try {
+          final content = await file.readAsString();
+          entries.add(JournalEntry.fromJson(jsonDecode(content)));
+        } catch (e) {
+          debugPrint('Error loading entry: $e');
+        }
+      }
+    }
+
+    return entries..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  }
+
+  static Future<void> deleteEntry(String id) async {
+    final dir = await _journalDir;
+    final jsonFile = File('${dir.path}/$id.json');
+    if (await jsonFile.exists()) {
+      final content = await jsonFile.readAsString();
+      final entry = JournalEntry.fromJson(jsonDecode(content));
+      final imageFile = File(entry.imagePath);
+      if (await imageFile.exists()) await imageFile.delete();
+      await jsonFile.delete();
+    }
+  }
+}
+
+// ==================== NOTIFICATION SERVICE ====================
+class NotificationService {
+  static final _notifications = FlutterLocalNotificationsPlugin();
+  static bool _initialized = false;
+
+  static Future<void> initialize() async {
+    if (_initialized) return;
+    const initSettings = InitializationSettings(
+      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      iOS: DarwinInitializationSettings(),
+    );
+    await _notifications.initialize(initSettings);
+    _initialized = true;
+  }
+
+  static Future<void> showEntrySavedNotification() async {
+    await _notifications.show(
+      0,
+      'Journal Entry Saved',
+      'Your photo and location have been recorded!',
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'journal_channel',
+          'Journal Notifications',
+          importance: Importance.high,
+        ),
+        iOS: DarwinNotificationDetails(),
+      ),
+    );
+  }
+}
+
+// ==================== APP ROOT ====================
+class GeoJournalApp extends StatelessWidget {
+  const GeoJournalApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'GeoJournal',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
+      ),
+      home: const HomeScreen(),
+    );
+  }
+}
+
+// ==================== HOME SCREEN ====================
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  List<JournalEntry> _entries = [];
+  bool _isLoading = false;
+  StreamSubscription<AccelerometerEvent>? _shakeSubscription;
+  DateTime? _lastShake;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEntries();
+    _setupShakeDetection();
+  }
+
+  @override
+  void dispose() {
+    _shakeSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _setupShakeDetection() {
+    _shakeSubscription = accelerometerEvents.listen((event) {
+      final magnitude = math.sqrt(
+        event.x * event.x + event.y * event.y + event.z * event.z,
+      );
+      if (magnitude > 22) {
+        final now = DateTime.now();
+        if (_lastShake == null || now.difference(_lastShake!) > const Duration(seconds: 2)) {
+          _lastShake = now;
+          _loadEntries();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Journal refreshed!')),
+          );
+        }
+      }
+    });
+  }
+
+  Future<void> _loadEntries() async {
+    setState(() => _isLoading = true);
+    final entries = await JournalStorage.loadEntries();
+    setState(() {
+      _entries = entries;
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _captureEntry() async {
+    try {
+      // Check permissions
+      final cameraStatus = await Permission.camera.request();
+      final locationStatus = await Permission.location.request();
+
+      if (cameraStatus.isDenied || locationStatus.isDenied) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Camera and location permissions are required')),
+        );
+        return;
+      }
+
+      // Capture image
+      final picker = ImagePicker();
+      final image = await picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+
+      if (image == null) return;
+
+      // Get location
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      // Get address
+      String address = 'Unknown location';
+      try {
+        final placemarks = await GeocodingPlatform.instance
+            .placemarkFromCoordinates(position.latitude, position.longitude);
+        if (placemarks.isNotEmpty) {
+          final place = placemarks.first;
+          address = '${place.street ?? ''}, ${place.locality ?? ''}, ${place.country ?? ''}';
+        }
+      } catch (e) {
+        debugPrint('Geocoding error: $e');
+      }
+
+      // Save image and entry
+      final savedImage = await JournalStorage.saveImage(File(image.path));
+      final entry = JournalEntry(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        imagePath: savedImage.path,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        address: address,
+        timestamp: DateTime.now(),
+      );
+
+      await JournalStorage.saveEntry(entry);
+      await NotificationService.showEntrySavedNotification();
+      await _loadEntries();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('GeoJournal'),
+        backgroundColor: Colors.teal,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.map),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => MapScreen(entries: _entries)),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadEntries,
+          ),
+        ],
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _entries.isEmpty
+              ? _buildEmptyState()
+              : _buildEntryList(),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _captureEntry,
+        backgroundColor: Colors.teal,
+        icon: const Icon(Icons.camera_alt),
+        label: const Text('Capture'),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.camera_alt, size: 80, color: Colors.grey.shade400),
+          const SizedBox(height: 16),
+          Text(
+            'No entries yet',
+            style: TextStyle(fontSize: 20, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Tap the camera button to capture your first moment',
+            style: TextStyle(color: Colors.grey.shade500),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Tip: Shake your device to refresh',
+            style: TextStyle(color: Colors.teal.shade300, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEntryList() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _entries.length,
+      itemBuilder: (context, index) {
+        final entry = _entries[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 16),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              GestureDetector(
+                onTap: () => _showImagePreview(entry),
+                child: Hero(
+                  tag: 'image-${entry.id}',
+                  child: Image.file(
+                    File(entry.imagePath),
+                    height: 200,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on, size: 16, color: Colors.teal),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            entry.address,
+                            style: const TextStyle(fontWeight: FontWeight.w500),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(Icons.access_time, size: 16, color: Colors.grey),
+                        const SizedBox(width: 8),
+                        Text(
+                          _formatDate(entry.timestamp),
+                          style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton.icon(
+                          onPressed: () => _deleteEntry(entry),
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          label: const Text('Delete', style: TextStyle(color: Colors.red)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year} at ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  void _showImagePreview(JournalEntry entry) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(backgroundColor: Colors.transparent, iconTheme: const IconThemeData(color: Colors.white)),
+          body: Center(
+            child: Hero(
+              tag: 'image-${entry.id}',
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: Image.file(File(entry.imagePath), fit: BoxFit.contain),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteEntry(JournalEntry entry) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Entry?'),
+        content: const Text('This will permanently delete this journal entry.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await JournalStorage.deleteEntry(entry.id);
+      await _loadEntries();
+    }
+  }
+}
+
+// ==================== MAP SCREEN ====================
+class MapScreen extends StatefulWidget {
+  final List<JournalEntry> entries;
+  const MapScreen({super.key, required this.entries});
+
+  @override
+  State<MapScreen> createState() => _MapScreenState();
+}
+
+class _MapScreenState extends State<MapScreen> {
+  GoogleMapController? _controller;
+  final Set<Marker> _markers = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _buildMarkers();
+  }
+
+  void _buildMarkers() {
+    for (final entry in widget.entries) {
+      _markers.add(
+        Marker(
+          markerId: MarkerId(entry.id),
+          position: LatLng(entry.latitude, entry.longitude),
+          infoWindow: InfoWindow(
+            title: entry.address,
+            snippet: _formatDate(entry.timestamp),
+          ),
+          onTap: () => _showEntryDetails(entry),
+        ),
+      );
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  void _showEntryDetails(JournalEntry entry) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.file(File(entry.imagePath), height: 150, fit: BoxFit.cover),
+            ),
+            const SizedBox(height: 16),
+            Text(entry.address, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text(_formatDate(entry.timestamp), style: TextStyle(color: Colors.grey.shade600)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Journal Map')),
+      body: GoogleMap(
+        initialCameraPosition: CameraPosition(
+          target: widget.entries.isNotEmpty
+              ? LatLng(widget.entries.first.latitude, widget.entries.first.longitude)
+              : const LatLng(0, 0),
+          zoom: 10,
+        ),
+        markers: _markers,
+        onMapCreated: (controller) => _controller = controller,
+        myLocationEnabled: true,
+        myLocationButtonEnabled: true,
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 12. Common Mistakes & How to Avoid Them
+
+## Mistake 1: Not Checking Permissions Before Access
+```dart
+// ❌ WRONG - Crashes if permission denied
+final position = await Geolocator.getCurrentPosition();
+
+// ✅ CORRECT - Check and request first
+final status = await Permission.location.request();
+if (status.isGranted) {
+  final position = await Geolocator.getCurrentPosition();
+}
+```
+
+## Mistake 2: Forgetting to Dispose Stream Subscriptions
+```dart
+// ❌ WRONG - Memory leak and battery drain
+@override
+void initState() {
+  super.initState();
+  Geolocator.getPositionStream().listen((position) {
+    setState(() => _position = position);
+  }); // Never cancelled!
+}
+
+// ✅ CORRECT - Always cancel
+StreamSubscription<Position>? _positionStream;
+
+@override
+void initState() {
+  super.initState();
+  _positionStream = Geolocator.getPositionStream().listen(...);
+}
+
+@override
+void dispose() {
+  _positionStream?.cancel();
+  super.dispose();
+}
+```
+
+## Mistake 3: Requesting All Permissions at App Launch
+```dart
+// ❌ WRONG - Poor UX, users uninstall
+void main() async {
+  await Permission.camera.request();
+  await Permission.location.request();
+  await Permission.photos.request();
+  runApp(MyApp());
+}
+
+// ✅ CORRECT - Request at point of need
+Future<void> capturePhoto() async {
+  final status = await Permission.camera.request(); // Ask when user taps camera
+  if (status.isGranted) { /* proceed */ }
+}
+```
+
+## Mistake 4: Not Handling Platform Exceptions
+```dart
+// ❌ WRONG - App crashes on platform error
+try {
+  final result = await methodChannel.invokeMethod('nativeMethod');
+} catch (e) {
+  print(e); // Too generic
+}
+
+// ✅ CORRECT - Handle specific exceptions
+try {
+  final result = await methodChannel.invokeMethod('nativeMethod');
+} on PlatformException catch (e) {
+  debugPrint('Platform error: ${e.code} - ${e.message}');
+  // Show user-friendly error
+} on MissingPluginException catch (e) {
+  debugPrint('Plugin not available on this platform');
+  // Fallback behavior
+}
+```
+
+## Mistake 5: Storing Large Files in App Documents
+```dart
+// ❌ WRONG - Documents directory is backed up to cloud
+final appDir = await getApplicationDocumentsDirectory();
+await File('${appDir.path}/huge_video.mp4').writeAsBytes(data);
+
+// ✅ CORRECT - Use temporary or cache directory for large files
+final tempDir = await getTemporaryDirectory();
+await File('${tempDir.path}/huge_video.mp4').writeAsBytes(data);
+
+// Or use getApplicationSupportDirectory for non-backed-up persistent data
+```
+
+## Mistake 6: Not Compressing Images Before Storage
+```dart
+// ❌ WRONG - Full resolution images eat storage
+final image = await ImagePicker().pickImage(source: ImageSource.camera);
+
+// ✅ CORRECT - Compress at capture time
+final image = await ImagePicker().pickImage(
+  source: ImageSource.camera,
+  maxWidth: 1920,
+  maxHeight: 1080,
+  imageQuality: 85, // 85% quality is visually identical for most photos
+);
+```
+
+## Mistake 7: Blocking UI During File Operations
+```dart
+// ❌ WRONG - UI freezes
+void saveLargeFile() {
+  final file = File(path);
+  file.writeAsBytesSync(hugeData); // Blocks UI thread!
+}
+
+// ✅ CORRECT - Use async/await
+Future<void> saveLargeFile() async {
+  final file = File(path);
+  await file.writeAsBytes(hugeData); // Non-blocking
+}
+
+// ✅ BETTER - Use isolate for very large operations
+import 'dart:isolate';
+
+Future<void> saveInIsolate(Uint8List data, String path) async {
+  await Isolate.run(() {
+    File(path).writeAsBytesSync(data);
+  });
+}
+```
+
+---
+
+# 13. Day 20 Checklist
+
+Use this checklist to verify mastery:
+
+- [ ] Understands why native features require platform integration
+- [ ] Can configure AndroidManifest.xml and Info.plist for permissions
+- [ ] Can implement camera capture with image_picker
+- [ ] Can pick images from gallery with quality compression
+- [ ] Can capture and pick videos
+- [ ] Can pick files with file_picker
+- [ ] Can open files with system apps
+- [ ] Can get current GPS position with geolocator
+- [ ] Can stream location updates
+- [ ] Can reverse geocode coordinates to address
+- [ ] Can integrate Google Maps with markers
+- [ ] Can show local notifications instantly
+- [ ] Can schedule notifications for future time
+- [ ] Can show progress notifications
+- [ ] Can access accelerometer and gyroscope streams
+- [ ] Can detect shake gestures
+- [ ] Can check battery level and state
+- [ ] Can monitor network connectivity
+- [ ] Understands MethodChannel for request/response native communication
+- [ ] Understands EventChannel for streaming native events
+- [ ] Can handle PlatformException and MissingPluginException
+- [ ] Knows when to use Pigeon for type-safe channels
+- [ ] Requests permissions at point of need, not at app launch
+- [ ] Always disposes stream subscriptions
+- [ ] Built the GeoJournal app with camera + GPS + maps
+- [ ] App has photo capture with location metadata
+- [ ] App has Google Maps with photo markers
+- [ ] App has local notifications on save
+- [ ] App has shake-to-refresh
+- [ ] App has file storage and management
+- [ ] Pushed the project to GitHub
+
+---
+
+# Key Takeaways (Memorize These!)
+
+1. **Flutter talks to native via Platform Channels** — MethodChannel for request/response, EventChannel for streams. Prefer plugins over custom channels when possible.
+
+2. **Always request permissions at point of need** — Asking for camera at app launch is poor UX. Ask when the user taps the camera button.
+
+3. **Dispose every stream subscription** — Location streams, sensor streams, and EventChannels all leak memory and drain battery if not cancelled.
+
+4. **Compress images at capture time** — Use `imageQuality: 85` and `maxWidth/maxHeight` to prevent storage bloat and slow uploads.
+
+5. **Use temporary directory for large/cache files** — `getTemporaryDirectory()` avoids cloud backup and OS cleanup manages space.
+
+6. **Handle all PlatformException codes** — Native code can fail in many ways. Never let a platform crash bring down your Flutter app.
+
+7. **Google Maps requires API keys per platform** — Android uses manifest meta-data, iOS uses `GMSServices.provideAPIKey()` in AppDelegate.
+
+8. **Local notifications need channel setup on Android** — Without notification channels, Android 8+ won't show notifications at all.
+
+9. **Sensors return raw data — interpret carefully** — Accelerometer includes gravity. Use sensor fusion or `sensors_plus` combined streams for accurate orientation.
+
+10. **Test native features on real devices** — Camera, GPS, and sensors often behave differently on emulators vs physical devices. Always test on hardware.
+
+---
+
+# Extra Practice (Do These Tonight!)
+
+1. **Fitness Tracker:** Build an app that tracks steps using accelerometer, plots the route on a map, and sends a notification when the daily goal is reached.
+
+2. **Document Scanner:** Use camera + edge detection (via platform channel or ML Kit) to scan documents, auto-crop, and save as PDF.
+
+3. **Audio Recorder:** Build a voice memo app using `record` package with waveform visualization using CustomPaint, background recording, and notification controls.
+
+4. **Bluetooth Peripheral:** Connect to a BLE device using `flutter_blue_plus`, read sensor data via platform channel, and display real-time charts.
+
+5. **Background Location Tracker:** Track location every 15 minutes using `background_locator_2`, store routes locally, and display as a polyline on Google Maps.
+
+---
+
+**Congratulations!** You've completed Day 20. You now master native device integration in Flutter — from camera and GPS to notifications, sensors, and custom platform channels.
+
+**Next Up → Day 21: Testing**
+
+---
+
+*Generated for 30Days Flutter: Zero to Hero (2026 Edition)*  
+*Day 20: Native Features & Platform Channels — Complete Deep Dive*
 
 *Generated for 30Days Flutter: Zero to Hero (2026 Edition)*  
 *Day 18: Animations — Complete Deep Dive*
