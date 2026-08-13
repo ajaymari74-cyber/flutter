@@ -40547,4 +40547,1831 @@ Use this checklist to verify mastery:
 *Day 24: Internationalization & Accessibility — Complete Deep Dive*
 
 *Day 23: Performance Optimization — Complete Deep Dive*
+# Day 25: Background Processing & Advanced Features
+# Complete Deep Dive
+
+**Goal:** Master background processing, real-time communication, and advanced integrations in Flutter. Implement background tasks with workmanager, push notifications via Firebase Cloud Messaging, WebSocket connections, GraphQL APIs, and media playback while ensuring battery efficiency and robust error handling.
+
+---
+
+# Table of Contents
+
+1. Why Background Processing & Advanced Features Are Essential in 2026
+2. Background Tasks Architecture Overview
+3. Workmanager: Background Task Scheduling
+4. Firebase Cloud Messaging: Push Notifications
+5. Background Location Tracking
+6. Audio & Video Playback
+7. WebSocket Connections: Real-Time Communication
+8. GraphQL Integration with graphql_flutter
+9. Hands-On Project: ChatPulse — Real-Time Chat App
+10. Testing Background & Advanced Features
+11. Performance & Battery Optimization
+12. Common Mistakes & How to Avoid Them
+13. Day 25 Checklist
+
+---
+
+# 1. Why Background Processing & Advanced Features Are Essential in 2026
+
+## The Modern App Landscape
+
+| Statistic | Impact |
+|:---|:---|
+| 87% of users expect real-time updates in messaging apps | WebSocket + Push = engagement |
+| 65% of users abandon apps that freeze during background sync | Background tasks = retention |
+| Push notifications increase app engagement by 88% | FCM = user re-activation |
+| Background location powers $150B logistics/delivery market | Location = core business logic |
+| GraphQL adoption grew 300% since 2023 | Efficient APIs = faster apps |
+| Audio/video streaming accounts for 70% of mobile traffic | Media playback = essential skill |
+
+## What You Will Master Today
+
+| Technology | Use Case | Package |
+|:---|:---|:---|
+| Workmanager | Periodic background sync, data cleanup | `workmanager: ^0.5.2` |
+| Firebase Cloud Messaging | Push notifications, silent data sync | `firebase_messaging: ^15.0.0` |
+| Geolocator | Background location tracking | `geolocator: ^12.0.0` |
+| Just Audio / Video Player | Media streaming & playback | `just_audio: ^0.9.38`, `video_player: ^2.9.0` |
+| WebSocket | Real-time chat, live updates | `web_socket_channel: ^3.0.0` |
+| GraphQL | Modern API queries & mutations | `graphql_flutter: ^5.1.2` |
+
+---
+
+# 2. Background Tasks Architecture Overview
+
+## The Background Execution Flow
+
+```
+App Foreground          App Background           Terminated
+     |                        |                        |
+     v                        v                        v
+[User Action]          [System Trigger]          [FCM Message]
+     |                        |                        |
+     v                        v                        v
+[Immediate Task]       [Workmanager Task]        [Background Handler]
+     |                        |                        |
+     v                        v                        v
+[Update UI]            [Sync Data]               [Show Notification]
+     |                        |                        |
+     v                        v                        v
+[setState/Provider]    [SharedPreferences/Hive]  [Navigate to Screen]
+```
+
+## Background Execution Types
+
+| Type | Description | Example |
+|:---|:---|:---|
+| **Immediate** | Runs right away, must be short | Save draft, log event |
+| **Deferred** | Runs when system has resources | Sync photos, upload logs |
+| **Periodic** | Repeats at interval | Fetch news, check messages |
+| **Triggered** | Runs on event (geofence, time) | Location entry, reminder |
+| **Foreground Service** | Persistent notification task | Music playback, navigation |
+
+---
+
+# 3. Workmanager: Background Task Scheduling
+
+## Setup
+
+### Android Configuration
+
+**`android/app/build.gradle`**
+```gradle
+android {
+    compileSdkVersion 34
+    defaultConfig {
+        minSdkVersion 21
+        targetSdkVersion 34
+    }
+}
+```
+
+**`android/app/src/main/AndroidManifest.xml`**
+```xml
+<manifest>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+
+    <application
+        android:name="${applicationName}"
+        android:label="ChatPulse">
+        <service
+            android:name="dev.fluttercommunity.workmanager.BackgroundWorker"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:exported="true"/>
+        <receiver 
+            android:name="dev.fluttercommunity.workmanager.WorkmanagerBroadcastReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
+```
+
+**`android/app/src/main/kotlin/.../MainApplication.kt`**
+```kotlin
+package com.example.chatpulse
+
+import io.flutter.app.FlutterApplication
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.PluginRegistry
+import io.flutter.plugins.GeneratedPluginRegistrant
+import dev.fluttercommunity.workmanager.WorkmanagerPlugin
+
+class MainApplication : FlutterApplication(), PluginRegistry.PluginRegistrantCallback {
+    override fun onCreate() {
+        super.onCreate()
+        WorkmanagerPlugin.setPluginRegistrantCallback(this)
+    }
+    override fun registerWith(registry: PluginRegistry) {
+        GeneratedPluginRegistrant.registerWith(registry)
+    }
+}
+```
+
+### iOS Configuration
+
+**`ios/Runner/Info.plist`**
+```xml
+<dict>
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>fetch</string>
+        <string>processing</string>
+    </array>
+    <key>BGTaskSchedulerPermittedIdentifiers</key>
+    <array>
+        <string>dev.fluttercommunity.workmanager.iOSBackgroundAppRefresh</string>
+        <string>dev.fluttercommunity.workmanager.iOSBackgroundProcessing</string>
+    </array>
+</dict>
+```
+
+**`ios/Runner/AppDelegate.swift`**
+```swift
+import UIKit
+import Flutter
+import workmanager
+
+@UIApplicationMain
+@objc class AppDelegate: FlutterAppDelegate {
+    override func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+    ) -> Bool {
+        GeneratedPluginRegistrant.register(with: self)
+        WorkmanagerPlugin.setPluginRegistrantCallback(registerPlugins)
+        UIApplication.shared.setMinimumBackgroundFetchInterval(TimeInterval(60*15))
+        return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    }
+}
+void registerPlugins(NSObject<FlutterPluginRegistry>* registry) {
+    [GeneratedPluginRegistrant registerWithRegistry:registry];
+}
+```
+
+## pubspec.yaml
+
+```yaml
+dependencies:
+  flutter:
+    sdk: flutter
+  workmanager: ^0.5.2
+  shared_preferences: ^2.2.3
+  connectivity_plus: ^6.0.0
+```
+
+## Implementation
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:workmanager/workmanager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+
+const String syncMessagesTask = "sync-messages-task";
+const String cleanupCacheTask = "cleanup-cache-task";
+const String dailyBackupTask = "daily-backup-task";
+
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    switch (task) {
+      case syncMessagesTask:
+        return await _syncPendingMessages();
+      case cleanupCacheTask:
+        return await _cleanupOldCache();
+      case dailyBackupTask:
+        return await _performDailyBackup();
+      default:
+        return Future.value(true);
+    }
+  });
+}
+
+Future<bool> _syncPendingMessages() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final pendingMessages = prefs.getStringList('pending_messages') ?? [];
+    if (pendingMessages.isEmpty) return true;
+
+    final connectivity = await Connectivity().checkConnectivity();
+    if (connectivity == ConnectivityResult.none) return false;
+
+    await Future.delayed(const Duration(seconds: 2));
+    await prefs.setStringList('pending_messages', []);
+    await prefs.setInt('last_sync', DateTime.now().millisecondsSinceEpoch);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+Future<bool> _cleanupOldCache() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKeys = prefs.getKeys().where((k) => k.startsWith('cache_'));
+    for (final key in cacheKeys) {
+      final timestamp = prefs.getInt('${key}_timestamp') ?? 0;
+      final age = DateTime.now().millisecondsSinceEpoch - timestamp;
+      if (age > const Duration(days: 7).inMilliseconds) {
+        await prefs.remove(key);
+        await prefs.remove('${key}_timestamp');
+      }
+    }
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+Future<bool> _performDailyBackup() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final lastBackup = prefs.getInt('last_backup') ?? 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - lastBackup < const Duration(hours: 20).inMilliseconds) return true;
+
+    await Future.delayed(const Duration(seconds: 3));
+    await prefs.setInt('last_backup', now);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+```
+
+## Registering Tasks
+
+```dart
+class BackgroundService {
+  static Future<void> initialize() async {
+    await Workmanager().initialize(
+      callbackDispatcher,
+      isInDebugMode: true,
+    );
+  }
+
+  static Future<void> scheduleImmediateSync() async {
+    await Workmanager().registerOneOffTask(
+      'immediate-sync-${DateTime.now().millisecondsSinceEpoch}',
+      syncMessagesTask,
+      constraints: Constraints(
+        networkType: NetworkType.connected,
+        requiresBatteryNotLow: true,
+      ),
+      existingWorkPolicy: ExistingWorkPolicy.replace,
+    );
+  }
+
+  static Future<void> schedulePeriodicSync() async {
+    await Workmanager().registerPeriodicTask(
+      'periodic-message-sync',
+      syncMessagesTask,
+      frequency: const Duration(minutes: 15),
+      constraints: Constraints(
+        networkType: NetworkType.connected,
+        requiresCharging: false,
+        requiresBatteryNotLow: true,
+        requiresStorageNotLow: false,
+      ),
+      existingWorkPolicy: ExistingWorkPolicy.keep,
+      backoffPolicy: BackoffPolicy.exponential,
+      backoffPolicyDelay: const Duration(minutes: 1),
+    );
+  }
+
+  static Future<void> cancelAll() async {
+    await Workmanager().cancelAll();
+  }
+}
+```
+
+## Usage in App
+
+```dart
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await BackgroundService.initialize();
+  runApp(const ChatPulseApp());
+}
+
+class SettingsScreen extends StatelessWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Background Tasks')),
+      body: ListView(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.sync),
+            title: const Text('Sync Now'),
+            subtitle: const Text('One-time immediate sync'),
+            onTap: () async {
+              await BackgroundService.scheduleImmediateSync();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Sync scheduled')),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.repeat),
+            title: const Text('Auto Sync'),
+            subtitle: const Text('Every 15 minutes'),
+            trailing: Switch(
+              value: true,
+              onChanged: (value) async {
+                if (value) {
+                  await BackgroundService.schedulePeriodicSync();
+                } else {
+                  await Workmanager().cancelByUniqueName('periodic-message-sync');
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 4. Firebase Cloud Messaging: Push Notifications
+
+## Setup
+
+### Firebase Console Setup
+1. Create project at console.firebase.google.com
+2. Add Android app (package name must match applicationId in build.gradle)
+3. Download google-services.json -> place in android/app/
+4. Add iOS app, download GoogleService-Info.plist -> place in ios/Runner/ via Xcode
+
+### Android Configuration
+
+**`android/build.gradle`**
+```gradle
+buildscript {
+    dependencies {
+        classpath 'com.google.gms:google-services:4.4.1'
+    }
+}
+```
+
+**`android/app/build.gradle`**
+```gradle
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+    id "com.google.gms.google-services"
+}
+dependencies {
+    implementation 'com.google.firebase:firebase-messaging:24.0.0'
+}
+```
+
+### iOS Configuration
+
+**`ios/Runner/AppDelegate.swift`**
+```swift
+import FirebaseCore
+import FirebaseMessaging
+
+override func application(
+  _ application: UIApplication,
+  didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+) -> Bool {
+  FirebaseApp.configure()
+  Messaging.messaging().delegate = self
+
+  if #available(iOS 10.0, *) {
+    UNUserNotificationCenter.current().delegate = self
+    let authOptions: UNAuthorizationOptions = [.alert, .badge, .sound]
+    UNUserNotificationCenter.current().requestAuthorization(
+      options: authOptions,
+      completionHandler: { _, _ in }
+    )
+  }
+
+  application.registerForRemoteNotifications()
+  return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+}
+
+extension AppDelegate: MessagingDelegate {
+  func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+    print("FCM Token: \(fcmToken ?? "")")
+  }
+}
+
+extension AppDelegate: UNUserNotificationCenterDelegate {
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    completionHandler([[.alert, .sound, .badge]])
+  }
+}
+```
+
+## pubspec.yaml
+
+```yaml
+dependencies:
+  firebase_core: ^3.0.0
+  firebase_messaging: ^15.0.0
+  flutter_local_notifications: ^17.0.0
+```
+
+## Complete FCM Implementation
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  await _showLocalNotification(message);
+}
+
+final FlutterLocalNotificationsPlugin _localNotifications = 
+    FlutterLocalNotificationsPlugin();
+
+Future<void> _showLocalNotification(RemoteMessage message) async {
+  const androidDetails = AndroidNotificationDetails(
+    'chat_channel',
+    'Chat Messages',
+    channelDescription: 'Real-time chat message notifications',
+    importance: Importance.high,
+    priority: Priority.high,
+    showWhen: true,
+    enableVibration: true,
+    playSound: true,
+    icon: '@mipmap/ic_launcher',
+  );
+
+  const iosDetails = DarwinNotificationDetails(
+    presentAlert: true,
+    presentBadge: true,
+    presentSound: true,
+  );
+
+  const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+
+  await _localNotifications.show(
+    message.hashCode,
+    message.notification?.title ?? 'New Message',
+    message.notification?.body ?? '',
+    details,
+    payload: message.data['chat_id'],
+  );
+}
+
+class NotificationService {
+  static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  static String? _fcmToken;
+
+  static Future<void> initialize() async {
+    await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+    final settings = await _messaging.requestPermission(
+      alert: true, badge: true, sound: true,
+    );
+    print('Notification permission: ${settings.authorizationStatus}');
+
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosInit = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+    const initSettings = InitializationSettings(android: androidInit, iOS: iosInit);
+
+    await _localNotifications.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: (response) {
+        _handleNotificationTap(response.payload);
+      },
+    );
+
+    _fcmToken = await _messaging.getToken();
+    print('FCM Token: $_fcmToken');
+
+    _messaging.onTokenRefresh.listen((token) {
+      _fcmToken = token;
+      _sendTokenToServer(token);
+    });
+
+    FirebaseMessaging.onMessage.listen((message) {
+      _showLocalNotification(message);
+    });
+
+    final initialMessage = await _messaging.getInitialMessage();
+    if (initialMessage != null) {
+      _handleNotificationTap(initialMessage.data['chat_id']);
+    }
+
+    FirebaseMessaging.onMessageOpenedApp.listen((message) {
+      _handleNotificationTap(message.data['chat_id']);
+    });
+  }
+
+  static void _handleNotificationTap(String? payload) {
+    if (payload != null) {
+      navigatorKey.currentState?.pushNamed('/chat', arguments: {'chatId': payload});
+    }
+  }
+
+  static Future<void> _sendTokenToServer(String token) async {
+    // await ApiService.updateFcmToken(token);
+  }
+
+  static Future<void> subscribeToTopic(String topic) async {
+    await _messaging.subscribeToTopic(topic);
+  }
+
+  static String? get fcmToken => _fcmToken;
+}
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+```
+
+## Notification Data Structure (Backend Payload)
+
+```json
+{
+  "message": {
+    "token": "device_fcm_token_here",
+    "notification": {
+      "title": "New Message from Sarah",
+      "body": "Hey! Are we still on for dinner tonight?"
+    },
+    "data": {
+      "chat_id": "chat_12345",
+      "sender_id": "user_67890",
+      "message_type": "text",
+      "click_action": "FLUTTER_NOTIFICATION_CLICK"
+    },
+    "android": {
+      "priority": "high",
+      "notification": {
+        "channel_id": "chat_channel",
+        "sound": "default"
+      }
+    },
+    "apns": {
+      "payload": {
+        "aps": {
+          "badge": 1,
+          "sound": "default"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+# 5. Background Location Tracking
+
+## Setup
+
+**`android/app/src/main/AndroidManifest.xml`**
+```xml
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+<uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+```
+
+**`ios/Runner/Info.plist`**
+```xml
+<key>NSLocationWhenInUseUsageDescription</key>
+<string>This app needs location to show nearby chat users</string>
+<key>NSLocationAlwaysUsageDescription</key>
+<string>This app tracks location in background for live location sharing</string>
+<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+<string>Background location is required for live location sharing feature</string>
+```
+
+## pubspec.yaml
+
+```yaml
+dependencies:
+  geolocator: ^12.0.0
+  permission_handler: ^11.3.0
+```
+
+## Implementation
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+
+class LocationService {
+  static Stream<Position>? _positionStream;
+
+  static Future<bool> _handlePermission() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return false;
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) return false;
+    }
+    if (permission == LocationPermission.deniedForever) return false;
+    return true;
+  }
+
+  static Future<Position?> getCurrentPosition() async {
+    final hasPermission = await _handlePermission();
+    if (!hasPermission) return null;
+    return await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+  }
+
+  static Stream<Position> startLocationTracking() {
+    const locationSettings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 10,
+    );
+    _positionStream = Geolocator.getPositionStream(locationSettings: locationSettings);
+    return _positionStream!;
+  }
+
+  static double calculateDistance(double startLat, double startLng, double endLat, double endLng) {
+    return Geolocator.distanceBetween(startLat, startLng, endLat, endLng);
+  }
+}
+
+class LiveLocationWidget extends StatefulWidget {
+  const LiveLocationWidget({super.key});
+
+  @override
+  State<LiveLocationWidget> createState() => _LiveLocationWidgetState();
+}
+
+class _LiveLocationWidgetState extends State<LiveLocationWidget> {
+  Position? _currentPosition;
+  StreamSubscription<Position>? _locationSubscription;
+  bool _isTracking = false;
+
+  @override
+  void dispose() {
+    _locationSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _startTracking() async {
+    final hasPermission = await LocationService._handlePermission();
+    if (!hasPermission) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Location permission required')),
+      );
+      return;
+    }
+    setState(() => _isTracking = true);
+    _locationSubscription = LocationService.startLocationTracking().listen(
+      (position) => setState(() => _currentPosition = position),
+      onError: (error) => setState(() => _isTracking = false),
+    );
+  }
+
+  void _stopTracking() {
+    _locationSubscription?.cancel();
+    setState(() { _isTracking = false; _currentPosition = null; });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Live Location', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Switch(
+                  value: _isTracking,
+                  onChanged: (value) => value ? _startTracking() : _stopTracking(),
+                ),
+              ],
+            ),
+            if (_currentPosition != null) ...[
+              const SizedBox(height: 8),
+              Text('Lat: ${_currentPosition!.latitude.toStringAsFixed(6)}'),
+              Text('Lng: ${_currentPosition!.longitude.toStringAsFixed(6)}'),
+              Text('Accuracy: ${_currentPosition!.accuracy.toStringAsFixed(1)}m'),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 6. Audio & Video Playback
+
+## Audio Playback with just_audio
+
+**pubspec.yaml**
+```yaml
+dependencies:
+  just_audio: ^0.9.38
+  audio_session: ^0.1.21
+```
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:audio_session/audio_session.dart';
+
+class AudioPlayerService {
+  static final AudioPlayer _player = AudioPlayer();
+  static final _playlist = ConcatenatingAudioSource(children: []);
+
+  static AudioPlayer get player => _player;
+
+  static Future<void> initialize() async {
+    final session = await AudioSession.instance;
+    await session.configure(const AudioSessionConfiguration.speech());
+    _player.playbackEventStream.listen((event) {}, onError: (error, stackTrace) {
+      print('Audio playback error: $error');
+    });
+  }
+
+  static Future<void> playUrl(String url) async {
+    await _player.setAudioSource(AudioSource.uri(Uri.parse(url)));
+    await _player.play();
+  }
+
+  static Future<void> pause() => _player.pause();
+  static Future<void> resume() => _player.play();
+  static Future<void> seek(Duration position) => _player.seek(position);
+
+  static Stream<Duration?> get durationStream => _player.durationStream;
+  static Stream<Duration> get positionStream => _player.positionStream;
+  static Stream<PlayerState> get playerStateStream => _player.playerStateStream;
+
+  static Future<void> dispose() => _player.dispose();
+}
+
+class AudioPlayerWidget extends StatelessWidget {
+  final String audioUrl;
+  const AudioPlayerWidget({super.key, required this.audioUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<PlayerState>(
+      stream: AudioPlayerService.playerStateStream,
+      builder: (context, snapshot) {
+        final isPlaying = snapshot.data?.playing ?? false;
+
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.replay_10),
+                    onPressed: () => AudioPlayerService.seek(
+                      AudioPlayerService.player.position - const Duration(seconds: 10),
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
+                    iconSize: 48,
+                    onPressed: () => isPlaying 
+                        ? AudioPlayerService.pause() 
+                        : AudioPlayerService.playUrl(audioUrl),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.forward_10),
+                    onPressed: () => AudioPlayerService.seek(
+                      AudioPlayerService.player.position + const Duration(seconds: 10),
+                    ),
+                  ),
+                ],
+              ),
+              StreamBuilder<Duration>(
+                stream: AudioPlayerService.positionStream,
+                builder: (context, positionSnapshot) {
+                  final position = positionSnapshot.data ?? Duration.zero;
+                  return StreamBuilder<Duration?>(
+                    stream: AudioPlayerService.durationStream,
+                    builder: (context, durationSnapshot) {
+                      final duration = durationSnapshot.data ?? Duration.zero;
+                      return Column(
+                        children: [
+                          Slider(
+                            min: 0,
+                            max: duration.inMilliseconds.toDouble(),
+                            value: position.inMilliseconds.toDouble().clamp(0, duration.inMilliseconds.toDouble()),
+                            onChanged: (value) => AudioPlayerService.seek(
+                              Duration(milliseconds: value.toInt()),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(_formatDuration(position)),
+                                Text(_formatDuration(duration)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    return '$minutes:$seconds';
+  }
+}
+```
+
+## Video Playback with video_player
+
+**pubspec.yaml**
+```yaml
+dependencies:
+  video_player: ^2.9.0
+```
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
+
+class VideoPlayerWidget extends StatefulWidget {
+  final String videoUrl;
+  const VideoPlayerWidget({super.key, required this.videoUrl});
+
+  @override
+  State<VideoPlayerWidget> createState() => _VideoPlayerWidgetState();
+}
+
+class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
+  late VideoPlayerController _controller;
+  bool _isInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializePlayer();
+  }
+
+  Future<void> _initializePlayer() async {
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+    await _controller.initialize();
+    await _controller.setLooping(true);
+    setState(() => _isInitialized = true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_isInitialized) {
+      return const AspectRatio(
+        aspectRatio: 16 / 9,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return AspectRatio(
+      aspectRatio: _controller.value.aspectRatio,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          VideoPlayer(_controller),
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _controller.value.isPlaying ? _controller.pause() : _controller.play();
+              });
+            },
+            child: Container(
+              color: Colors.transparent,
+              child: Center(
+                child: AnimatedOpacity(
+                  opacity: _controller.value.isPlaying ? 0 : 1,
+                  duration: const Duration(milliseconds: 300),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(50),
+                    ),
+                    child: Icon(
+                      _controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
+                      color: Colors.white,
+                      size: 48,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          VideoProgressIndicator(
+            _controller,
+            allowScrubbing: true,
+            colors: VideoProgressColors(
+              playedColor: Theme.of(context).colorScheme.primary,
+              bufferedColor: Colors.grey.shade400,
+              backgroundColor: Colors.grey.shade300,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 7. WebSocket Connections: Real-Time Communication
+
+## Setup
+
+**pubspec.yaml**
+```yaml
+dependencies:
+  web_socket_channel: ^3.0.0
+```
+
+## Complete WebSocket Service
+
+```dart
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:web_socket_channel/io.dart';
+import 'package:web_socket_channel/status.dart' as status;
+
+class ChatMessage {
+  final String id;
+  final String senderId;
+  final String senderName;
+  final String content;
+  final DateTime timestamp;
+  final String? mediaUrl;
+
+  ChatMessage({
+    required this.id,
+    required this.senderId,
+    required this.senderName,
+    required this.content,
+    required this.timestamp,
+    this.mediaUrl,
+  });
+
+  factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
+    id: json['id'],
+    senderId: json['sender_id'],
+    senderName: json['sender_name'],
+    content: json['content'],
+    timestamp: DateTime.parse(json['timestamp']),
+    mediaUrl: json['media_url'],
+  );
+}
+
+class WebSocketService extends ChangeNotifier {
+  WebSocketChannel? _channel;
+  final List<ChatMessage> _messages = [];
+  bool _isConnected = false;
+  bool _isConnecting = false;
+  String? _error;
+  Timer? _reconnectTimer;
+  int _reconnectAttempts = 0;
+  static const int _maxReconnectAttempts = 5;
+  static const Duration _reconnectDelay = Duration(seconds: 3);
+
+  List<ChatMessage> get messages => List.unmodifiable(_messages);
+  bool get isConnected => _isConnected;
+  bool get isConnecting => _isConnecting;
+  String? get error => _error;
+
+  final _connectionController = StreamController<bool>.broadcast();
+  Stream<bool> get connectionStream => _connectionController.stream;
+
+  Future<void> connect(String url, {Map<String, dynamic>? headers}) async {
+    if (_isConnected || _isConnecting) return;
+
+    _isConnecting = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      _channel = IOWebSocketChannel.connect(
+        Uri.parse(url),
+        headers: headers,
+        pingInterval: const Duration(seconds: 30),
+      );
+
+      _channel!.stream.listen(
+        _onMessage,
+        onError: _onError,
+        onDone: _onDisconnected,
+        cancelOnError: false,
+      );
+
+      _isConnected = true;
+      _isConnecting = false;
+      _reconnectAttempts = 0;
+      _connectionController.add(true);
+      notifyListeners();
+    } catch (e) {
+      _onError(e);
+    }
+  }
+
+  void _onMessage(dynamic data) {
+    try {
+      final json = jsonDecode(data);
+      switch (json['event']) {
+        case 'message':
+          final message = ChatMessage.fromJson(json['data']);
+          _messages.add(message);
+          notifyListeners();
+          break;
+        case 'user_joined':
+          _messages.add(ChatMessage(
+            id: 'system_${DateTime.now().millisecondsSinceEpoch}',
+            senderId: 'system',
+            senderName: 'System',
+            content: '${json['data']['username']} joined',
+            timestamp: DateTime.now(),
+          ));
+          notifyListeners();
+          break;
+      }
+    } catch (e) {
+      print('Message parse error: $e');
+    }
+  }
+
+  void sendMessage(String content) {
+    if (!_isConnected) return;
+    final message = {
+      'event': 'message',
+      'data': {
+        'id': DateTime.now().millisecondsSinceEpoch.toString(),
+        'content': content,
+        'timestamp': DateTime.now().toIso8601String(),
+      },
+    };
+    _channel!.sink.add(jsonEncode(message));
+  }
+
+  void sendTypingIndicator(bool isTyping) {
+    if (!_isConnected) return;
+    _channel!.sink.add(jsonEncode({
+      'event': 'typing',
+      'data': {'is_typing': isTyping},
+    }));
+  }
+
+  void _onError(dynamic error) {
+    _error = error.toString();
+    _isConnected = false;
+    _isConnecting = false;
+    _connectionController.add(false);
+    notifyListeners();
+    _attemptReconnect();
+  }
+
+  void _onDisconnected() {
+    _isConnected = false;
+    _isConnecting = false;
+    _connectionController.add(false);
+    notifyListeners();
+    _attemptReconnect();
+  }
+
+  void _attemptReconnect() {
+    if (_reconnectAttempts >= _maxReconnectAttempts) {
+      _error = 'Max reconnection attempts reached';
+      notifyListeners();
+      return;
+    }
+    _reconnectAttempts++;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(_reconnectDelay * _reconnectAttempts, () {
+      if (!_isConnected) connect('wss://your-server.com/ws');
+    });
+  }
+
+  void disconnect() {
+    _reconnectTimer?.cancel();
+    _channel?.sink.close(status.normalClosure);
+    _channel = null;
+    _isConnected = false;
+    _isConnecting = false;
+    _connectionController.add(false);
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _reconnectTimer?.cancel();
+    _channel?.sink.close();
+    _connectionController.close();
+    super.dispose();
+  }
+}
+```
+
+---
+
+# 8. GraphQL Integration with graphql_flutter
+
+## Setup
+
+**pubspec.yaml**
+```yaml
+dependencies:
+  graphql_flutter: ^5.1.2
+```
+
+## Implementation
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:graphql_flutter/graphql_flutter.dart';
+
+class GraphQLService {
+  static GraphQLClient? _client;
+  static String? _authToken;
+
+  static GraphQLClient get client {
+    if (_client == null) {
+      throw Exception('GraphQL client not initialized');
+    }
+    return _client!;
+  }
+
+  static Future<void> initialize(String httpUrl, {String? wsUrl}) async {
+    await initHiveForFlutter();
+
+    final httpLink = HttpLink(httpUrl);
+    final authLink = AuthLink(
+      getToken: () => _authToken != null ? 'Bearer $_authToken' : '',
+    );
+
+    Link link = authLink.concat(httpLink);
+
+    if (wsUrl != null) {
+      final wsLink = WebSocketLink(
+        wsUrl,
+        config: SocketClientConfig(
+          autoReconnect: true,
+          inactivityTimeout: const Duration(seconds: 30),
+        ),
+      );
+      link = Link.split((request) => request.isSubscription, wsLink, link);
+    }
+
+    _client = GraphQLClient(
+      link: link,
+      cache: GraphQLCache(store: HiveStore()),
+      defaultPolicies: DefaultPolicies(
+        query: Policies.safe(
+          FetchPolicy.cacheFirst,
+          ErrorPolicy.all,
+          CachePolicy.partial,
+        ),
+        mutate: Policies.safe(
+          FetchPolicy.networkOnly,
+          ErrorPolicy.all,
+          CachePolicy.none,
+        ),
+      ),
+    );
+  }
+
+  static void setAuthToken(String token) { _authToken = token; }
+}
+
+class ChatQueries {
+  static const String getMessages = r'''
+    query GetMessages($chatId: ID!, $limit: Int, $offset: Int) {
+      messages(chatId: $chatId, limit: $limit, offset: $offset) {
+        id
+        content
+        sender { id name avatar }
+        createdAt
+        type
+        mediaUrl
+      }
+    }
+  ''';
+}
+
+class ChatMutations {
+  static const String sendMessage = r'''
+    mutation SendMessage($chatId: ID!, $content: String!) {
+      sendMessage(chatId: $chatId, content: $content) {
+        id content createdAt sender { id name }
+      }
+    }
+  ''';
+}
+
+class ChatSubscriptions {
+  static const String newMessages = r'''
+    subscription OnNewMessage($chatId: ID!) {
+      messageAdded(chatId: $chatId) {
+        id content sender { id name avatar } createdAt
+      }
+    }
+  ''';
+}
+```
+
+---
+
+# 9. Hands-On Project: ChatPulse — Real-Time Chat App
+
+## Project Overview
+
+Build **ChatPulse** — a production-grade real-time messaging app with:
+- WebSocket-based real-time messaging
+- Push notifications via FCM
+- Background message sync with Workmanager
+- Audio message playback
+- GraphQL API integration
+- Typing indicators and online status
+- Message persistence and offline queue
+
+## Main Entry Point
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:graphql_flutter/graphql_flutter.dart';
+import 'app.dart';
+import 'data/services/notification_service.dart';
+import 'data/services/background_service.dart';
+import 'data/services/audio_service.dart';
+import 'data/services/graphql_service.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  await NotificationService.initialize();
+  await BackgroundService.initialize();
+  await AudioPlayerService.initialize();
+  await GraphQLService.initialize(
+    'https://api.chatpulse.com/graphql',
+    wsUrl: 'wss://api.chatpulse.com/graphql',
+  );
+  runApp(const ChatPulseApp());
+}
+```
+
+## App Root
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:graphql_flutter/graphql_flutter.dart';
+import 'data/services/graphql_service.dart';
+import 'presentation/screens/home_screen.dart';
+
+class ChatPulseApp extends StatelessWidget {
+  const ChatPulseApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return GraphQLProvider(
+      client: ValueNotifier(GraphQLService.client),
+      child: CacheProvider(
+        child: MaterialApp(
+          title: 'ChatPulse',
+          debugShowCheckedModeBanner: false,
+          navigatorKey: navigatorKey,
+          theme: ThemeData(
+            useMaterial3: true,
+            colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+          ),
+          darkTheme: ThemeData(
+            useMaterial3: true,
+            brightness: Brightness.dark,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.deepPurple,
+              brightness: Brightness.dark,
+            ),
+          ),
+          initialRoute: '/',
+          routes: {
+            '/': (context) => const HomeScreen(),
+            '/chat': (context) => const ChatScreen(),
+            '/settings': (context) => const SettingsScreen(),
+          },
+        ),
+      ),
+    );
+  }
+}
+```
+
+## Chat Screen
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../data/services/websocket_service.dart';
+
+class ChatScreen extends StatefulWidget {
+  final String chatId;
+  final String chatName;
+  const ChatScreen({super.key, required this.chatId, required this.chatName});
+
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  late WebSocketService _webSocketService;
+  bool _isTyping = false;
+  Timer? _typingTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _webSocketService = WebSocketService();
+    _webSocketService.connect('wss://api.chatpulse.com/ws/${widget.chatId}');
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _scrollController.dispose();
+    _typingTimer?.cancel();
+    _webSocketService.dispose();
+    super.dispose();
+  }
+
+  void _sendMessage() {
+    final text = _messageController.text.trim();
+    if (text.isEmpty) return;
+    _webSocketService.sendMessage(text);
+    _messageController.clear();
+    _stopTyping();
+  }
+
+  void _onTyping() {
+    if (!_isTyping) {
+      _isTyping = true;
+      _webSocketService.sendTypingIndicator(true);
+    }
+    _typingTimer?.cancel();
+    _typingTimer = Timer(const Duration(seconds: 2), _stopTyping);
+  }
+
+  void _stopTyping() {
+    _isTyping = false;
+    _webSocketService.sendTypingIndicator(false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider.value(
+      value: _webSocketService,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(widget.chatName),
+              Consumer<WebSocketService>(
+                builder: (context, service, child) => Text(
+                  service.isConnected ? 'Online' : 'Connecting...',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                ),
+              ),
+            ],
+          ),
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: Consumer<WebSocketService>(
+                builder: (context, service, child) => ListView.builder(
+                  controller: _scrollController,
+                  reverse: true,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: service.messages.length,
+                  itemBuilder: (context, index) {
+                    final message = service.messages[service.messages.length - 1 - index];
+                    return MessageBubble(message: message);
+                  },
+                ),
+              ),
+            ),
+            _buildInputArea(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInputArea() {
+    return SafeArea(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          border: Border(top: BorderSide(color: Colors.grey.shade300)),
+        ),
+        child: Row(
+          children: [
+            IconButton(icon: const Icon(Icons.attach_file), onPressed: () {}),
+            Expanded(
+              child: TextField(
+                controller: _messageController,
+                decoration: const InputDecoration(
+                  hintText: 'Type a message...',
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+                textInputAction: TextInputAction.send,
+                onChanged: (_) => _onTyping(),
+                onSubmitted: (_) => _sendMessage(),
+              ),
+            ),
+            IconButton(icon: const Icon(Icons.mic), onPressed: () {}),
+            IconButton(
+              icon: const Icon(Icons.send),
+              color: Theme.of(context).colorScheme.primary,
+              onPressed: _sendMessage,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class MessageBubble extends StatelessWidget {
+  final ChatMessage message;
+  const MessageBubble({super.key, required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final isMe = message.senderId == 'current_user_id';
+    final isSystem = message.senderId == 'system';
+
+    if (isSystem) {
+      return Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(message.content, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+        ),
+      );
+    }
+
+    return Align(
+      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isMe ? Theme.of(context).colorScheme.primary : Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(20).copyWith(
+            bottomRight: isMe ? const Radius.circular(4) : null,
+            bottomLeft: !isMe ? const Radius.circular(4) : null,
+          ),
+        ),
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (!isMe)
+              Text(
+                message.senderName,
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, 
+                  color: isMe ? Colors.white70 : Colors.grey.shade700),
+              ),
+            Text(message.content, style: TextStyle(color: isMe ? Colors.white : Colors.black87)),
+            const SizedBox(height: 4),
+            Text(
+              '${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')}',
+              style: TextStyle(fontSize: 10, color: isMe ? Colors.white60 : Colors.grey.shade500),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 10. Testing Background & Advanced Features
+
+## Unit Testing WebSocket
+
+```dart
+import 'package:flutter_test/flutter_test.dart';
+import 'package:chatpulse/data/services/websocket_service.dart';
+
+void main() {
+  late WebSocketService service;
+
+  setUp(() => service = WebSocketService());
+  tearDown(() => service.dispose());
+
+  test('initial state is disconnected', () {
+    expect(service.isConnected, false);
+    expect(service.isConnecting, false);
+    expect(service.messages, isEmpty);
+  });
+
+  test('sendMessage queues when disconnected', () {
+    service.sendMessage('Hello');
+    expect(service.messages, isEmpty);
+  });
+}
+```
+
+## Widget Testing Notifications
+
+```dart
+testWidgets('shows notification when message received', (tester) async {
+  await tester.pumpWidget(
+    MaterialApp(home: ChatScreen(chatId: 'test', chatName: 'Test')),
+  );
+  await tester.pump();
+  expect(find.text('New Message'), findsOneWidget);
+});
+```
+
+---
+
+# 11. Performance & Battery Optimization
+
+## Background Processing Best Practices
+
+| Rule | Impact | Implementation |
+|:---|:---|:---|
+| Batch network requests | Reduces radio wake-ups | Queue messages, sync every 15 min |
+| Use exponential backoff | Prevents server overload | Workmanager backoffPolicy |
+| Respect battery saver | Avoids user frustration | Check Battery Saver mode before sync |
+| Compress payloads | Faster transfers, less data | Gzip JSON, WebSocket permessage-deflate |
+| Cancel unused tasks | Frees system resources | Cancel tasks in onDispose |
+| Use Workmanager constraints | Runs only when optimal | requiresBatteryNotLow, networkType |
+
+## Memory Management for Streams
+
+```dart
+class StreamManager {
+  final List<StreamSubscription> _subscriptions = [];
+  void addSubscription(StreamSubscription sub) => _subscriptions.add(sub);
+  void cancelAll() {
+    for (final sub in _subscriptions) { sub.cancel(); }
+    _subscriptions.clear();
+  }
+}
+```
+
+---
+
+# 12. Common Mistakes & How to Avoid Them
+
+## Mistake 1: Not Handling Background Entry Points Correctly
+
+```dart
+// WRONG - Not annotated
+default void backgroundHandler() { }
+
+// CORRECT - Top-level with pragma
+@pragma('vm:entry-point')
+void callbackDispatcher() { }
+```
+
+## Mistake 2: Missing iOS Background Modes
+
+```dart
+// WRONG - No background modes declared
+// App killed by system
+
+// CORRECT - Add to Info.plist
+// UIBackgroundModes: fetch, processing, remote-notification
+```
+
+## Mistake 3: Not Cancelling Streams
+
+```dart
+// WRONG - Memory leak
+stream.listen((data) { });
+
+// CORRECT - Always cancel
+final sub = stream.listen((data) { });
+sub.cancel();
+```
+
+## Mistake 4: Hardcoding Server URLs
+
+```dart
+// WRONG
+connect('wss://prod-server.com/ws');
+
+// CORRECT - Use environment config
+connect(Env.websocketUrl);
+```
+
+## Mistake 5: Ignoring Network State
+
+```dart
+// WRONG - Always attempts sync
+Workmanager().registerPeriodicTask('sync', 'task');
+
+// CORRECT - Add network constraint
+Workmanager().registerPeriodicTask(
+  'sync', 'task',
+  constraints: Constraints(networkType: NetworkType.connected),
+);
+```
+
+## Mistake 6: Not Handling Token Refresh
+
+```dart
+// WRONG - Token set once
+FirebaseMessaging.instance.getToken();
+
+// CORRECT - Listen for refresh
+FirebaseMessaging.instance.onTokenRefresh.listen((token) {
+  ApiService.updateFcmToken(token);
+});
+```
+
+## Mistake 7: Blocking UI Thread
+
+```dart
+// WRONG - Sync operation on main thread
+final data = heavyComputation();
+
+// CORRECT - Use compute or isolate
+final data = await compute(heavyComputation, input);
+```
+
+---
+
+# 13. Day 25 Checklist
+
+Use this checklist to verify mastery:
+
+- [ ] Understands background execution types (immediate, deferred, periodic)
+- [ ] Can configure Workmanager for Android and iOS
+- [ ] Can create top-level background entry points with @pragma
+- [ ] Can schedule one-off and periodic background tasks
+- [ ] Can set task constraints (network, battery, charging)
+- [ ] Can configure Firebase project for push notifications
+- [ ] Can handle foreground, background, and terminated FCM states
+- [ ] Can display local notifications with flutter_local_notifications
+- [ ] Can request and handle notification permissions on iOS
+- [ ] Can navigate from notification tap to specific screen
+- [ ] Can subscribe to and unsubscribe from FCM topics
+- [ ] Can request location permissions (foreground and background)
+- [ ] Can stream location updates with Geolocator
+- [ ] Can calculate distance between coordinates
+- [ ] Can initialize and control audio playback with just_audio
+- [ ] Can build custom audio player UI with progress tracking
+- [ ] Can initialize and control video playback with video_player
+- [ ] Can establish WebSocket connections with auto-reconnect
+- [ ] Can send and receive JSON messages over WebSocket
+- [ ] Can implement exponential backoff for reconnection
+- [ ] Can set up GraphQL client with HTTP and WebSocket links
+- [ ] Can write GraphQL queries, mutations, and subscriptions
+- [ ] Can use Query, Mutation, and Subscription widgets
+- [ ] Can implement typing indicators in chat
+- [ ] Can build a complete chat app with real-time features
+- [ ] Can test background tasks and WebSocket connections
+- [ ] Understands battery optimization best practices
+- [ ] Can manage stream subscriptions to prevent memory leaks
+- [ ] Pushed the ChatPulse project to GitHub
+
+---
+
+# Key Takeaways (Memorize These!)
+
+1. **Background tasks need entry points** — Always use `@pragma('vm:entry-point')` and declare iOS background modes. Without these, your background code won't run.
+
+2. **FCM has three states** — Foreground (show local notification), Background (silent data), Terminated (wake app). Handle all three or miss messages.
+
+3. **WebSocket needs resilience** — Networks drop. Implement auto-reconnect with exponential backoff and message queuing for offline scenarios.
+
+4. **GraphQL replaces REST + WebSocket** — One endpoint for queries, mutations, AND real-time subscriptions. Less boilerplate, more power.
+
+5. **Location drains battery** — Always use distance filters, stop tracking when not needed, and respect user permissions. Background location is a privilege.
+
+6. **Media players need disposal** — Audio and video controllers hold native resources. Always dispose them in `onDispose()` to prevent memory leaks.
+
+7. **Constraints save battery** — Don't sync on low battery or metered networks. Workmanager constraints make your app a good citizen.
+
+8. **Test background features on real devices** — Simulators don't accurately represent background execution limits. Always test on physical hardware.
+
+9. **Streams must be cancelled** — Every `listen()` returns a `StreamSubscription`. Cancel it or leak memory and battery.
+
+10. **Real-time is expected in 2026** — Users expect instant messaging, live updates, and push notifications. These are not premium features — they are table stakes.
+
+---
+
+# Extra Practice (Do These Tonight!)
+
+1. **Offline-First Chat**: Extend ChatPulse to queue messages when offline and auto-sync when connection returns using Workmanager + connectivity check.
+
+2. **Push Notification Deep Linking**: Implement notification actions (Reply, Mark Read, Delete) that work from the lock screen without opening the app.
+
+3. **Voice Messages**: Add audio recording and playback to ChatPulse. Show waveform visualization during playback.
+
+4. **Location Sharing**: Add a "Share Live Location for 15 minutes" feature that tracks location in background and sends updates via WebSocket.
+
+5. **GraphQL Pagination**: Implement cursor-based pagination for chat messages using GraphQL `fetchMore` with `ListView.builder` reverse scrolling.
+
+---
+
+**Congratulations!** You've completed Day 25. You now master background processing and advanced Flutter features — from Workmanager and FCM to WebSocket, GraphQL, and media playback. Your apps can now work in the background, communicate in real-time, and deliver rich media experiences.
+
+**Next Up -> Day 26: Flutter Web & Desktop**
+
+---
+
+*Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*  
+*Day 25: Background Processing & Advanced Features — Complete Deep Dive*
+
 
