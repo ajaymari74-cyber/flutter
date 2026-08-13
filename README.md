@@ -35300,6 +35300,1850 @@ Use this checklist to verify mastery:
 
 *Generated for 30Days Flutter: Zero to Hero (2026 Edition)*  
 *Day 21: Testing — Complete Deep Dive*
+# Day 22: Architecture & Clean Code
+# Complete Deep Dive
+
+**Goal:** Master production-ready, scalable Flutter architecture. Implement Clean Architecture layers, Repository Pattern, Dependency Injection with get_it and injectable, apply SOLID principles, and organize code using feature-first vs layer-first folder structures.
+
+---
+
+# Table of Contents
+1. Why Architecture Matters in 2026
+2. Clean Architecture Overview
+3. The Three Layers: Presentation, Domain, Data
+4. Repository Pattern Deep Dive
+5. Dependency Injection: get_it & injectable
+6. SOLID Principles in Flutter
+7. State Management Architecture
+8. Error Handling Architecture
+9. Feature-First vs Layer-First Folder Structure
+10. Performance & Best Practices
+11. Hands-On Project: Clean Architecture Expense Tracker
+12. Common Mistakes & How to Avoid Them
+13. Day 22 Checklist
+
+---
+
+# 1. Why Architecture Matters in 2026
+
+## The Cost of Poor Architecture
+| Symptom | Root Cause | Solution |
+|:---|:---|:---|
+| **"I can't test this"** | UI mixed with business logic | Separation of concerns |
+| **"Changing X broke Y"** | Tight coupling | Dependency inversion |
+| **"This code is unreadable"** | Giant widgets/files | Single responsibility |
+| **"We need to rewrite"** | No abstraction layers | Clean architecture layers |
+| **"State is everywhere"** | Global mutable state | Proper state management |
+
+## Architecture ROI
+- **Onboarding:** New developers understand the codebase in days, not weeks
+- **Refactoring:** Change data source (Firebase → REST) without touching UI
+- **Testing:** Unit test business logic without running the app
+- **Scaling:** Add features without breaking existing ones
+- **Teamwork:** Multiple developers work on different features simultaneously
+
+---
+
+# 2. Clean Architecture Overview
+
+## The Dependency Rule
+```
+┌─────────────────────────────────────┐
+│         Presentation Layer          │  ← UI, Widgets, State Management
+│    (depends on Domain Layer)        │
+├─────────────────────────────────────┤
+│           Domain Layer              │  ← Entities, Use Cases, Repository Interfaces
+│    (depends on nothing)             │     The heart of your app
+├─────────────────────────────────────┤
+│           Data Layer                │  ← Repository Implementations, API, Database
+│    (depends on Domain Layer)        │
+└─────────────────────────────────────┘
+```
+
+**Golden Rule:** Dependencies point INWARD. Domain knows nothing about Flutter, Firebase, or HTTP.
+
+## The Flow of Control
+```
+User Action
+     |
+     v
+Presentation (Bloc/Provider/Riverpod)
+     |
+     v
+Use Case (Domain) — "What should happen?"
+     |
+     v
+Repository Interface (Domain) — "What do I need?"
+     |
+     v
+Repository Implementation (Data) — "How do I get it?"
+     |
+     v
+Data Source (Data) — Firebase / REST / SQLite
+```
+
+---
+
+# 3. The Three Layers: Presentation, Domain, Data
+
+## Domain Layer (The Core)
+```dart
+// lib/domain/entities/expense.dart
+class Expense {
+  final String id;
+  final String title;
+  final double amount;
+  final String category;
+  final DateTime date;
+
+  const Expense({
+    required this.id,
+    required this.title,
+    required this.amount,
+    required this.category,
+    required this.date,
+  });
+
+  bool get isValid => title.isNotEmpty && amount > 0 && category.isNotEmpty;
+}
+
+// lib/domain/entities/category.dart
+class Category {
+  final String id;
+  final String name;
+  final String iconName;
+  final int colorValue;
+
+  const Category({
+    required this.id,
+    required this.name,
+    required this.iconName,
+    required this.colorValue,
+  });
+}
+```
+
+```dart
+// lib/domain/repositories/expense_repository.dart
+abstract class ExpenseRepository {
+  Future<List<Expense>> getExpenses();
+  Future<Expense> getExpenseById(String id);
+  Future<void> addExpense(Expense expense);
+  Future<void> updateExpense(Expense expense);
+  Future<void> deleteExpense(String id);
+  Future<Map<String, double>> getExpensesByCategory();
+  Future<double> getTotalExpenses();
+}
+
+// lib/domain/repositories/category_repository.dart
+abstract class CategoryRepository {
+  Future<List<Category>> getCategories();
+  Future<Category> getCategoryById(String id);
+}
+```
+
+```dart
+// lib/domain/usecases/get_expenses.dart
+class GetExpenses {
+  final ExpenseRepository repository;
+
+  GetExpenses(this.repository);
+
+  Future<List<Expense>> call() async {
+    return await repository.getExpenses();
+  }
+}
+
+// lib/domain/usecases/add_expense.dart
+class AddExpense {
+  final ExpenseRepository repository;
+
+  AddExpense(this.repository);
+
+  Future<void> call(Expense expense) async {
+    if (!expense.isValid) {
+      throw ArgumentError('Invalid expense data');
+    }
+    await repository.addExpense(expense);
+  }
+}
+
+// lib/domain/usecases/get_total_expenses.dart
+class GetTotalExpenses {
+  final ExpenseRepository repository;
+
+  GetTotalExpenses(this.repository);
+
+  Future<double> call() async {
+    return await repository.getTotalExpenses();
+  }
+}
+
+// lib/domain/usecases/get_expenses_by_category.dart
+class GetExpensesByCategory {
+  final ExpenseRepository repository;
+
+  GetExpensesByCategory(this.repository);
+
+  Future<Map<String, double>> call() async {
+    return await repository.getExpensesByCategory();
+  }
+}
+```
+
+## Data Layer (The Implementation)
+```dart
+// lib/data/models/expense_model.dart
+class ExpenseModel {
+  final String id;
+  final String title;
+  final double amount;
+  final String category;
+  final String dateIso;
+
+  ExpenseModel({
+    required this.id,
+    required this.title,
+    required this.amount,
+    required this.category,
+    required this.dateIso,
+  });
+
+  factory ExpenseModel.fromJson(Map<String, dynamic> json) {
+    return ExpenseModel(
+      id: json['id'] as String,
+      title: json['title'] as String,
+      amount: (json['amount'] as num).toDouble(),
+      category: json['category'] as String,
+      dateIso: json['date'] as String,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'amount': amount,
+      'category': category,
+      'date': dateIso,
+    };
+  }
+
+  // Mapper: Model → Entity
+  Expense toEntity() {
+    return Expense(
+      id: id,
+      title: title,
+      amount: amount,
+      category: category,
+      date: DateTime.parse(dateIso),
+    );
+  }
+
+  // Mapper: Entity → Model
+  factory ExpenseModel.fromEntity(Expense entity) {
+    return ExpenseModel(
+      id: entity.id,
+      title: entity.title,
+      amount: entity.amount,
+      category: entity.category,
+      dateIso: entity.date.toIso8601String(),
+    );
+  }
+}
+```
+
+```dart
+// lib/data/datasources/expense_local_datasource.dart
+abstract class ExpenseLocalDataSource {
+  Future<List<ExpenseModel>> getExpenses();
+  Future<void> addExpense(ExpenseModel expense);
+  Future<void> updateExpense(ExpenseModel expense);
+  Future<void> deleteExpense(String id);
+}
+
+// lib/data/datasources/expense_local_datasource_impl.dart
+class ExpenseLocalDataSourceImpl implements ExpenseLocalDataSource {
+  final Database database; // sqflite or drift
+
+  ExpenseLocalDataSourceImpl(this.database);
+
+  @override
+  Future<List<ExpenseModel>> getExpenses() async {
+    final List<Map<String, dynamic>> maps = await database.query('expenses');
+    return maps.map((json) => ExpenseModel.fromJson(json)).toList();
+  }
+
+  @override
+  Future<void> addExpense(ExpenseModel expense) async {
+    await database.insert('expenses', expense.toJson());
+  }
+
+  @override
+  Future<void> updateExpense(ExpenseModel expense) async {
+    await database.update(
+      'expenses',
+      expense.toJson(),
+      where: 'id = ?',
+      whereArgs: [expense.id],
+    );
+  }
+
+  @override
+  Future<void> deleteExpense(String id) async {
+    await database.delete('expenses', where: 'id = ?', whereArgs: [id]);
+  }
+}
+```
+
+```dart
+// lib/data/repositories/expense_repository_impl.dart
+class ExpenseRepositoryImpl implements ExpenseRepository {
+  final ExpenseLocalDataSource localDataSource;
+  // final ExpenseRemoteDataSource remoteDataSource; // For sync
+
+  ExpenseRepositoryImpl({required this.localDataSource});
+
+  @override
+  Future<List<Expense>> getExpenses() async {
+    final models = await localDataSource.getExpenses();
+    return models.map((m) => m.toEntity()).toList();
+  }
+
+  @override
+  Future<Expense> getExpenseById(String id) async {
+    final expenses = await getExpenses();
+    return expenses.firstWhere((e) => e.id == id);
+  }
+
+  @override
+  Future<void> addExpense(Expense expense) async {
+    final model = ExpenseModel.fromEntity(expense);
+    await localDataSource.addExpense(model);
+  }
+
+  @override
+  Future<void> updateExpense(Expense expense) async {
+    final model = ExpenseModel.fromEntity(expense);
+    await localDataSource.updateExpense(model);
+  }
+
+  @override
+  Future<void> deleteExpense(String id) async {
+    await localDataSource.deleteExpense(id);
+  }
+
+  @override
+  Future<Map<String, double>> getExpensesByCategory() async {
+    final expenses = await getExpenses();
+    final map = <String, double>{};
+    for (final expense in expenses) {
+      map[expense.category] = (map[expense.category] ?? 0) + expense.amount;
+    }
+    return map;
+  }
+
+  @override
+  Future<double> getTotalExpenses() async {
+    final expenses = await getExpenses();
+    return expenses.fold(0.0, (sum, e) => sum + e.amount);
+  }
+}
+```
+
+## Presentation Layer (The UI)
+```dart
+// lib/presentation/bloc/expense_bloc.dart
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:equatable/equatable.dart';
+
+abstract class ExpenseEvent extends Equatable {
+  const ExpenseEvent();
+  @override List<Object?> get props => [];
+}
+
+class LoadExpenses extends ExpenseEvent {}
+class AddExpenseEvent extends ExpenseEvent {
+  final Expense expense;
+  const AddExpenseEvent(this.expense);
+  @override List<Object?> get props => [expense];
+}
+class DeleteExpenseEvent extends ExpenseEvent {
+  final String id;
+  const DeleteExpenseEvent(this.id);
+  @override List<Object?> get props => [id];
+}
+
+abstract class ExpenseState extends Equatable {
+  const ExpenseState();
+  @override List<Object?> get props => [];
+}
+
+class ExpenseInitial extends ExpenseState {}
+class ExpenseLoading extends ExpenseState {}
+class ExpenseLoaded extends ExpenseState {
+  final List<Expense> expenses;
+  final double total;
+  final Map<String, double> byCategory;
+  const ExpenseLoaded(this.expenses, this.total, this.byCategory);
+  @override List<Object?> get props => [expenses, total, byCategory];
+}
+class ExpenseError extends ExpenseState {
+  final String message;
+  const ExpenseError(this.message);
+  @override List<Object?> get props => [message];
+}
+
+class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
+  final GetExpenses getExpenses;
+  final AddExpense addExpense;
+  final GetTotalExpenses getTotal;
+  final GetExpensesByCategory getByCategory;
+  final DeleteExpense deleteExpense;
+
+  ExpenseBloc({
+    required this.getExpenses,
+    required this.addExpense,
+    required this.getTotal,
+    required this.getByCategory,
+    required this.deleteExpense,
+  }) : super(ExpenseInitial()) {
+    on<LoadExpenses>(_onLoadExpenses);
+    on<AddExpenseEvent>(_onAddExpense);
+    on<DeleteExpenseEvent>(_onDeleteExpense);
+  }
+
+  Future<void> _onLoadExpenses(LoadExpenses event, Emitter<ExpenseState> emit) async {
+    emit(ExpenseLoading());
+    try {
+      final expenses = await getExpenses();
+      final total = await getTotal();
+      final byCategory = await getByCategory();
+      emit(ExpenseLoaded(expenses, total, byCategory));
+    } catch (e) {
+      emit(ExpenseError(e.toString()));
+    }
+  }
+
+  Future<void> _onAddExpense(AddExpenseEvent event, Emitter<ExpenseState> emit) async {
+    try {
+      await addExpense(event.expense);
+      add(LoadExpenses());
+    } catch (e) {
+      emit(ExpenseError(e.toString()));
+    }
+  }
+
+  Future<void> _onDeleteExpense(DeleteExpenseEvent event, Emitter<ExpenseState> emit) async {
+    try {
+      await deleteExpense(event.id);
+      add(LoadExpenses());
+    } catch (e) {
+      emit(ExpenseError(e.toString()));
+    }
+  }
+}
+```
+
+```dart
+// lib/presentation/screens/home_screen.dart
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Expenses')),
+      body: BlocBuilder<ExpenseBloc, ExpenseState>(
+        builder: (context, state) {
+          if (state is ExpenseLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (state is ExpenseError) {
+            return Center(child: Text('Error: ${state.message}'));
+          }
+          if (state is ExpenseLoaded) {
+            return _buildContent(context, state);
+          }
+          return const Center(child: Text('No data'));
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showAddDialog(context),
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context, ExpenseLoaded state) {
+    return Column(
+      children: [
+        _buildSummaryCard(state.total, state.byCategory),
+        Expanded(
+          child: ListView.builder(
+            itemCount: state.expenses.length,
+            itemBuilder: (context, index) {
+              final expense = state.expenses[index];
+              return ListTile(
+                title: Text(expense.title),
+                subtitle: Text(expense.category),
+                trailing: Text('\$${expense.amount.toStringAsFixed(2)}'),
+                onLongPress: () {
+                  context.read<ExpenseBloc>().add(DeleteExpenseEvent(expense.id));
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSummaryCard(double total, Map<String, double> byCategory) {
+    return Card(
+      margin: const EdgeInsets.all(16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text('Total: \$${total.toStringAsFixed(2)}',
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: byCategory.entries.map((e) {
+                return Chip(label: Text('${e.key}: \$${e.value.toStringAsFixed(0)}'));
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAddDialog(BuildContext context) {
+    // Show dialog to add expense
+    showDialog(
+      context: context,
+      builder: (context) => const AddExpenseDialog(),
+    );
+  }
+}
+```
+
+---
+
+# 4. Repository Pattern Deep Dive
+
+## Why Repository Pattern?
+| Without Repository | With Repository |
+|:---|:---|
+| `FirebaseAuth.instance` scattered in 20 files | Single `AuthRepository` interface |
+| Changing Firebase → REST requires 20 file edits | Change 1 implementation class |
+| Can't unit test without Firebase | Mock `AuthRepository` in tests |
+| UI knows about Firebase exceptions | Repository maps to domain exceptions |
+
+## The Repository Contract
+```dart
+// Domain defines WHAT, Data defines HOW
+abstract class UserRepository {              // ← Domain
+  Future<User> getUser(String id);
+  Future<void> updateUser(User user);
+}
+
+class UserRepositoryImpl implements UserRepository {  // ← Data
+  final UserRemoteDataSource remote;
+  final UserLocalDataSource local;
+
+  UserRepositoryImpl({required this.remote, required this.local});
+
+  @override
+  Future<User> getUser(String id) async {
+    try {
+      // Try cache first
+      final cached = await local.getUser(id);
+      if (cached != null) return cached;
+
+      // Fetch from network
+      final user = await remote.getUser(id);
+      await local.cacheUser(user);
+      return user;
+    } on SocketException {
+      throw NetworkException('No internet connection');
+    } on HttpException catch (e) {
+      throw ServerException(e.message);
+    }
+  }
+
+  @override
+  Future<void> updateUser(User user) async {
+    await remote.updateUser(user);
+    await local.cacheUser(user);
+  }
+}
+```
+
+## Data Source vs Repository
+| Concept | Responsibility | Example |
+|:---|:---|:---|
+| **Data Source** | Raw I/O operations | `FirebaseFirestore.instance.collection('users').get()` |
+| **Repository** | Business logic, caching, error mapping | "Try cache, then network, then error" |
+| **Use Case** | Orchestration, validation | "Get user, validate premium status, return result" |
+
+---
+
+# 5. Dependency Injection: get_it & injectable
+
+## Why DI?
+- **Decoupling:** Classes depend on abstractions, not concrete implementations
+- **Testability:** Inject mocks instead of real services
+- **Lifecycle management:** Singleton vs Factory vs LazySingleton
+- **Centralized configuration:** One place to wire everything
+
+## Setup
+
+**pubspec.yaml:**
+```yaml
+dependencies:
+  get_it: ^7.7.0
+  injectable: ^2.4.0
+
+dev_dependencies:
+  injectable_generator: ^2.6.0
+  build_runner: ^2.4.0
+```
+
+## Manual DI with get_it
+```dart
+// lib/core/di/injection.dart
+import 'package:get_it/get_it.dart';
+
+final GetIt sl = GetIt.instance;
+
+void initDependencies() {
+  // Data Sources
+  sl.registerLazySingleton<Database>(() => Database.open('app.db'));
+  sl.registerLazySingleton<ExpenseLocalDataSource>(
+    () => ExpenseLocalDataSourceImpl(sl()),
+  );
+
+  // Repositories
+  sl.registerLazySingleton<ExpenseRepository>(
+    () => ExpenseRepositoryImpl(localDataSource: sl()),
+  );
+
+  // Use Cases
+  sl.registerLazySingleton(() => GetExpenses(sl()));
+  sl.registerLazySingleton(() => AddExpense(sl()));
+  sl.registerLazySingleton(() => GetTotalExpenses(sl()));
+  sl.registerLazySingleton(() => GetExpensesByCategory(sl()));
+  sl.registerLazySingleton(() => DeleteExpense(sl()));
+
+  // BLoC
+  sl.registerFactory(() => ExpenseBloc(
+    getExpenses: sl(),
+    addExpense: sl(),
+    getTotal: sl(),
+    getByCategory: sl(),
+    deleteExpense: sl(),
+  ));
+}
+```
+
+## Code Generation with injectable
+```dart
+// lib/core/di/injection.dart
+import 'package:get_it/get_it.dart';
+import 'package:injectable/injectable.dart';
+
+final GetIt getIt = GetIt.instance;
+
+@InjectableInit()
+void configureDependencies() => getIt.init();
+```
+
+```dart
+// lib/data/datasources/expense_local_datasource_impl.dart
+@LazySingleton(as: ExpenseLocalDataSource)
+class ExpenseLocalDataSourceImpl implements ExpenseLocalDataSource {
+  final Database database;
+  ExpenseLocalDataSourceImpl(this.database);
+  // ...
+}
+```
+
+```dart
+// lib/data/repositories/expense_repository_impl.dart
+@LazySingleton(as: ExpenseRepository)
+class ExpenseRepositoryImpl implements ExpenseRepository {
+  final ExpenseLocalDataSource localDataSource;
+  ExpenseRepositoryImpl({required this.localDataSource});
+  // ...
+}
+```
+
+```dart
+// lib/domain/usecases/get_expenses.dart
+@injectable
+class GetExpenses {
+  final ExpenseRepository repository;
+  GetExpenses(this.repository);
+  Future<List<Expense>> call() async => await repository.getExpenses();
+}
+```
+
+```dart
+// lib/presentation/bloc/expense_bloc.dart
+@injectable
+class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
+  final GetExpenses getExpenses;
+  final AddExpense addExpense;
+  // ...
+  ExpenseBloc({
+    required this.getExpenses,
+    required this.addExpense,
+    // ...
+  }) : super(ExpenseInitial()) {
+    // ...
+  }
+}
+```
+
+**Generate code:**
+```bash
+flutter pub run build_runner build --delete-conflicting-outputs
+```
+
+## DI Registration Types
+| Type | Use Case | Example |
+|:---|:---|:---|
+| `registerSingleton` | Created immediately, lives forever | Database connection |
+| `registerLazySingleton` | Created on first use, lives forever | Repository |
+| `registerFactory` | New instance every time | BLoC (needs fresh state) |
+| `registerScoped` | Lives for a scope (page/feature) | Feature-specific service |
+
+---
+
+# 6. SOLID Principles in Flutter
+
+## S — Single Responsibility Principle
+```dart
+// ❌ WRONG - Widget does everything
+class HomeScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder(
+      future: FirebaseFirestore.instance.collection('expenses').get(),
+      builder: (context, snapshot) {
+        // Parse data, calculate totals, build UI, handle errors
+        // 500 lines of mixed concerns
+      },
+    );
+  }
+}
+
+// ✅ CORRECT - Each class has one job
+class HomeScreen extends StatelessWidget {  // ← Builds UI
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<ExpenseBloc, ExpenseState>(
+      builder: (context, state) => ExpenseList(state.expenses),
+    );
+  }
+}
+
+class ExpenseBloc extends Bloc<...> {  // ← Manages state
+  final GetExpenses getExpenses;      // ← Use case handles logic
+}
+
+class ExpenseRepositoryImpl implements ExpenseRepository {  // ← Fetches data
+  final ExpenseDataSource dataSource;  // ← Raw I/O
+}
+```
+
+## O — Open/Closed Principle
+```dart
+// ❌ WRONG - Modify existing code to add features
+class ReportGenerator {
+  String generate(String type) {
+    if (type == 'pdf') return generatePdf();
+    if (type == 'csv') return generateCsv();
+    // Modify this class every time!
+  }
+}
+
+// ✅ CORRECT - Extend without modifying
+abstract class ReportGenerator {
+  String generate();
+}
+
+class PdfReportGenerator implements ReportGenerator {
+  @override String generate() => 'PDF content';
+}
+
+class CsvReportGenerator implements ReportGenerator {
+  @override String generate() => 'CSV content';
+}
+
+class ExcelReportGenerator implements ReportGenerator {
+  @override String generate() => 'Excel content';
+}
+
+// Usage
+List<ReportGenerator> generators = [PdfReportGenerator(), CsvReportGenerator()];
+```
+
+## L — Liskov Substitution Principle
+```dart
+// ❌ WRONG - Subclass breaks parent contract
+class Rectangle {
+  double width, height;
+  double get area => width * height;
+}
+
+class Square extends Rectangle {  // Breaks LSP!
+  @override set width(double w) { width = height = w; }
+  @override set height(double h) { width = height = h; }
+}
+
+// ✅ CORRECT - Use composition over inheritance
+abstract class Shape {
+  double get area;
+}
+
+class Rectangle implements Shape {
+  final double width, height;
+  Rectangle(this.width, this.height);
+  @override double get area => width * height;
+}
+
+class Square implements Shape {
+  final double side;
+  Square(this.side);
+  @override double get area => side * side;
+}
+```
+
+## I — Interface Segregation Principle
+```dart
+// ❌ WRONG - Fat interface
+abstract class Repository {
+  Future<void> create();
+  Future<void> read();
+  Future<void> update();
+  Future<void> delete();
+  Future<void> sync();
+  Future<void> export();
+  Future<void> import();
+}
+
+// ✅ CORRECT - Split into focused interfaces
+abstract class CrudRepository<T> {
+  Future<void> create(T item);
+  Future<T> read(String id);
+  Future<void> update(T item);
+  Future<void> delete(String id);
+}
+
+abstract class Syncable {
+  Future<void> sync();
+}
+
+abstract class Exportable {
+  Future<String> export();
+  Future<void> import(String data);
+}
+
+class ExpenseRepository implements CrudRepository<Expense>, Syncable {
+  // Only implements what's needed
+}
+```
+
+## D — Dependency Inversion Principle
+```dart
+// ❌ WRONG - High-level depends on low-level
+class ExpenseBloc {
+  final ExpenseRepositoryImpl repository;  // Concrete class!
+}
+
+// ✅ CORRECT - Both depend on abstraction
+class ExpenseBloc {
+  final ExpenseRepository repository;  // Abstract interface
+}
+
+// The concrete implementation is injected
+class ExpenseRepositoryImpl implements ExpenseRepository { ... }
+class MockExpenseRepository implements ExpenseRepository { ... }
+```
+
+---
+
+# 7. State Management Architecture
+
+## Choosing the Right Tool
+| Scenario | Recommended | Why |
+|:---|:---|:---|
+| **Simple form state** | `ValueNotifier` | Lightweight, no boilerplate |
+| **Medium app (5-10 screens)** | `Riverpod` | Compile-safe, testable |
+| **Large app, team project** | `BLoC` | Strict architecture, event-driven |
+| **Rapid prototyping** | `ChangeNotifier` + `Provider` | Fast to implement |
+
+## BLoC Architecture Pattern
+```
+Event → Bloc → State
+  |       |      |
+  |    Use Case  |
+  |       |      |
+  |   Repository  |
+  |       |      |
+  |   Data Source |
+```
+
+```dart
+// lib/presentation/bloc/expense_event.dart
+abstract class ExpenseEvent extends Equatable {
+  const ExpenseEvent();
+  @override List<Object?> get props => [];
+}
+
+class LoadExpenses extends ExpenseEvent {}
+class RefreshExpenses extends ExpenseEvent {}
+class AddNewExpense extends ExpenseEvent {
+  final String title;
+  final double amount;
+  final String category;
+  const AddNewExpense(this.title, this.amount, this.category);
+  @override List<Object?> get props => [title, amount, category];
+}
+```
+
+```dart
+// lib/presentation/bloc/expense_state.dart
+abstract class ExpenseState extends Equatable {
+  const ExpenseState();
+  @override List<Object?> get props => [];
+}
+
+class ExpenseInitial extends ExpenseState {}
+class ExpenseLoading extends ExpenseState {}
+class ExpenseLoaded extends ExpenseState {
+  final List<Expense> expenses;
+  const ExpenseLoaded(this.expenses);
+  @override List<Object?> get props => [expenses];
+}
+class ExpenseEmpty extends ExpenseState {}
+class ExpenseError extends ExpenseState {
+  final String message;
+  const ExpenseError(this.message);
+  @override List<Object?> get props => [message];
+}
+```
+
+---
+
+# 8. Error Handling Architecture
+
+## The Result Pattern (Functional Error Handling)
+```dart
+// lib/core/errors/failures.dart
+abstract class Failure {
+  final String message;
+  const Failure(this.message);
+}
+
+class ServerFailure extends Failure {
+  const ServerFailure(String message) : super(message);
+}
+
+class CacheFailure extends Failure {
+  const CacheFailure(String message) : super(message);
+}
+
+class NetworkFailure extends Failure {
+  const NetworkFailure() : super('No internet connection');
+}
+
+class ValidationFailure extends Failure {
+  const ValidationFailure(String message) : super(message);
+}
+```
+
+```dart
+// lib/core/result/result.dart
+sealed class Result<T> {
+  const Result();
+}
+
+class Success<T> extends Result<T> {
+  final T data;
+  const Success(this.data);
+}
+
+class Error<T> extends Result<T> {
+  final Failure failure;
+  const Error(this.failure);
+}
+```
+
+```dart
+// Usage in Use Case
+class GetExpenses {
+  final ExpenseRepository repository;
+  GetExpenses(this.repository);
+
+  Future<Result<List<Expense>>> call() async {
+    try {
+      final expenses = await repository.getExpenses();
+      return Success(expenses);
+    } on SocketException {
+      return const Error(NetworkFailure());
+    } on FormatException catch (e) {
+      return Error(CacheFailure('Data corruption: ${e.message}'));
+    } catch (e) {
+      return Error(ServerFailure(e.toString()));
+    }
+  }
+}
+```
+
+```dart
+// Usage in BLoC
+Future<void> _onLoadExpenses(LoadExpenses event, Emitter<ExpenseState> emit) async {
+  emit(ExpenseLoading());
+  final result = await getExpenses();
+  switch (result) {
+    case Success(data: final expenses):
+      emit(expenses.isEmpty ? ExpenseEmpty() : ExpenseLoaded(expenses));
+    case Error(failure: final failure):
+      emit(ExpenseError(failure.message));
+  }
+}
+```
+
+---
+
+# 9. Feature-First vs Layer-First Folder Structure
+
+## Layer-First (Traditional)
+```
+lib/
+  data/
+    models/
+    datasources/
+    repositories/
+  domain/
+    entities/
+    repositories/
+    usecases/
+  presentation/
+    bloc/
+    screens/
+    widgets/
+  core/
+    errors/
+    usecases/
+    di/
+```
+
+**Pros:** Easy to find all models, all repositories  
+**Cons:** Scattered feature code, hard to delete a feature
+
+## Feature-First (Recommended for 2026)
+```
+lib/
+  core/
+    di/
+      injection.dart
+    errors/
+      failures.dart
+    result/
+      result.dart
+    usecases/
+      usecase.dart
+    utils/
+      extensions.dart
+  features/
+    expenses/
+      data/
+        models/
+          expense_model.dart
+        datasources/
+          expense_local_datasource.dart
+          expense_local_datasource_impl.dart
+        repositories/
+          expense_repository_impl.dart
+      domain/
+        entities/
+          expense.dart
+        repositories/
+          expense_repository.dart
+        usecases/
+          get_expenses.dart
+          add_expense.dart
+          delete_expense.dart
+      presentation/
+        bloc/
+          expense_bloc.dart
+          expense_event.dart
+          expense_state.dart
+        screens/
+          expense_list_screen.dart
+          expense_detail_screen.dart
+        widgets/
+          expense_card.dart
+          expense_summary.dart
+        dialogs/
+          add_expense_dialog.dart
+    categories/
+      data/
+      domain/
+      presentation/
+    auth/
+      data/
+      domain/
+      presentation/
+  app.dart
+  main.dart
+```
+
+**Pros:** Feature is self-contained, easy to delete/modify, team scaling  
+**Cons:** More folders, repeated layer structure per feature
+
+## Hybrid Approach (Best of Both)
+```
+lib/
+  core/              # Shared utilities, DI, errors
+  shared/            # Shared widgets, themes
+  features/
+    expenses/
+      data/
+      domain/
+      presentation/
+    auth/
+      data/
+      domain/
+      presentation/
+```
+
+---
+
+# 10. Performance & Best Practices
+
+## Architecture Performance Rules
+| Rule | Impact | Why |
+|:---|:---|:---|
+| **Use lazy loading for features** | Faster startup | `get_it` lazy singletons |
+| **Cache repository results** | Fewer API calls | Memory vs network tradeoff |
+| **Dispose BLoCs when screen closes** | Memory management | `AutoRoute` or `BlocProvider` |
+| **Use immutable state** | Predictable rebuilds | `Equatable` or `Freezed` |
+| **Map errors in repository, not UI** | Consistent UX | One place to handle exceptions |
+
+## Code Generation Strategy
+```yaml
+dev_dependencies:
+  build_runner: ^2.4.0
+  injectable_generator: ^2.6.0
+  freezed: ^2.5.0
+  freezed_annotation: ^2.4.0
+  json_serializable: ^6.8.0
+```
+
+```bash
+# Watch for changes and auto-generate
+flutter pub run build_runner watch --delete-conflicting-outputs
+
+# One-time generation
+flutter pub run build_runner build --delete-conflicting-outputs
+```
+
+---
+
+# 11. Hands-On Project: Clean Architecture Expense Tracker
+
+## Project Overview
+Build **CleanExpense** — a fully architected expense tracker with:
+- Clean Architecture: Presentation → Domain → Data
+- Repository Pattern with local SQLite storage
+- Dependency Injection with get_it + injectable
+- BLoC state management
+- Result pattern for error handling
+- Feature-first folder structure
+- Unit tests for use cases and repositories
+
+## Complete Project Structure
+```
+lib/
+  core/
+    di/
+      injection.dart
+    errors/
+      failures.dart
+    result/
+      result.dart
+    usecases/
+      usecase.dart
+  features/
+    expenses/
+      data/
+        models/expense_model.dart
+        datasources/expense_local_datasource.dart
+        datasources/expense_local_datasource_impl.dart
+        repositories/expense_repository_impl.dart
+      domain/
+        entities/expense.dart
+        repositories/expense_repository.dart
+        usecases/get_expenses.dart
+        usecases/add_expense.dart
+        usecases/delete_expense.dart
+        usecases/get_total_expenses.dart
+        usecases/get_expenses_by_category.dart
+      presentation/
+        bloc/expense_bloc.dart
+        bloc/expense_event.dart
+        bloc/expense_state.dart
+        screens/expense_list_screen.dart
+        widgets/expense_card.dart
+        widgets/expense_summary.dart
+        dialogs/add_expense_dialog.dart
+  main.dart
+  app.dart
+```
+
+## Core Files
+
+```dart
+// lib/core/errors/failures.dart
+abstract class Failure {
+  final String message;
+  const Failure(this.message);
+}
+
+class CacheFailure extends Failure {
+  const CacheFailure(String message) : super(message);
+}
+
+class ValidationFailure extends Failure {
+  const ValidationFailure(String message) : super(message);
+}
+```
+
+```dart
+// lib/core/result/result.dart
+sealed class Result<T> {
+  const Result();
+}
+
+class Success<T> extends Result<T> {
+  final T data;
+  const Success(this.data);
+}
+
+class Error<T> extends Result<T> {
+  final Failure failure;
+  const Error(this.failure);
+}
+```
+
+```dart
+// lib/core/usecases/usecase.dart
+abstract class UseCase<Type, Params> {
+  Future<Type> call(Params params);
+}
+
+class NoParams {
+  const NoParams();
+}
+```
+
+```dart
+// lib/core/di/injection.dart
+import 'package:get_it/get_it.dart';
+import 'package:injectable/injectable.dart';
+
+final GetIt getIt = GetIt.instance;
+
+@InjectableInit()
+void configureDependencies() => getIt.init();
+```
+
+## Feature: Expenses
+
+```dart
+// lib/features/expenses/domain/entities/expense.dart
+class Expense {
+  final String id;
+  final String title;
+  final double amount;
+  final String category;
+  final DateTime date;
+
+  const Expense({
+    required this.id,
+    required this.title,
+    required this.amount,
+    required this.category,
+    required this.date,
+  });
+
+  bool get isValid => title.isNotEmpty && amount > 0 && category.isNotEmpty;
+
+  Expense copyWith({
+    String? id,
+    String? title,
+    double? amount,
+    String? category,
+    DateTime? date,
+  }) {
+    return Expense(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      amount: amount ?? this.amount,
+      category: category ?? this.category,
+      date: date ?? this.date,
+    );
+  }
+}
+```
+
+```dart
+// lib/features/expenses/domain/repositories/expense_repository.dart
+abstract class ExpenseRepository {
+  Future<List<Expense>> getExpenses();
+  Future<void> addExpense(Expense expense);
+  Future<void> deleteExpense(String id);
+  Future<double> getTotalExpenses();
+  Future<Map<String, double>> getExpensesByCategory();
+}
+```
+
+```dart
+// lib/features/expenses/domain/usecases/get_expenses.dart
+import 'package:injectable/injectable.dart';
+
+@injectable
+class GetExpenses implements UseCase<List<Expense>, NoParams> {
+  final ExpenseRepository repository;
+  GetExpenses(this.repository);
+
+  @override
+  Future<List<Expense>> call(NoParams params) async {
+    return await repository.getExpenses();
+  }
+}
+```
+
+```dart
+// lib/features/expenses/domain/usecases/add_expense.dart
+import 'package:injectable/injectable.dart';
+
+@injectable
+class AddExpense implements UseCase<void, Expense> {
+  final ExpenseRepository repository;
+  AddExpense(this.repository);
+
+  @override
+  Future<void> call(Expense expense) async {
+    if (!expense.isValid) {
+      throw const ValidationFailure('Invalid expense data');
+    }
+    await repository.addExpense(expense);
+  }
+}
+```
+
+```dart
+// lib/features/expenses/data/models/expense_model.dart
+class ExpenseModel {
+  final String id;
+  final String title;
+  final double amount;
+  final String category;
+  final String dateIso;
+
+  ExpenseModel({
+    required this.id,
+    required this.title,
+    required this.amount,
+    required this.category,
+    required this.dateIso,
+  });
+
+  factory ExpenseModel.fromJson(Map<String, dynamic> json) => ExpenseModel(
+    id: json['id'] as String,
+    title: json['title'] as String,
+    amount: (json['amount'] as num).toDouble(),
+    category: json['category'] as String,
+    dateIso: json['date'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'amount': amount,
+    'category': category,
+    'date': dateIso,
+  };
+
+  Expense toEntity() => Expense(
+    id: id,
+    title: title,
+    amount: amount,
+    category: category,
+    date: DateTime.parse(dateIso),
+  );
+
+  factory ExpenseModel.fromEntity(Expense entity) => ExpenseModel(
+    id: entity.id,
+    title: entity.title,
+    amount: entity.amount,
+    category: entity.category,
+    dateIso: entity.date.toIso8601String(),
+  );
+}
+```
+
+```dart
+// lib/features/expenses/data/datasources/expense_local_datasource.dart
+abstract class ExpenseLocalDataSource {
+  Future<List<ExpenseModel>> getExpenses();
+  Future<void> addExpense(ExpenseModel expense);
+  Future<void> deleteExpense(String id);
+}
+```
+
+```dart
+// lib/features/expenses/data/datasources/expense_local_datasource_impl.dart
+import 'package:injectable/injectable.dart';
+import 'package:sqflite/sqflite.dart';
+
+@LazySingleton(as: ExpenseLocalDataSource)
+class ExpenseLocalDataSourceImpl implements ExpenseLocalDataSource {
+  final Database database;
+  ExpenseLocalDataSourceImpl(this.database);
+
+  @override
+  Future<List<ExpenseModel>> getExpenses() async {
+    final maps = await database.query('expenses', orderBy: 'date DESC');
+    return maps.map((json) => ExpenseModel.fromJson(json)).toList();
+  }
+
+  @override
+  Future<void> addExpense(ExpenseModel expense) async {
+    await database.insert('expenses', expense.toJson());
+  }
+
+  @override
+  Future<void> deleteExpense(String id) async {
+    await database.delete('expenses', where: 'id = ?', whereArgs: [id]);
+  }
+}
+```
+
+```dart
+// lib/features/expenses/data/repositories/expense_repository_impl.dart
+import 'package:injectable/injectable.dart';
+
+@LazySingleton(as: ExpenseRepository)
+class ExpenseRepositoryImpl implements ExpenseRepository {
+  final ExpenseLocalDataSource localDataSource;
+  ExpenseRepositoryImpl({required this.localDataSource});
+
+  @override
+  Future<List<Expense>> getExpenses() async {
+    final models = await localDataSource.getExpenses();
+    return models.map((m) => m.toEntity()).toList();
+  }
+
+  @override
+  Future<void> addExpense(Expense expense) async {
+    final model = ExpenseModel.fromEntity(expense);
+    await localDataSource.addExpense(model);
+  }
+
+  @override
+  Future<void> deleteExpense(String id) async {
+    await localDataSource.deleteExpense(id);
+  }
+
+  @override
+  Future<double> getTotalExpenses() async {
+    final expenses = await getExpenses();
+    return expenses.fold(0.0, (sum, e) => sum + e.amount);
+  }
+
+  @override
+  Future<Map<String, double>> getExpensesByCategory() async {
+    final expenses = await getExpenses();
+    final map = <String, double>{};
+    for (final expense in expenses) {
+      map[expense.category] = (map[expense.category] ?? 0) + expense.amount;
+    }
+    return map;
+  }
+}
+```
+
+```dart
+// lib/features/expenses/presentation/bloc/expense_bloc.dart
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:equatable/equatable.dart';
+import 'package:injectable/injectable.dart';
+
+part 'expense_event.dart';
+part 'expense_state.dart';
+
+@injectable
+class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> {
+  final GetExpenses getExpenses;
+  final AddExpense addExpense;
+  final DeleteExpense deleteExpense;
+  final GetTotalExpenses getTotal;
+  final GetExpensesByCategory getByCategory;
+
+  ExpenseBloc({
+    required this.getExpenses,
+    required this.addExpense,
+    required this.deleteExpense,
+    required this.getTotal,
+    required this.getByCategory,
+  }) : super(ExpenseInitial()) {
+    on<LoadExpenses>(_onLoad);
+    on<AddNewExpense>(_onAdd);
+    on<RemoveExpense>(_onDelete);
+  }
+
+  Future<void> _onLoad(LoadExpenses event, Emitter<ExpenseState> emit) async {
+    emit(ExpenseLoading());
+    try {
+      final expenses = await getExpenses(const NoParams());
+      final total = await getTotal(const NoParams());
+      final byCategory = await getByCategory(const NoParams());
+      emit(ExpenseLoaded(expenses: expenses, total: total, byCategory: byCategory));
+    } catch (e) {
+      emit(ExpenseError(e.toString()));
+    }
+  }
+
+  Future<void> _onAdd(AddNewExpense event, Emitter<ExpenseState> emit) async {
+    try {
+      final expense = Expense(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        title: event.title,
+        amount: event.amount,
+        category: event.category,
+        date: DateTime.now(),
+      );
+      await addExpense(expense);
+      add(LoadExpenses());
+    } catch (e) {
+      emit(ExpenseError(e.toString()));
+    }
+  }
+
+  Future<void> _onDelete(RemoveExpense event, Emitter<ExpenseState> emit) async {
+    try {
+      await deleteExpense(event.id);
+      add(LoadExpenses());
+    } catch (e) {
+      emit(ExpenseError(e.toString()));
+    }
+  }
+}
+```
+
+```dart
+// lib/features/expenses/presentation/bloc/expense_event.dart
+part of 'expense_bloc.dart';
+
+abstract class ExpenseEvent extends Equatable {
+  const ExpenseEvent();
+  @override List<Object?> get props => [];
+}
+
+class LoadExpenses extends ExpenseEvent {}
+
+class AddNewExpense extends ExpenseEvent {
+  final String title;
+  final double amount;
+  final String category;
+  const AddNewExpense(this.title, this.amount, this.category);
+  @override List<Object?> get props => [title, amount, category];
+}
+
+class RemoveExpense extends ExpenseEvent {
+  final String id;
+  const RemoveExpense(this.id);
+  @override List<Object?> get props => [id];
+}
+```
+
+```dart
+// lib/features/expenses/presentation/bloc/expense_state.dart
+part of 'expense_bloc.dart';
+
+abstract class ExpenseState extends Equatable {
+  const ExpenseState();
+  @override List<Object?> get props => [];
+}
+
+class ExpenseInitial extends ExpenseState {}
+class ExpenseLoading extends ExpenseState {}
+
+class ExpenseLoaded extends ExpenseState {
+  final List<Expense> expenses;
+  final double total;
+  final Map<String, double> byCategory;
+  const ExpenseLoaded({required this.expenses, required this.total, required this.byCategory});
+  @override List<Object?> get props => [expenses, total, byCategory];
+}
+
+class ExpenseError extends ExpenseState {
+  final String message;
+  const ExpenseError(this.message);
+  @override List<Object?> get props => [message];
+}
+```
+
+```dart
+// lib/app.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'core/di/injection.dart';
+import 'features/expenses/presentation/bloc/expense_bloc.dart';
+import 'features/expenses/presentation/screens/expense_list_screen.dart';
+
+class CleanExpenseApp extends StatelessWidget {
+  const CleanExpenseApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'CleanExpense',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(useMaterial3: true, colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo)),
+      home: BlocProvider(
+        create: (_) => getIt<ExpenseBloc>()..add(LoadExpenses()),
+        child: const ExpenseListScreen(),
+      ),
+    );
+  }
+}
+```
+
+```dart
+// lib/main.dart
+import 'package:flutter/material.dart';
+import 'core/di/injection.dart';
+import 'app.dart';
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  configureDependencies();
+  runApp(const CleanExpenseApp());
+}
+```
+
+---
+
+# 12. Common Mistakes & How to Avoid Them
+
+## Mistake 1: UI Directly Calls Firebase/HTTP
+```dart
+// ❌ WRONG - UI depends on implementation
+class HomeScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder(
+      future: FirebaseFirestore.instance.collection('expenses').get(),
+      builder: ...,
+    );
+  }
+}
+
+// ✅ CORRECT - UI depends on abstraction
+class HomeScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<ExpenseBloc, ExpenseState>(builder: ...);
+  }
+}
+```
+
+## Mistake 2: Business Logic in Widgets
+```dart
+// ❌ WRONG - Calculations in build method
+class TotalWidget extends StatelessWidget {
+  final List<Expense> expenses;
+  @override
+  Widget build(BuildContext context) {
+    final total = expenses.where((e) => e.date.month == DateTime.now().month)
+                          .fold(0.0, (s, e) => s + e.amount);
+    return Text('Total: \$${total.toStringAsFixed(2)}');
+  }
+}
+
+// ✅ CORRECT - Use case handles logic
+class GetMonthlyTotal implements UseCase<double, int> {
+  final ExpenseRepository repo;
+  @override
+  Future<double> call(int month) async { ... }
+}
+```
+
+## Mistake 3: Giant BLoC with All Features
+```dart
+// ❌ WRONG - God BLoC
+class AppBloc extends Bloc<AppEvent, AppState> {  // 2000 lines
+  // Handles auth, expenses, categories, settings, notifications...
+}
+
+// ✅ CORRECT - One BLoC per feature
+class AuthBloc extends Bloc<AuthEvent, AuthState> { ... }
+class ExpenseBloc extends Bloc<ExpenseEvent, ExpenseState> { ... }
+class CategoryBloc extends Bloc<CategoryEvent, CategoryState> { ... }
+```
+
+## Mistake 4: Not Using Repository Interface
+```dart
+// ❌ WRONG - Direct dependency on implementation
+class ExpenseBloc {
+  final ExpenseRepositoryImpl repository;  // Concrete!
+}
+
+// ✅ CORRECT - Depend on abstraction
+class ExpenseBloc {
+  final ExpenseRepository repository;  // Interface
+}
+```
+
+## Mistake 5: Mixing Models and Entities
+```dart
+// ❌ WRONG - One class does everything
+class Expense {  // Is this entity or model?
+  final String id;
+  final String firebaseDocId;  // Data-specific!
+  final Map<String, dynamic> rawJson;  // Data-specific!
+}
+
+// ✅ CORRECT - Separate concerns
+class Expense {  // Entity - pure business object
+  final String id, title;
+  final double amount;
+}
+
+class ExpenseModel {  // Model - data layer object
+  final String id, title;
+  final double amount;
+  final String dateIso;
+  Expense toEntity() => Expense(id: id, title: title, amount: amount, ...);
+}
+```
+
+## Mistake 6: No Error Handling Strategy
+```dart
+// ❌ WRONG - Raw exceptions everywhere
+try {
+  await repository.getExpenses();
+} catch (e) {
+  showSnackBar(e.toString());  // User sees "SocketException: Connection refused"
+}
+
+// ✅ CORRECT - Mapped, user-friendly errors
+try {
+  await repository.getExpenses();
+} on NetworkException {
+  showSnackBar('Please check your internet connection');
+} on ServerException {
+  showSnackBar('Server error. Please try again later.');
+}
+```
+
+---
+
+# 13. Day 22 Checklist
+
+Use this checklist to verify mastery:
+
+- [ ] Understands Clean Architecture dependency rule (inward only)
+- [ ] Can explain the three layers: Presentation, Domain, Data
+- [ ] Can create domain entities (pure Dart, no Flutter)
+- [ ] Can define repository interfaces in domain layer
+- [ ] Can implement repository pattern in data layer
+- [ ] Can create use cases with single responsibility
+- [ ] Can map between models (data) and entities (domain)
+- [ ] Can implement local data source with SQLite/sqflite
+- [ ] Can set up get_it for dependency injection
+- [ ] Can use injectable for code-generated DI
+- [ ] Understands singleton vs factory registration
+- [ ] Can apply Single Responsibility Principle
+- [ ] Can apply Open/Closed Principle
+- [ ] Can apply Liskov Substitution Principle
+- [ ] Can apply Interface Segregation Principle
+- [ ] Can apply Dependency Inversion Principle
+- [ ] Can implement BLoC with Clean Architecture
+- [ ] Can use Result pattern for error handling
+- [ ] Can create custom Failure classes
+- [ ] Understands feature-first vs layer-first structure
+- [ ] Can organize code by feature
+- [ ] Can write unit tests for use cases
+- [ ] Can write unit tests for repositories
+- [ ] Built the CleanExpense app
+- [ ] App has three-layer architecture
+- [ ] App has DI with get_it + injectable
+- [ ] App has BLoC state management
+- [ ] App has repository pattern
+- [ ] App has feature-first folder structure
+- [ ] App has unit tests for use cases
+- [ ] Pushed the project to GitHub
+
+---
+
+# Key Takeaways (Memorize These!)
+
+1. **Domain layer knows nothing about Flutter** — Entities and use cases are pure Dart. They can be reused in CLI tools, backend, or other frontends.
+
+2. **Repository is an interface in domain, implementation in data** — This lets you swap Firebase for REST, or mock for tests, without touching UI.
+
+3. **Use cases have one job** — "GetExpenses", "AddExpense", "DeleteExpense" — each is a single class with a single `call()` method.
+
+4. **Models map to entities, never leak to presentation** — Data layer uses models (JSON-serializable). Domain uses entities (pure). Presentation sees only entities.
+
+5. **Dependency injection makes testing possible** — Without DI, you can't inject mocks. With DI, every class is testable in isolation.
+
+6. **Feature-first scales better than layer-first** — When your app grows to 50 features, layer-first becomes a maze. Feature-first keeps each feature self-contained.
+
+7. **BLoC belongs in presentation, not domain** — BLoC handles UI state and orchestrates use cases. Business rules live in use cases and entities.
+
+8. **Error handling is architecture, not afterthought** — Map raw exceptions to domain failures in repository. Present user-friendly messages in UI.
+
+9. **Code generation saves hours of boilerplate** — `injectable`, `freezed`, and `json_serializable` eliminate repetitive, error-prone code.
+
+10. **Architecture is a means, not an end** — Don't over-engineer a 3-screen app. Start simple, add layers as complexity grows.
+
+---
+
+# Extra Practice (Do These Tonight!)
+
+1. **Multi-Data-Source Repository:** Build a repository that tries cache first, then network, then shows cached data if offline.
+
+2. **Feature Module:** Extract your expenses feature into a separate Dart package with its own pubspec.yaml. Import it into the main app.
+
+3. **Migration from setState to Clean Architecture:** Take a simple setState app and refactor it into full Clean Architecture with BLoC, use cases, and repositories.
+
+4. **Custom Failure Hierarchy:** Create a comprehensive error handling system with retry logic, exponential backoff, and user-friendly error widgets.
+
+5. **Modular Monolith:** Build an app with 3 features (Auth, Expenses, Profile) each in its own folder with independent BLoCs, repositories, and use cases.
+
+---
+
+**Congratulations!** You've completed Day 22. You now master production-ready Flutter architecture — from Clean Architecture layers and Repository Pattern to Dependency Injection, SOLID principles, and scalable folder structures.
+
+**Next Up → Day 23: Performance Optimization**
+
+---
+
+*Generated for 30Days Flutter: Zero to Hero (2026 Edition)*  
+*Day 22: Architecture & Clean Code — Complete Deep Dive*
 
 
 *Generated for 30Days Flutter: Zero to Hero (2026 Edition)*  
