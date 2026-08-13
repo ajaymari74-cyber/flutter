@@ -37148,3 +37148,1625 @@ Use this checklist to verify mastery:
 
 *Generated for 30Days Flutter: Zero to Hero (2026 Edition)*  
 *Day 18: Animations — Complete Deep Dive*
+
+# Day 23: Performance Optimization
+# Complete Deep Dive
+
+**Goal:** Master Flutter performance optimization. Eliminate jank with widget rebuild optimization, implement image caching and lazy loading, use isolates for heavy computation, profile with DevTools, reduce app size, and apply SkSL warmup for smooth 60fps/120fps experiences.
+
+---
+
+# Table of Contents
+1. Why Performance Matters in 2026
+2. Flutter's Rendering Pipeline
+3. Widget Rebuild Optimization
+4. Image Optimization & Caching
+5. List Virtualization & Lazy Loading
+6. Isolates for Heavy Computation
+7. DevTools: Performance, Memory, Network Profiling
+8. Shader Compilation Jank & SkSL Warmup
+9. App Size Optimization
+10. Memory Management
+11. Hands-On Project: Performance-Aware Social Feed
+12. Common Mistakes & How to Avoid Them
+13. Day 23 Checklist
+
+---
+
+# 1. Why Performance Matters in 2026
+
+## The Performance-User Connection
+| Metric | User Impact | Business Impact |
+|:---|:---|:---|
+| **Frame drops (jank)** | Feels sluggish, unprofessional | 1-star reviews, uninstalls |
+| **Slow startup** | Users abandon before first screen | 20% drop in D1 retention |
+| **Memory leaks** | App crashes, device heats up | Negative word-of-mouth |
+| **Large APK/IPA** | Users refuse to download | Lower store conversion |
+| **Battery drain** | Users disable background | Reduced engagement |
+
+## Flutter Performance Targets
+| Target | Metric | Tool |
+|:---|:---|:---|
+| **Frame Time** | < 16.67ms (60fps) or < 8.33ms (120fps) | Performance Overlay |
+| **Startup Time** | < 2 seconds to first frame | DevTools Timeline |
+| **Memory Usage** | < 150MB average for standard apps | DevTools Memory |
+| **APK Size** | < 20MB (Android), < 30MB (iOS) | `flutter build apk --analyze-size` |
+| **Build Time** | < 5 minutes for CI | Build logs |
+
+---
+
+# 2. Flutter's Rendering Pipeline
+
+## The Frame Lifecycle
+```
+1. Build Phase          →  Widget tree construction
+        |
+2. Layout Phase         →  Calculate sizes and positions
+        |
+3. Paint Phase          →  Render to layers
+        |
+4. Composite Phase      →  Layer tree to GPU
+        |
+5. Rasterize Phase      →  GPU renders pixels
+        |
+   Target: 16.67ms total for 60fps
+```
+
+## The Three Trees (Revisited)
+```
+Widget Tree (Configuration)     →  Cheap to rebuild
+        |
+        v
+Element Tree (Lifecycle)        →  Reused when possible
+        |
+        v
+RenderObject Tree (Pixels)      →  Expensive to recreate
+```
+
+## What Causes Jank?
+| Cause | Phase Affected | Solution |
+|:---|:---|:---|
+| **Expensive build methods** | Build | `const`, `RepaintBoundary` |
+| **Deep widget trees** | Build | Extract widgets, reduce nesting |
+| **Synchronous file I/O** | Build | Move to isolate |
+| **Image decoding** | Paint | Pre-cache, resize before display |
+| **Shader compilation** | Rasterize | SkSL warmup, Impeller (iOS) |
+| **Garbage collection** | All | Reduce object allocation |
+
+---
+
+# 3. Widget Rebuild Optimization
+
+## The `const` Constructor
+```dart
+// ❌ WRONG - Rebuilds every time parent rebuilds
+class MyScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text('Title'),           // Rebuilds!
+        Container(               // Rebuilds!
+          padding: EdgeInsets.all(16),
+          child: Icon(Icons.star),
+        ),
+      ],
+    );
+  }
+}
+
+// ✅ CORRECT - const prevents unnecessary rebuilds
+class MyScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      children: [
+        Text('Title'),           // Never rebuilds
+        Padding(                 // Never rebuilds
+          padding: EdgeInsets.all(16),
+          child: Icon(Icons.star),
+        ),
+      ],
+    );
+  }
+}
+```
+
+## `const` Rules
+| Can Be `const` | Cannot Be `const` |
+|:---|:---|
+| `Text('Hello')` | `Text(variable)` |
+| `EdgeInsets.all(16)` | `EdgeInsets.all(someValue)` |
+| `Icon(Icons.add)` | `Icon(iconData)` where iconData is variable |
+| `SizedBox(height: 20)` | `SizedBox(height: calculateHeight())` |
+| `Container(color: Colors.red)` | `Container(color: theme.primaryColor)` |
+
+## Extract Widgets to Prevent Rebuilds
+```dart
+// ❌ WRONG - Entire Column rebuilds when counter changes
+class CounterScreen extends StatefulWidget {
+  @override
+  State<CounterScreen> createState() => _CounterScreenState();
+}
+
+class _CounterScreenState extends State<CounterScreen> {
+  int _count = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const HeaderWidget(),          // Shouldn't rebuild
+        Text('Count: $_count'),         // Only this should rebuild
+        const FooterWidget(),           // Shouldn't rebuild
+      ],
+    );
+  }
+}
+
+// ✅ CORRECT - Only counter rebuilds
+class CounterScreen extends StatefulWidget {
+  @override
+  State<CounterScreen> createState() => _CounterScreenState();
+}
+
+class _CounterScreenState extends State<CounterScreen> {
+  int _count = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      children: [
+        HeaderWidget(),
+        CounterDisplay(),   // Extracted - uses its own state or selector
+        FooterWidget(),
+      ],
+    );
+  }
+}
+
+class CounterDisplay extends StatelessWidget {
+  const CounterDisplay({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // Use BlocBuilder, Consumer, or ValueListenableBuilder
+    // to rebuild only when count changes
+    return BlocBuilder<CounterBloc, int>(
+      builder: (context, count) => Text('Count: $count'),
+    );
+  }
+}
+```
+
+## `RepaintBoundary` for Isolation
+```dart
+// ❌ WRONG - Animation triggers rebuild of entire screen
+class Dashboard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Header(),
+        AnimatedChart(),   // Animating this rebuilds everything above and below
+        Footer(),
+      ],
+    );
+  }
+}
+
+// ✅ CORRECT - Isolate expensive painters
+class Dashboard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const Header(),
+        RepaintBoundary(   // Creates separate layer
+          child: AnimatedChart(),
+        ),
+        const Footer(),
+      ],
+    );
+  }
+}
+```
+
+## `ListenableBuilder` / `ValueListenableBuilder` for Granular Updates
+```dart
+class OptimizedCounter extends StatefulWidget {
+  const OptimizedCounter({super.key});
+
+  @override
+  State<OptimizedCounter> createState() => _OptimizedCounterState();
+}
+
+class _OptimizedCounterState extends State<OptimizedCounter> {
+  final ValueNotifier<int> _counter = ValueNotifier(0);
+
+  @override
+  void dispose() {
+    _counter.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Column(
+        children: [
+          const Text('This text never rebuilds'),  // const = safe
+          ValueListenableBuilder<int>(
+            valueListenable: _counter,
+            builder: (context, value, child) {
+              // Only this Text rebuilds when counter changes
+              return Text('Count: $value', style: const TextStyle(fontSize: 48));
+            },
+          ),
+          const Text('This text also never rebuilds'),  // const = safe
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _counter.value++,
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+```
+
+## `Selector` with Provider/Riverpod
+```dart
+// ❌ WRONG - Rebuilds when ANY field changes
+Consumer<AppState>(
+  builder: (context, state, child) {
+    return Text(state.user.name);  // Rebuilds if user.email changes too!
+  },
+)
+
+// ✅ CORRECT - Only rebuilds when selected field changes
+Selector<AppState, String>(
+  selector: (state) => state.user.name,
+  builder: (context, name, child) {
+    return Text(name);  // Only rebuilds when name changes
+  },
+)
+
+// Riverpod equivalent
+Consumer(
+  builder: (context, ref, child) {
+    final name = ref.watch(userProvider.select((u) => u.name));
+    return Text(name);
+  },
+)
+```
+
+## Avoid `setState` in Large Widgets
+```dart
+// ❌ WRONG - setState rebuilds entire screen
+class ProfileScreen extends StatefulWidget {
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  bool _isEditing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Column(
+        children: [
+          Header(),              // Rebuilds unnecessarily
+          Body(),                // Rebuilds unnecessarily
+          Footer(                // Rebuilds unnecessarily
+            isEditing: _isEditing,
+            onToggle: () => setState(() => _isEditing = !_isEditing),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ✅ CORRECT - Localize state to smallest possible widget
+class ProfileScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Column(
+        children: [
+          Header(),
+          Body(),
+          EditableFooter(),  // Contains its own state
+        ],
+      ),
+    );
+  }
+}
+
+class EditableFooter extends StatefulWidget {
+  const EditableFooter({super.key});
+
+  @override
+  State<EditableFooter> createState() => _EditableFooterState();
+}
+
+class _EditableFooterState extends State<EditableFooter> {
+  bool _isEditing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(_isEditing ? 'Editing...' : 'View Mode'),
+        Switch(
+          value: _isEditing,
+          onChanged: (v) => setState(() => _isEditing = v),
+        ),
+      ],
+    );
+  }
+}
+```
+
+---
+
+# 4. Image Optimization & Caching
+
+## Image Loading Best Practices
+```dart
+// ❌ WRONG - Raw NetworkImage with no caching
+Image.network('https://example.com/photo.jpg')
+
+// ✅ CORRECT - Cached with resize and placeholder
+CachedNetworkImage(
+  imageUrl: 'https://example.com/photo.jpg',
+  placeholder: (context, url) => const SkeletonLoadingWidget(),
+  errorWidget: (context, url, error) => const Icon(Icons.error),
+  memCacheWidth: 400,        // Resize to display width
+  memCacheHeight: 400,
+  maxWidthDiskCache: 800,    // Limit disk cache size
+  maxHeightDiskCache: 800,
+  fadeInDuration: const Duration(milliseconds: 300),
+)
+```
+
+## Pre-caching Images
+```dart
+class ImagePreloader {
+  static final Map<String, ImageProvider> _cache = {};
+
+  static void preload(BuildContext context, List<String> urls) {
+    for (final url in urls) {
+      if (!_cache.containsKey(url)) {
+        final provider = CachedNetworkImageProvider(url);
+        _cache[url] = provider;
+        precacheImage(provider, context);
+      }
+    }
+  }
+
+  static ImageProvider getProvider(String url) {
+    return _cache[url] ?? CachedNetworkImageProvider(url);
+  }
+}
+
+// Usage in initState
+@override
+void didChangeDependencies() {
+  super.didChangeDependencies();
+  ImagePreloader.preload(context, imageUrls);
+}
+```
+
+## Asset Image Optimization
+```yaml
+# pubspec.yaml - Use proper resolution variants
+flutter:
+  assets:
+    - assets/images/2.0x/logo.png
+    - assets/images/3.0x/logo.png
+    - assets/images/logo.png  # 1.0x base
+```
+
+## SVG vs PNG vs WebP
+| Format | Use Case | Size |
+|:---|:---|:---|
+| **SVG** | Icons, logos, illustrations | Tiny (vector) |
+| **WebP** | Photos, complex images | 25-35% smaller than PNG |
+| **PNG** | Transparency needed, simple graphics | Larger |
+| **JPEG** | Photos without transparency | Smallest for photos |
+
+```yaml
+dependencies:
+  flutter_svg: ^2.0.0
+  cached_network_image: ^3.3.0
+```
+
+```dart
+// SVG is resolution-independent and tiny
+SvgPicture.asset(
+  'assets/icons/logo.svg',
+  width: 120,
+  height: 40,
+)
+```
+
+---
+
+# 5. List Virtualization & Lazy Loading
+
+## `ListView.builder` vs `ListView`
+```dart
+// ❌ WRONG - Builds ALL children upfront
+ListView(
+  children: items.map((item) => ExpensiveCard(item)).toList(),  // 1000 widgets built!
+)
+
+// ✅ CORRECT - Only builds visible children
+ListView.builder(
+  itemCount: items.length,
+  itemBuilder: (context, index) => ExpensiveCard(items[index]),  // Only ~10 built
+)
+```
+
+## `SliverList` with `SliverChildBuilderDelegate`
+```dart
+CustomScrollView(
+  slivers: [
+    SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          return ExpenseCard(expenses[index]);
+        },
+        childCount: expenses.length,
+        // Estimate item height for better scroll performance
+        // Or use SliverFixedExtentList if heights are uniform
+      ),
+    ),
+  ],
+)
+```
+
+## Pagination with Lazy Loading
+```dart
+class PaginatedList extends StatefulWidget {
+  const PaginatedList({super.key});
+
+  @override
+  State<PaginatedList> createState() => _PaginatedListState();
+}
+
+class _PaginatedListState extends State<PaginatedList> {
+  final List<Item> _items = [];
+  final ScrollController _scrollController = ScrollController();
+  bool _isLoading = false;
+  bool _hasMore = true;
+  int _page = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMore();
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      _loadMore();
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_isLoading || !_hasMore) return;
+    setState(() => _isLoading = true);
+
+    final newItems = await ApiService.fetchItems(page: _page);
+    setState(() {
+      _items.addAll(newItems);
+      _isLoading = false;
+      _hasMore = newItems.length == 20;  // Assuming page size is 20
+      _page++;
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      controller: _scrollController,
+      itemCount: _items.length + (_hasMore ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index >= _items.length) {
+          return const Center(child: Padding(
+            padding: EdgeInsets.all(16),
+            child: CircularProgressIndicator(),
+          ));
+        }
+        return ItemCard(item: _items[index]);
+      },
+    );
+  }
+}
+```
+
+## `PageStorageKey` for Scroll Position Persistence
+```dart
+ListView.builder(
+  key: const PageStorageKey('feed_list'),  // Remembers scroll position
+  itemCount: items.length,
+  itemBuilder: (context, index) => ItemCard(items[index]),
+)
+```
+
+---
+
+# 6. Isolates for Heavy Computation
+
+## When to Use Isolates
+| Operation | Duration | Use Isolate? |
+|:---|:---|:---|
+| **Parsing small JSON** | < 5ms | No |
+| **Parsing large JSON (MBs)** | > 16ms | Yes |
+| **Image processing** | Variable | Yes |
+| **File compression** | > 16ms | Yes |
+| **Sorting 1000 items** | < 5ms | No |
+| **Sorting 100,000 items** | > 16ms | Yes |
+| **Database query** | Usually < 16ms | No (async is enough) |
+
+## `Isolate.run()` (Flutter 3.7+)
+```dart
+import 'dart:convert';
+import 'dart:isolate';
+
+class JsonParser {
+  /// Parse large JSON without blocking UI
+  static Future<List<Map<String, dynamic>>> parseLargeJson(String jsonString) async {
+    return await Isolate.run(() {
+      final decoded = jsonDecode(jsonString) as List<dynamic>;
+      return decoded.map((e) => e as Map<String, dynamic>).toList();
+    });
+  }
+
+  /// Process images in isolate
+  static Future<Uint8List> compressImage(Uint8List imageBytes) async {
+    return await Isolate.run(() {
+      // Heavy image processing
+      return processedBytes;
+    });
+  }
+}
+```
+
+## `compute()` Function (Simpler API)
+```dart
+import 'package:flutter/foundation.dart';
+
+// Top-level or static function required
+List<Expense> parseExpensesInIsolate(String jsonString) {
+  final decoded = jsonDecode(jsonString) as List<dynamic>;
+  return decoded.map((e) => Expense.fromJson(e)).toList();
+}
+
+// Usage
+Future<void> loadExpenses() async {
+  final jsonString = await rootBundle.loadString('assets/expenses.json');
+  final expenses = await compute(parseExpensesInIsolate, jsonString);
+  setState(() => _expenses = expenses);
+}
+```
+
+## Custom Isolate with Communication
+```dart
+import 'dart:isolate';
+import 'dart:async';
+
+class ImageProcessor {
+  late Isolate _isolate;
+  late SendPort _sendPort;
+  final _receivePort = ReceivePort();
+  final _completers = <int, Completer<Uint8List>>{};
+  int _id = 0;
+
+  Future<void> init() async {
+    _isolate = await Isolate.spawn(
+      _imageProcessorEntry,
+      _receivePort.sendPort,
+    );
+
+    _receivePort.listen((message) {
+      if (message is SendPort) {
+        _sendPort = message;
+      } else if (message is Map<String, dynamic>) {
+        final id = message['id'] as int;
+        final result = message['result'] as Uint8List;
+        _completers[id]?.complete(result);
+        _completers.remove(id);
+      }
+    });
+  }
+
+  Future<Uint8List> process(Uint8List image) async {
+    final id = _id++;
+    final completer = Completer<Uint8List>();
+    _completers[id] = completer;
+    _sendPort.send({'id': id, 'image': image});
+    return completer.future;
+  }
+
+  void dispose() {
+    _isolate.kill();
+    _receivePort.close();
+  }
+
+  static void _imageProcessorEntry(SendPort mainSendPort) {
+    final receivePort = ReceivePort();
+    mainSendPort.send(receivePort.sendPort);
+
+    receivePort.listen((message) async {
+      final id = message['id'] as int;
+      final image = message['image'] as Uint8List;
+
+      // Heavy processing
+      final result = await _heavyImageProcessing(image);
+
+      mainSendPort.send({'id': id, 'result': result});
+    });
+  }
+
+  static Future<Uint8List> _heavyImageProcessing(Uint8List image) async {
+    // Image manipulation
+    return image;
+  }
+}
+```
+
+---
+
+# 7. DevTools: Performance, Memory, Network Profiling
+
+## Enabling Performance Overlay
+```dart
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      showPerformanceOverlay: true,  // Shows FPS graphs on screen
+      home: HomeScreen(),
+    );
+  }
+}
+```
+
+## Reading the Performance Overlay
+```
+Top graph (GPU)    →  Raster thread (GPU work)
+Bottom graph (UI)  →  UI thread (build/layout/paint)
+
+Green line = 60fps target (16.67ms)
+Red bars   = Jank (frame took too long)
+```
+
+## DevTools Commands
+```bash
+# Open DevTools
+flutter pub global activate devtools
+flutter pub global run devtools
+
+# Or run with DevTools
+flutter run --devtools-server-address http://localhost:9100
+
+# Profile mode (optimized, not debug)
+flutter run --profile
+
+# Release mode (smallest, fastest)
+flutter run --release
+```
+
+## Performance Profiling Checklist
+| Check | How | Target |
+|:---|:---|:---|
+| **Frame times** | Performance Overlay / Timeline | < 16.67ms |
+| **Rebuild counts** | Widget Inspector "Highlight Repaints" | Minimize red flashes |
+| **Widget tree depth** | Widget Inspector | < 20 levels |
+| **Memory leaks** | Memory tab, heap snapshots | Stable over time |
+| **Network efficiency** | Network tab | Cache responses |
+| **App size** | `flutter build apk --analyze-size` | < 20MB |
+
+## Memory Profiling
+```dart
+// Force garbage collection (debug only)
+import 'dart:developer' as developer;
+developer.ServiceExtensionResponse response =
+  await developer.Service.getInfo();
+
+// Check image cache size
+PaintingBinding.instance.imageCache.currentSize;      // Bytes
+PaintingBinding.instance.imageCache.currentSizeBytes;  // Bytes
+PaintingBinding.instance.imageCache.maximumSize = 100; // Max images
+PaintingBinding.instance.imageCache.maximumSizeBytes = 50 * 1024 * 1024; // 50MB
+```
+
+---
+
+# 8. Shader Compilation Jank & SkSL Warmup
+
+## Understanding Shader Jank
+| Renderer | Shader Handling | Jank? |
+|:---|:---|:---|
+| **Skia (default)** | Compiles shaders on first use | Yes, on first animation |
+| **Impeller (iOS)** | Pre-compiles shaders at build | No |
+| **Impeller (Android)** | Pre-compiles shaders at build | No (rolling out) |
+
+## SkSL Warmup (For Skia)
+```bash
+# 1. Run app in profile mode and capture shaders
+flutter run --profile --cache-sksl
+
+# 2. Play through all animations, transitions, screens
+# 3. Press 'M' in terminal to capture SkSL shaders
+# 4. This writes flutter_01.sksl.json
+
+# 5. Bundle shaders into app
+flutter build apk --bundle-sksl-path flutter_01.sksl.json
+flutter build ios --bundle-sksl-path flutter_01.sksl.json
+```
+
+## Checking Your Renderer
+```dart
+import 'dart:io';
+
+void checkRenderer() {
+  if (Platform.isIOS) {
+    // iOS uses Impeller by default in Flutter 3.10+
+    print('Using Impeller on iOS - no shader jank!');
+  } else {
+    // Android may still use Skia
+    print('Check if Impeller is enabled');
+  }
+}
+```
+
+## Enable Impeller on Android (Flutter 3.24+)
+```xml
+<!-- android/app/src/main/AndroidManifest.xml -->
+<meta-data
+    android:name="io.flutter.embedding.android.EnableImpeller"
+    android:value="true" />
+```
+
+---
+
+# 9. App Size Optimization
+
+## Analyze Build Size
+```bash
+# Android App Bundle analysis
+flutter build appbundle --analyze-size
+
+# APK analysis
+flutter build apk --analyze-size
+
+# iOS analysis
+flutter build ios --analyze-size
+```
+
+## Size Reduction Strategies
+| Strategy | Savings | How |
+|:---|:---|:---|
+| **Split ABI** | ~40% per APK | `flutter build apk --split-per-abi` |
+| **Remove unused resources** | Variable | `flutter pub run flutter_launcher_icons:main` |
+| **Compress images** | 50-80% | Use WebP, TinyPNG |
+| **Use SVG for icons** | 90%+ | `flutter_svg` instead of PNG |
+| **Minify code** | 20-30% | Enabled in release by default |
+| **Tree shake fonts** | Variable | Only include used font weights |
+| **Deferred components** | Large features | `deferred-components` (Android) |
+
+## Split Per ABI
+```bash
+# Instead of one fat APK with all architectures:
+# app-release.apk (50MB)
+
+# Build separate APKs:
+flutter build apk --split-per-abi
+# app-arm64-v8a-release.apk (15MB)
+# app-armeabi-v7a-release.apk (12MB)
+# app-x86_64-release.apk (18MB)
+```
+
+## Removing Unused Resources
+```yaml
+# pubspec.yaml - Only include what you need
+flutter:
+  assets:
+    - assets/images/  # Don't include entire folder blindly
+    # Be specific:
+    - assets/images/logo.png
+    - assets/images/onboarding/
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Roboto-Regular.ttf
+        # Don't include weights you don't use
+        # - asset: assets/fonts/Roboto-Thin.ttf
+```
+
+## Code Obfuscation
+```bash
+# Enabled by default in release builds
+# For extra obfuscation:
+flutter build apk --obfuscate --split-debug-info=symbols/
+```
+
+---
+
+# 10. Memory Management
+
+## Dispose Controllers and Streams
+```dart
+class _MyScreenState extends State<MyScreen> {
+  final _controller = AnimationController(vsync: this);
+  final _scrollController = ScrollController();
+  final _textController = TextEditingController();
+  StreamSubscription? _subscription;
+
+  @override
+  void dispose() {
+    _controller.dispose();        // Always dispose animations
+    _scrollController.dispose();  // Always dispose scroll controllers
+    _textController.dispose();    // Always dispose text controllers
+    _subscription?.cancel();      // Always cancel stream subscriptions
+    super.dispose();
+  }
+}
+```
+
+## Image Cache Management
+```dart
+// Clear image cache when memory is low
+void clearImageCache() {
+  PaintingBinding.instance.imageCache.clear();
+  PaintingBinding.instance.imageCache.clearLiveImages();
+}
+
+// Set reasonable limits
+void configureImageCache() {
+  PaintingBinding.instance.imageCache.maximumSize = 100;  // Max 100 images
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 50 * 1024 * 1024;  // 50MB
+}
+```
+
+## Avoid Memory Leaks in Closures
+```dart
+// ❌ WRONG - Captures context, prevents garbage collection
+class LeakyWidget extends StatefulWidget {
+  @override
+  State<LeakyWidget> createState() => _LeakyWidgetState();
+}
+
+class _LeakyWidgetState extends State<LeakyWidget> {
+  @override
+  void initState() {
+    super.initState();
+    Timer.periodic(const Duration(seconds: 1), (timer) {
+      setState(() {});  // setState after dispose = crash!
+    });
+  }
+}
+
+// ✅ CORRECT - Check mounted before setState
+class FixedWidget extends StatefulWidget {
+  @override
+  State<FixedWidget> createState() => _FixedWidgetState();
+}
+
+class _FixedWidgetState extends State<FixedWidget> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {  // Critical check!
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();  // Always cancel timers
+    super.dispose();
+  }
+}
+```
+
+---
+
+# 11. Hands-On Project: Performance-Aware Social Feed
+
+## Project Overview
+Build **FastFeed** — a high-performance social feed app with:
+- `ListView.builder` with pagination
+- Image pre-caching and placeholder skeletons
+- `RepaintBoundary` for animated cards
+- `ValueListenableBuilder` for like counters
+- Isolate-based JSON parsing
+- Scroll position persistence
+- Optimized `const` widget usage
+
+## Complete App Code
+
+```dart
+import 'dart:convert';
+import 'dart:isolate';
+import 'dart:math' as math;
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:shimmer/shimmer.dart';
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(statusBarColor: Colors.transparent),
+  );
+  runApp(const FastFeedApp());
+}
+
+// ==================== APP ROOT ====================
+class FastFeedApp extends StatelessWidget {
+  const FastFeedApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'FastFeed',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+      ),
+      home: const FeedScreen(),
+    );
+  }
+}
+
+// ==================== DATA MODELS ====================
+class Post {
+  final String id;
+  final String authorName;
+  final String authorAvatar;
+  final String imageUrl;
+  final String caption;
+  final int likes;
+  final DateTime timestamp;
+
+  const Post({
+    required this.id,
+    required this.authorName,
+    required this.authorAvatar,
+    required this.imageUrl,
+    required this.caption,
+    required this.likes,
+    required this.timestamp,
+  });
+
+  factory Post.fromJson(Map<String, dynamic> json) {
+    return Post(
+      id: json['id'],
+      authorName: json['authorName'],
+      authorAvatar: json['authorAvatar'],
+      imageUrl: json['imageUrl'],
+      caption: json['caption'],
+      likes: json['likes'],
+      timestamp: DateTime.parse(json['timestamp']),
+    );
+  }
+}
+
+// ==================== MOCK DATA SERVICE ====================
+class PostService {
+  static Future<List<Post>> fetchPosts(int page, int limit) async {
+    // Simulate network delay
+    await Future.delayed(const Duration(milliseconds: 800));
+
+    // Generate mock data
+    return List.generate(limit, (index) {
+      final id = page * limit + index;
+      return Post(
+        id: 'post_$id',
+        authorName: 'User ${id % 50}',
+        authorAvatar: 'https://i.pravatar.cc/150?img=${id % 70}',
+        imageUrl: 'https://picsum.photos/seed/$id/800/600',
+        caption: 'This is post number $id with some interesting content about Flutter performance optimization techniques.',
+        likes: math.Random().nextInt(1000),
+        timestamp: DateTime.now().subtract(Duration(hours: id)),
+      );
+    });
+  }
+
+  static Future<List<Post>> fetchPostsInIsolate(int page, int limit) async {
+    return await Isolate.run(() async {
+      // In real app, this would parse large JSON response
+      return fetchPosts(page, limit);
+    });
+  }
+}
+
+// ==================== FEED SCREEN ====================
+class FeedScreen extends StatefulWidget {
+  const FeedScreen({super.key});
+
+  @override
+  State<FeedScreen> createState() => _FeedScreenState();
+}
+
+class _FeedScreenState extends State<FeedScreen> {
+  final List<Post> _posts = [];
+  final ScrollController _scrollController = ScrollController();
+  bool _isLoading = false;
+  bool _hasMore = true;
+  int _page = 0;
+  static const int _pageSize = 10;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMore();
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 300) {
+      _loadMore();
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_isLoading || !_hasMore) return;
+    setState(() => _isLoading = true);
+
+    final newPosts = await PostService.fetchPosts(_page, _pageSize);
+
+    setState(() {
+      _posts.addAll(newPosts);
+      _isLoading = false;
+      _hasMore = newPosts.length == _pageSize;
+      _page++;
+    });
+
+    // Pre-cache next batch images
+    _preCacheImages(newPosts);
+  }
+
+  void _preCacheImages(List<Post> posts) {
+    for (final post in posts) {
+      precacheImage(
+        CachedNetworkImageProvider(post.imageUrl),
+        context,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('FastFeed'),
+        backgroundColor: Colors.deepPurple,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.bolt),
+            onPressed: _showPerformanceStats,
+          ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          setState(() {
+            _posts.clear();
+            _page = 0;
+            _hasMore = true;
+          });
+          await _loadMore();
+        },
+        child: ListView.builder(
+          key: const PageStorageKey('feed_list'),
+          controller: _scrollController,
+          itemCount: _posts.length + (_hasMore ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (index >= _posts.length) {
+              return const LoadingIndicator();
+            }
+            return PostCard(post: _posts[index]);
+          },
+        ),
+      ),
+    );
+  }
+
+  void _showPerformanceStats() {
+    final cache = PaintingBinding.instance.imageCache;
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Performance Stats'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Posts loaded: ${_posts.length}'),
+            Text('Image cache: ${cache.currentSize} images'),
+            Text('Cache size: ${(cache.currentSizeBytes / 1024 / 1024).toStringAsFixed(2)} MB'),
+            Text('Max cache: ${cache.maximumSize} images'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              cache.clear();
+              cache.clearLiveImages();
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Image cache cleared')),
+              );
+            },
+            child: const Text('Clear Cache'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==================== POST CARD ====================
+class PostCard extends StatelessWidget {
+  final Post post;
+
+  const PostCard({super.key, required this.post});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Author header - const where possible
+          _AuthorHeader(
+            name: post.authorName,
+            avatarUrl: post.authorAvatar,
+            timestamp: post.timestamp,
+          ),
+
+          // Image with RepaintBoundary for smooth scrolling
+          RepaintBoundary(
+            child: CachedNetworkImage(
+              imageUrl: post.imageUrl,
+              height: 280,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              placeholder: (context, url) => const SkeletonImage(),
+              errorWidget: (context, url, error) => const Icon(Icons.error),
+              memCacheWidth: 800,
+              memCacheHeight: 600,
+            ),
+          ),
+
+          // Actions with ValueListenableBuilder for likes
+          _PostActions(postId: post.id, initialLikes: post.likes),
+
+          // Caption
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Text(
+              post.caption,
+              style: const TextStyle(fontSize: 14),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==================== AUTHOR HEADER ====================
+class _AuthorHeader extends StatelessWidget {
+  final String name;
+  final String avatarUrl;
+  final DateTime timestamp;
+
+  const _AuthorHeader({
+    required this.name,
+    required this.avatarUrl,
+    required this.timestamp,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundImage: CachedNetworkImageProvider(avatarUrl),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                  _timeAgo(timestamp),
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.more_vert),
+        ],
+      ),
+    );
+  }
+
+  String _timeAgo(DateTime date) {
+    final diff = DateTime.now().difference(date);
+    if (diff.inDays > 0) return '${diff.inDays}d ago';
+    if (diff.inHours > 0) return '${diff.inHours}h ago';
+    if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
+    return 'Just now';
+  }
+}
+
+// ==================== POST ACTIONS ====================
+class _PostActions extends StatefulWidget {
+  final String postId;
+  final int initialLikes;
+
+  const _PostActions({required this.postId, required this.initialLikes});
+
+  @override
+  State<_PostActions> createState() => _PostActionsState();
+}
+
+class _PostActionsState extends State<_PostActions>
+    with SingleTickerProviderStateMixin {
+  late final ValueNotifier<int> _likeNotifier;
+  late final ValueNotifier<bool> _isLikedNotifier;
+  late AnimationController _animController;
+
+  @override
+  void initState() {
+    super.initState();
+    _likeNotifier = ValueNotifier(widget.initialLikes);
+    _isLikedNotifier = ValueNotifier(false);
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+  }
+
+  @override
+  void dispose() {
+    _likeNotifier.dispose();
+    _isLikedNotifier.dispose();
+    _animController.dispose();
+    super.dispose();
+  }
+
+  void _toggleLike() {
+    _isLikedNotifier.value = !_isLikedNotifier.value;
+    if (_isLikedNotifier.value) {
+      _likeNotifier.value++;
+      _animController.forward(from: 0);
+    } else {
+      _likeNotifier.value--;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          ValueListenableBuilder<bool>(
+            valueListenable: _isLikedNotifier,
+            builder: (context, isLiked, child) {
+              return IconButton(
+                onPressed: _toggleLike,
+                icon: AnimatedBuilder(
+                  animation: _animController,
+                  builder: (context, child) {
+                    return Transform.scale(
+                      scale: 1.0 + (_animController.value * 0.3),
+                      child: Icon(
+                        isLiked ? Icons.favorite : Icons.favorite_border,
+                        color: isLiked ? Colors.red : null,
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+          ValueListenableBuilder<int>(
+            valueListenable: _likeNotifier,
+            builder: (context, likes, child) {
+              return Text('$likes', style: const TextStyle(fontWeight: FontWeight.bold));
+            },
+          ),
+          const SizedBox(width: 16),
+          const Icon(Icons.comment_outlined),
+          const SizedBox(width: 16),
+          const Icon(Icons.send_outlined),
+          const Spacer(),
+          const Icon(Icons.bookmark_border),
+        ],
+      ),
+    );
+  }
+}
+
+// ==================== SKELETON LOADING ====================
+class SkeletonImage extends StatelessWidget {
+  const SkeletonImage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey.shade300,
+      highlightColor: Colors.grey.shade100,
+      child: Container(
+        height: 280,
+        width: double.infinity,
+        color: Colors.white,
+      ),
+    );
+  }
+}
+
+// ==================== LOADING INDICATOR ====================
+class LoadingIndicator extends StatelessWidget {
+  const LoadingIndicator({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.all(24),
+      child: Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+```
+
+---
+
+# 12. Common Mistakes & How to Avoid Them
+
+## Mistake 1: Not Using `const`
+```dart
+// ❌ WRONG - Rebuilds every time
+@override
+Widget build(BuildContext context) {
+  return Container(
+    padding: EdgeInsets.all(16),  // Not const
+    child: Text('Hello'),          // Not const
+  );
+}
+
+// ✅ CORRECT - Add const everywhere possible
+@override
+Widget build(BuildContext context) {
+  return const Padding(            // const constructor
+    padding: EdgeInsets.all(16),   // const
+    child: Text('Hello'),           // const
+  );
+}
+```
+
+## Mistake 2: `ListView` Instead of `ListView.builder`
+```dart
+// ❌ WRONG - Builds all children immediately
+ListView(
+  children: longList.map((item) => ComplexWidget(item)).toList(),
+)
+
+// ✅ CORRECT - Lazy builds only visible items
+ListView.builder(
+  itemCount: longList.length,
+  itemBuilder: (context, index) => ComplexWidget(longList[index]),
+)
+```
+
+## Mistake 3: setState in Large Widgets
+```dart
+// ❌ WRONG - Rebuilds entire screen
+setState(() => _counter++);
+
+// ✅ CORRECT - Localize state
+ValueListenableBuilder(
+  valueListenable: counterNotifier,
+  builder: (context, value, child) => Text('$value'),
+)
+```
+
+## Mistake 4: Not Disposing Controllers
+```dart
+// ❌ WRONG - Memory leak
+class _MyState extends State<MyWidget> {
+  final controller = AnimationController(vsync: this);
+  // No dispose!
+}
+
+// ✅ CORRECT - Always dispose
+@override
+void dispose() {
+  controller.dispose();
+  super.dispose();
+}
+```
+
+## Mistake 5: Heavy Computation on Main Thread
+```dart
+// ❌ WRONG - Blocks UI
+void processData() {
+  final result = heavyCalculation(data);  // 500ms freeze
+  setState(() => _result = result);
+}
+
+// ✅ CORRECT - Use isolate
+Future<void> processData() async {
+  final result = await Isolate.run(() => heavyCalculation(data));
+  if (mounted) setState(() => _result = result);
+}
+```
+
+## Mistake 6: Loading Full-Resolution Images
+```dart
+// ❌ WRONG - 4000x3000 image in 400x300 container
+Image.network('https://example.com/huge-photo.jpg')
+
+// ✅ CORRECT - Resize to display size
+CachedNetworkImage(
+  imageUrl: 'https://example.com/huge-photo.jpg',
+  memCacheWidth: 400,
+  memCacheHeight: 300,
+)
+```
+
+## Mistake 7: Not Using `RepaintBoundary`
+```dart
+// ❌ WRONG - Animation triggers parent rebuild
+Column(
+  children: [
+    StaticHeader(),
+    AnimatedWidget(),  // Rebuilds header and footer!
+    StaticFooter(),
+  ],
+)
+
+// ✅ CORRECT - Isolate animation
+Column(
+  children: [
+    const StaticHeader(),
+    RepaintBoundary(child: AnimatedWidget()),
+    const StaticFooter(),
+  ],
+)
+```
+
+---
+
+# 13. Day 23 Checklist
+
+Use this checklist to verify mastery:
+
+- [ ] Understands Flutter's rendering pipeline (Build → Layout → Paint → Composite → Rasterize)
+- [ ] Can explain what causes jank and how to fix it
+- [ ] Uses `const` constructors wherever possible
+- [ ] Extracts widgets to prevent unnecessary rebuilds
+- [ ] Uses `RepaintBoundary` for animated/complex widgets
+- [ ] Uses `ValueListenableBuilder` for granular rebuilds
+- [ ] Uses `Selector` or `select` with state management
+- [ ] Avoids `setState` in large widget trees
+- [ ] Uses `ListView.builder` instead of `ListView` for long lists
+- [ ] Implements pagination with lazy loading
+- [ ] Uses `PageStorageKey` for scroll position persistence
+- [ ] Pre-caches images before display
+- [ ] Uses `CachedNetworkImage` with size limits
+- [ ] Uses WebP/SVG for optimal image formats
+- [ ] Uses isolates for heavy computation (`Isolate.run` or `compute`)
+- [ ] Can profile app with Performance Overlay
+- [ ] Can read DevTools timeline for frame analysis
+- [ ] Can identify memory leaks with DevTools Memory tab
+- [ ] Understands shader compilation jank
+- [ ] Can bundle SkSL shaders for Skia
+- [ ] Knows Impeller eliminates shader jank on iOS
+- [ ] Can analyze app size with `--analyze-size`
+- [ ] Uses `--split-per-abi` for smaller APKs
+- [ ] Disposes all controllers, subscriptions, and timers
+- [ ] Checks `mounted` before `setState` in async operations
+- [ ] Configures image cache limits appropriately
+- [ ] Built the FastFeed app with performance optimizations
+- [ ] App uses `ListView.builder` with pagination
+- [ ] App has image pre-caching and skeleton loading
+- [ ] App has `RepaintBoundary` and `ValueListenableBuilder`
+- [ ] App has isolate-based data processing
+- [ ] Pushed the project to GitHub
+
+---
+
+# Key Takeaways (Memorize These!)
+
+1. **const is free performance** — Every `const` widget is cached and never rebuilt. Add `const` to every constructor that allows it.
+
+2. **ListView.builder is mandatory for lists > 20 items** — `ListView` builds everything upfront. `ListView.builder` builds only what's visible.
+
+3. **Never do heavy work on the main thread** — Parsing JSON, processing images, or sorting large lists in build() causes jank. Use `Isolate.run()`.
+
+4. **Dispose everything** — Controllers, subscriptions, timers, and focus nodes all leak memory if not disposed. Check every `initState` has a matching `dispose`.
+
+5. **Images are the #1 cause of memory bloat** — Always resize images to display dimensions. Use `CachedNetworkImage` with `memCacheWidth/Height`.
+
+6. **RepaintBoundary isolates expensive painters** — Wrap `CustomPaint`, animations, and complex widgets to prevent full-tree repaints.
+
+7. **ValueListenableBuilder > setState for local state** — Rebuild only the widget that needs to change, not the entire screen.
+
+8. **Impeller eliminates shader jank** — On iOS (and soon Android), Impeller pre-compiles shaders. No more warm-up needed.
+
+9. **Profile in profile mode, not debug** — Debug mode is 10x slower. Always measure performance with `flutter run --profile`.
+
+10. **Performance is a feature** — Users notice jank before they notice missing features. A smooth 60fps app feels premium. A janky app feels broken.
+
+---
+
+# Extra Practice (Do These Tonight!)
+
+1. **Jank Detective:** Take an existing app, enable Performance Overlay, identify red bars, and fix them using the techniques from today.
+
+2. **Infinite Scroll Gallery:** Build a photo gallery with `ListView.builder`, pagination, image pre-caching, and skeleton loading. Target 60fps with 1000+ images.
+
+3. **Isolate Benchmark:** Compare parsing a 5MB JSON file on the main thread vs in an isolate. Measure frame times with DevTools.
+
+4. **App Size Audit:** Run `flutter build apk --analyze-size` on your largest app. Identify the biggest contributors and reduce APK size by 30%.
+
+5. **Memory Leak Hunter:** Use DevTools Memory tab to find leaks in a real app. Fix them by adding proper `dispose()` calls and canceling subscriptions.
+
+---
+
+**Congratulations!** You've completed Day 23. You now master Flutter performance optimization — from widget rebuild strategies and image caching to isolates, DevTools profiling, and shader warmup.
+
+**Next Up → Day 24: Internationalization & Accessibility**
+
+---
+
+*Generated for 30Days Flutter: Zero to Hero (2026 Edition)*  
+*Day 23: Performance Optimization — Complete Deep Dive*
+
