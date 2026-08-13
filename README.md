@@ -38768,5 +38768,1783 @@ Use this checklist to verify mastery:
 ---
 
 *Generated for 30Days Flutter: Zero to Hero (2026 Edition)*  
+
+# Day 24: Internationalization & Accessibility
+# Complete Deep Dive
+
+**Goal:** Master making Flutter apps global and accessible. Implement full internationalization with flutter_localizations and intl, manage ARB files with code generation, support RTL languages, ensure screen reader compatibility, and handle dynamic text scaling for inclusive design.
+
+---
+
+# Table of Contents
+1. Why i18n & a11y Are Non-Negotiable in 2026
+2. Internationalization Architecture Overview
+3. flutter_localizations & intl Setup
+4. ARB Files & Code Generation
+5. RTL Support & Text Direction
+6. Date, Number & Currency Formatting
+7. Accessibility: Screen Readers & Semantics
+8. Dynamic Text Scaling & Contrast
+9. Testing i18n & Accessibility
+10. Performance & Best Practices
+11. Hands-On Project: GlobalNews Accessible App
+12. Common Mistakes & How to Avoid Them
+13. Day 24 Checklist
+
+---
+
+# 1. Why i18n & a11y Are Non-Negotiable in 2026
+
+## The Global App Economy
+| Statistic | Impact |
+|:---|:---|
+| **75% of users** prefer apps in their native language | Localization = market expansion |
+| **1 billion people** live with disabilities | Accessibility = legal requirement + moral obligation |
+| **Non-English app stores** show 2x download growth | i18n unlocks emerging markets |
+| **WCAG lawsuits** increased 400% since 2020 | a11y compliance = legal protection |
+| **iOS/Android** reject apps with poor accessibility | Store policy enforcement |
+
+## i18n vs l10n vs a11y
+| Term | Meaning | Example |
+|:---|:---|:---|
+| **i18n** (Internationalization) | Engineering for multiple locales | String externalization, RTL layout |
+| **l10n** (Localization) | Translating content for a locale | French strings, Arabic layout |
+| **a11y** (Accessibility) | Usable by people with disabilities | Screen readers, large text, high contrast |
+
+---
+
+# 2. Internationalization Architecture Overview
+
+## The i18n Flow
+```
+Source Code (English)
+        |
+        v
+    ARB Files (.arb)
+        |
+        +---> flutter gen-l10n  -->  app_localizations.dart
+        |                              (Generated Dart code)
+        +---> Translator --> fr.arb, es.arb, ar.arb
+        |
+        v
+    Runtime Locale Resolution
+        |
+        v
+    Localized Widgets (MaterialApp.localizationsDelegates)
+```
+
+## Locale Resolution Priority
+```
+1. User explicitly selected locale (app preference)
+        |
+2. Device system locale
+        |
+3. Supported locale fallback (closest match)
+        |
+4. Default locale (usually 'en')
+```
+
+---
+
+# 3. flutter_localizations & intl Setup
+
+## pubspec.yaml
+```yaml
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  generate: true  # Enable code generation
+```
+
+## l10n.yaml Configuration
+```yaml
+# l10n.yaml
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+output-class: AppLocalizations
+output-dir: lib/generated
+synthetic-package: false
+nullable-getter: false
+untranslated-messages-file: untranslated.json
+```
+
+## Directory Structure
+```
+lib/
+  l10n/
+    app_en.arb      # Template (source of truth)
+    app_fr.arb      # French
+    app_es.arb      # Spanish
+    app_ar.arb      # Arabic (RTL)
+    app_hi.arb      # Hindi
+    app_ja.arb      # Japanese
+  generated/
+    app_localizations.dart
+    app_localizations_en.dart
+    app_localizations_fr.dart
+    ...
+  main.dart
+l10n.yaml
+```
+
+## MaterialApp Configuration
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'generated/app_localizations.dart';
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'GlobalNews',
+      debugShowCheckedModeBanner: false,
+
+      // Localization delegates
+      localizationsDelegates: const [
+        AppLocalizations.delegate,           // Generated
+        GlobalMaterialLocalizations.delegate,  // Material widgets
+        GlobalWidgetsLocalizations.delegate,   // Text direction
+        GlobalCupertinoLocalizations.delegate, // Cupertino widgets
+      ],
+
+      // Supported locales
+      supportedLocales: const [
+        Locale('en'),    // English
+        Locale('fr'),    // French
+        Locale('es'),    // Spanish
+        Locale('ar'),    // Arabic (RTL)
+        Locale('hi'),    // Hindi
+        Locale('ja'),    // Japanese
+      ],
+
+      // Locale resolution (fallback logic)
+      localeResolutionCallback: (locale, supportedLocales) {
+        if (locale == null) return const Locale('en');
+
+        // Exact match
+        for (final supported in supportedLocales) {
+          if (supported.languageCode == locale.languageCode &&
+              supported.countryCode == locale.countryCode) {
+            return supported;
+          }
+        }
+
+        // Language-only match
+        for (final supported in supportedLocales) {
+          if (supported.languageCode == locale.languageCode) {
+            return supported;
+          }
+        }
+
+        return const Locale('en'); // Default fallback
+      },
+
+      home: const HomeScreen(),
+    );
+  }
+}
+```
+
+## Generate Localizations
+```bash
+# Generate Dart code from ARB files
+flutter gen-l10n
+
+# Or it runs automatically on hot reload if configured
+```
+
+---
+
+# 4. ARB Files & Code Generation
+
+## ARB Format (Application Resource Bundle)
+```json
+// lib/l10n/app_en.arb
+{
+  "@@locale": "en",
+  "appTitle": "GlobalNews",
+  "@appTitle": {
+    "description": "The title of the application"
+  },
+
+  "welcomeMessage": "Welcome to GlobalNews",
+  "@welcomeMessage": {
+    "description": "Welcome message on home screen"
+  },
+
+  "articleCount": "{count, plural, =0{No articles} =1{One article} other{{count} articles}}",
+  "@articleCount": {
+    "description": "Number of articles",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "compact"
+      }
+    }
+  },
+
+  "publishedOn": "Published on {date}",
+  "@publishedOn": {
+    "description": "Article publish date",
+    "placeholders": {
+      "date": {
+        "type": "DateTime",
+        "format": "yMMMd"
+      }
+    }
+  },
+
+  "userGreeting": "Hello, {name}!",
+  "@userGreeting": {
+    "description": "Greeting with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+
+  "settingsTitle": "Settings",
+  "darkMode": "Dark Mode",
+  "language": "Language",
+  "notifications": "Notifications",
+  "about": "About",
+  "logout": "Log Out",
+  "cancel": "Cancel",
+  "save": "Save",
+  "delete": "Delete",
+  "confirmDelete": "Are you sure you want to delete?",
+  "emptyStateTitle": "No articles yet",
+  "emptyStateSubtitle": "Pull down to refresh or check back later",
+  "searchHint": "Search articles...",
+  "readMore": "Read more",
+  "shareArticle": "Share article",
+  "bookmarkAdded": "Article bookmarked",
+  "bookmarkRemoved": "Bookmark removed"
+}
+```
+
+## French Translation
+```json
+// lib/l10n/app_fr.arb
+{
+  "@@locale": "fr",
+  "appTitle": "GlobalNews",
+  "welcomeMessage": "Bienvenue sur GlobalNews",
+  "articleCount": "{count, plural, =0{Aucun article} =1{Un article} other{{count} articles}}",
+  "publishedOn": "Publié le {date}",
+  "userGreeting": "Bonjour, {name} !",
+  "settingsTitle": "Paramètres",
+  "darkMode": "Mode sombre",
+  "language": "Langue",
+  "notifications": "Notifications",
+  "about": "À propos",
+  "logout": "Déconnexion",
+  "cancel": "Annuler",
+  "save": "Enregistrer",
+  "delete": "Supprimer",
+  "confirmDelete": "Êtes-vous sûr de vouloir supprimer ?",
+  "emptyStateTitle": "Aucun article pour l'instant",
+  "emptyStateSubtitle": "Tirez vers le bas pour actualiser ou revenez plus tard",
+  "searchHint": "Rechercher des articles...",
+  "readMore": "Lire la suite",
+  "shareArticle": "Partager l'article",
+  "bookmarkAdded": "Article ajouté aux favoris",
+  "bookmarkRemoved": "Article retiré des favoris"
+}
+```
+
+## Arabic Translation (RTL)
+```json
+// lib/l10n/app_ar.arb
+{
+  "@@locale": "ar",
+  "appTitle": "جلوبال نيوز",
+  "welcomeMessage": "مرحباً بك في جلوبال نيوز",
+  "articleCount": "{count, plural, =0{لا توجد مقالات} =1{مقالة واحدة} =2{مقالتان} few{{count} مقالات} many{{count} مقالة} other{{count} مقالة}}",
+  "publishedOn": "نُشر في {date}",
+  "userGreeting": "مرحباً، {name}!",
+  "settingsTitle": "الإعدادات",
+  "darkMode": "الوضع الداكن",
+  "language": "اللغة",
+  "notifications": "الإشعارات",
+  "about": "حول",
+  "logout": "تسجيل الخروج",
+  "cancel": "إلغاء",
+  "save": "حفظ",
+  "delete": "حذف",
+  "confirmDelete": "هل أنت متأكد أنك تريد الحذف؟",
+  "emptyStateTitle": "لا توجد مقالات بعد",
+  "emptyStateSubtitle": "اسحب للأسفل للتحديث أو تحقق لاحقاً",
+  "searchHint": "البحث في المقالات...",
+  "readMore": "اقرأ المزيد",
+  "shareArticle": "مشاركة المقالة",
+  "bookmarkAdded": "تمت إضافة المقالة للمفضلة",
+  "bookmarkRemoved": "تمت إزالة المقالة من المفضلة"
+}
+```
+
+## Using Generated Localizations
+```dart
+import 'generated/app_localizations.dart';
+
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l10n.appTitle),
+      ),
+      body: Column(
+        children: [
+          Text(l10n.welcomeMessage),
+          Text(l10n.userGreeting('Ahmed')),
+          Text(l10n.articleCount(5)),
+          Text(l10n.publishedOn(DateTime.now())),
+        ],
+      ),
+    );
+  }
+}
+```
+
+## Locale Provider for Runtime Switching
+```dart
+import 'package:flutter/material.dart';
+
+class LocaleProvider extends ChangeNotifier {
+  Locale _locale = const Locale('en');
+
+  Locale get locale => _locale;
+
+  void setLocale(Locale locale) {
+    if (!['en', 'fr', 'es', 'ar', 'hi', 'ja'].contains(locale.languageCode)) {
+      return;
+    }
+    _locale = locale;
+    notifyListeners();
+  }
+
+  void clearLocale() {
+    _locale = const Locale('en');
+    notifyListeners();
+  }
+
+  bool isRtl() {
+    return _locale.languageCode == 'ar' || _locale.languageCode == 'he';
+  }
+}
+```
+
+```dart
+// main.dart with locale provider
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) => LocaleProvider(),
+      child: Consumer<LocaleProvider>(
+        builder: (context, provider, child) {
+          return MaterialApp(
+            title: 'GlobalNews',
+            locale: provider.locale,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: const [
+              Locale('en'),
+              Locale('fr'),
+              Locale('es'),
+              Locale('ar'),
+              Locale('hi'),
+              Locale('ja'),
+            ],
+            home: const HomeScreen(),
+          );
+        },
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 5. RTL Support & Text Direction
+
+## Automatic RTL with flutter_localizations
+Flutter automatically handles text direction when you use:
+- `MaterialApp` with `GlobalWidgetsLocalizations.delegate`
+- `Directionality` widget
+- `EdgeInsetsDirectional` instead of `EdgeInsets`
+
+## RTL-Aware Widgets
+```dart
+// ❌ WRONG - Hardcoded LTR padding
+Padding(
+  padding: const EdgeInsets.only(left: 16, right: 8),
+  child: Text('Title'),
+)
+
+// ✅ CORRECT - Directional padding adapts to RTL
+Padding(
+  padding: const EdgeInsetsDirectional.only(start: 16, end: 8),
+  child: Text('Title'),
+)
+```
+
+## RTL Layout Helpers
+```dart
+// lib/core/utils/rtl_helpers.dart
+import 'package:flutter/material.dart';
+
+extension RtlContext on BuildContext {
+  bool get isRtl {
+    return Directionality.of(this) == TextDirection.rtl;
+  }
+
+  TextDirection get textDirection {
+    return Directionality.of(this);
+  }
+}
+
+extension RtlEdgeInsets on EdgeInsets {
+  EdgeInsetsDirectional toDirectional() {
+    return EdgeInsetsDirectional.fromSTEB(left, top, right, bottom);
+  }
+}
+```
+
+## RTL Navigation & Icons
+```dart
+class RtlAwareIcon extends StatelessWidget {
+  final IconData icon;
+  final IconData rtlIcon;
+
+  const RtlAwareIcon({
+    super.key,
+    required this.icon,
+    required this.rtlIcon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Icon(context.isRtl ? rtlIcon : icon);
+  }
+}
+
+// Usage
+RtlAwareIcon(
+  icon: Icons.arrow_forward,
+  rtlIcon: Icons.arrow_back,
+)
+```
+
+## Mirror-Aware Row
+```dart
+class MirrorRow extends StatelessWidget {
+  final List<Widget> children;
+  final MainAxisAlignment mainAxisAlignment;
+
+  const MirrorRow({
+    super.key,
+    required this.children,
+    this.mainAxisAlignment = MainAxisAlignment.start,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      textDirection: context.isRtl ? TextDirection.rtl : TextDirection.ltr,
+      mainAxisAlignment: mainAxisAlignment,
+      children: children,
+    );
+  }
+}
+```
+
+---
+
+# 6. Date, Number & Currency Formatting
+
+## intl Formatting
+```dart
+import 'package:intl/intl.dart';
+
+class Formatters {
+  static String formatDate(DateTime date, String locale) {
+    return DateFormat.yMMMd(locale).format(date);
+  }
+
+  static String formatDateLong(DateTime date, String locale) {
+    return DateFormat.yMMMMEEEEd(locale).format(date);
+  }
+
+  static String formatTime(DateTime time, String locale) {
+    return DateFormat.jm(locale).format(time);
+  }
+
+  static String formatRelativeTime(DateTime date, String locale) {
+    final now = DateTime.now();
+    final diff = now.difference(date);
+
+    if (diff.inDays > 365) {
+      return DateFormat.yMMMd(locale).format(date);
+    } else if (diff.inDays > 30) {
+      return '${diff.inDays ~/ 30} ${Intl.message('months ago', locale: locale)}';
+    } else if (diff.inDays > 0) {
+      return '${diff.inDays} ${Intl.message('days ago', locale: locale)}';
+    } else if (diff.inHours > 0) {
+      return '${diff.inHours} ${Intl.message('hours ago', locale: locale)}';
+    } else if (diff.inMinutes > 0) {
+      return '${diff.inMinutes} ${Intl.message('minutes ago', locale: locale)}';
+    } else {
+      return Intl.message('Just now', locale: locale);
+    }
+  }
+
+  static String formatCurrency(double amount, String locale, String symbol) {
+    return NumberFormat.currency(
+      locale: locale,
+      symbol: symbol,
+    ).format(amount);
+  }
+
+  static String formatCompactNumber(int number, String locale) {
+    return NumberFormat.compact(locale: locale).format(number);
+  }
+
+  static String formatPercent(double value, String locale) {
+    return NumberFormat.percentPattern(locale).format(value);
+  }
+}
+```
+
+## Usage in Widgets
+```dart
+Text(Formatters.formatDate(article.publishedAt, Localizations.localeOf(context).languageCode))
+Text(Formatters.formatCurrency(49.99, 'en_US', '\$'))   // $49.99
+Text(Formatters.formatCurrency(49.99, 'fr_FR', '€'))    // 49,99 €
+Text(Formatters.formatCompactNumber(1500000, 'en'))      // 1.5M
+Text(Formatters.formatCompactNumber(1500000, 'hi'))    // 15 लाख
+```
+
+---
+
+# 7. Accessibility: Screen Readers & Semantics
+
+## Semantics Widget
+```dart
+// ❌ WRONG - Screen reader says nothing useful
+IconButton(
+  onPressed: () => deleteItem(),
+  icon: const Icon(Icons.delete),
+)
+
+// ✅ CORRECT - Descriptive semantics
+Semantics(
+  button: true,
+  label: 'Delete article about ${article.title}',
+  hint: 'Double tap to delete this article',
+  onTap: () => deleteItem(),
+  child: IconButton(
+    onPressed: () => deleteItem(),
+    icon: const Icon(Icons.delete),
+  ),
+)
+
+// ✅ BETTER - Built-in tooltip + semanticLabel
+IconButton(
+  onPressed: () => deleteItem(),
+  icon: const Icon(Icons.delete),
+  tooltip: 'Delete article',  // Sets semantics label automatically
+)
+```
+
+## Custom Semantics
+```dart
+class AccessibleArticleCard extends StatelessWidget {
+  final Article article;
+  final VoidCallback onTap;
+
+  const AccessibleArticleCard({
+    super.key,
+    required this.article,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: '${article.title}. ${article.summary}',
+      hint: 'Double tap to read full article',
+      onTap: onTap,
+      child: InkWell(
+        onTap: onTap,
+        child: Card(
+          child: Column(
+            children: [
+              // Hide decorative image from screen reader
+              ExcludeSemantics(
+                child: Image.network(article.imageUrl),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(article.title, style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 8),
+                    Text(article.summary),
+                    const SizedBox(height: 8),
+                    // Merge child semantics into parent
+                    MergeSemantics(
+                      child: Row(
+                        children: [
+                          const Icon(Icons.access_time, size: 16),
+                          const SizedBox(width: 4),
+                          Text(Formatters.formatRelativeTime(article.publishedAt, 'en')),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+```
+
+## Focus Management
+```dart
+class AccessibleForm extends StatefulWidget {
+  const AccessibleForm({super.key});
+
+  @override
+  State<AccessibleForm> createState() => _AccessibleFormState();
+}
+
+class _AccessibleFormState extends State<AccessibleForm> {
+  final _nameFocus = FocusNode();
+  final _emailFocus = FocusNode();
+  final _submitFocus = FocusNode();
+
+  @override
+  void dispose() {
+    _nameFocus.dispose();
+    _emailFocus.dispose();
+    _submitFocus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        TextField(
+          focusNode: _nameFocus,
+          decoration: const InputDecoration(
+            labelText: 'Full Name',
+            hintText: 'Enter your full name',
+          ),
+          textInputAction: TextInputAction.next,
+          onEditingComplete: () => _emailFocus.requestFocus(),
+        ),
+        TextField(
+          focusNode: _emailFocus,
+          decoration: const InputDecoration(
+            labelText: 'Email Address',
+            hintText: 'Enter your email address',
+          ),
+          keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.done,
+          onEditingComplete: () => _submitFocus.requestFocus(),
+        ),
+        Focus(
+          focusNode: _submitFocus,
+          child: ElevatedButton(
+            onPressed: _submit,
+            child: const Text('Submit'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _submit() {
+    // Submit logic
+  }
+}
+```
+
+## Accessibility Testing with TalkBack/VoiceOver
+| Gesture | Action |
+|:---|:---|
+| **Swipe right** | Next element |
+| **Swipe left** | Previous element |
+| **Double tap** | Activate |
+| **Swipe up/down** | Change navigation type (headings, links, etc.) |
+| **Three-finger swipe** | Scroll |
+
+---
+
+# 8. Dynamic Text Scaling & Contrast
+
+## Text Scaling
+```dart
+class AccessibleText extends StatelessWidget {
+  final String text;
+  final TextStyle? style;
+
+  const AccessibleText(this.text, {super.key, this.style});
+
+  @override
+  Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final textScale = mediaQuery.textScaler;
+
+    return Text(
+      text,
+      style: style,
+      // Text automatically scales with system settings
+      // But we can constrain max scale to prevent layout breaks
+    );
+  }
+}
+
+// Constrain text scale to prevent layout breaks
+class ConstrainedApp extends StatelessWidget {
+  final Widget child;
+
+  const ConstrainedApp({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final constrainedTextScale = mediaQuery.textScaler.clamp(
+      minScaleFactor: 0.8,
+      maxScaleFactor: 1.6,  // Cap at 1.6x to prevent layout overflow
+    );
+
+    return MediaQuery(
+      data: mediaQuery.copyWith(textScaler: constrainedTextScale),
+      child: child,
+    );
+  }
+}
+```
+
+## High Contrast Support
+```dart
+class ContrastAwareWidget extends StatelessWidget {
+  final Widget child;
+
+  const ContrastAwareWidget({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final platformBrightness = MediaQuery.platformBrightnessOf(context);
+    final highContrast = MediaQuery.highContrastOf(context);
+
+    return Theme(
+      data: Theme.of(context).copyWith(
+        colorScheme: highContrast
+            ? _highContrastColorScheme(platformBrightness)
+            : Theme.of(context).colorScheme,
+      ),
+      child: child,
+    );
+  }
+
+  ColorScheme _highContrastColorScheme(Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
+    return ColorScheme(
+      brightness: brightness,
+      primary: isDark ? Colors.cyan : Colors.blue.shade900,
+      onPrimary: Colors.white,
+      secondary: isDark ? Colors.yellow : Colors.orange.shade900,
+      onSecondary: Colors.black,
+      error: Colors.red,
+      onError: Colors.white,
+      surface: isDark ? Colors.black : Colors.white,
+      onSurface: isDark ? Colors.white : Colors.black,
+    );
+  }
+}
+```
+
+## Minimum Touch Target
+```dart
+// Ensure all interactive elements are at least 48x48dp
+class AccessibleButton extends StatelessWidget {
+  final VoidCallback onPressed;
+  final Widget child;
+
+  const AccessibleButton({
+    super.key,
+    required this.onPressed,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(
+        minWidth: 48,
+        minHeight: 48,
+      ),
+      child: InkWell(
+        onTap: onPressed,
+        child: Center(child: child),
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 9. Testing i18n & Accessibility
+
+## Widget Test with Locale
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  testWidgets('displays French text when locale is fr', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('fr'),
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+        ],
+        supportedLocales: const [Locale('en'), Locale('fr')],
+        home: const HomeScreen(),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(find.text('Bienvenue sur GlobalNews'), findsOneWidget);
+  });
+
+  testWidgets('displays RTL layout for Arabic', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ar'),
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+        ],
+        supportedLocales: const [Locale('en'), Locale('ar')],
+        home: const HomeScreen(),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    // Verify text direction
+    final directionality = tester.widget<Directionality>(
+      find.byType(Directionality).first,
+    );
+    expect(directionality.textDirection, TextDirection.rtl);
+  });
+}
+```
+
+## Semantics Testing
+```dart
+testWidgets('article card has correct semantics', (tester) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      home: AccessibleArticleCard(
+        article: Article(
+          title: 'Flutter Accessibility',
+          summary: 'Learn about a11y',
+        ),
+        onTap: () {},
+      ),
+    ),
+  );
+
+  final semantics = tester.getSemantics(find.byType(AccessibleArticleCard));
+  expect(semantics.label, contains('Flutter Accessibility'));
+  expect(semantics.label, contains('Learn about a11y'));
+  expect(semantics.hasFlag(SemanticsFlag.isButton), isTrue);
+});
+```
+
+---
+
+# 10. Performance & Best Practices
+
+## i18n Performance Rules
+| Rule | Impact | Why |
+|:---|:---|:---|
+| **Generate code at build time** | Faster startup | `flutter gen-l10n` not runtime resolution |
+| **Cache formatters** | Less GC pressure | `DateFormat` is expensive to create |
+| **Use const where possible** | Faster rebuilds | Localized widgets can still be const |
+| **Lazy load locale data** | Smaller initial bundle | Only load needed locale |
+
+## Accessibility Performance
+| Rule | Impact | Why |
+|:---|:---|:---|
+| **Don't over-nest Semantics** | Faster screen reader | Flatten where possible with MergeSemantics |
+| **Use ExcludeSemantics for decorative** | Less noise | Images that don't convey meaning |
+| **Test with actual screen readers** | Real UX | Simulators don't catch everything |
+
+---
+
+# 11. Hands-On Project: GlobalNews Accessible App
+
+## Project Overview
+Build **GlobalNews** — a fully internationalized and accessible news reader with:
+- 6 language support (English, French, Spanish, Arabic, Hindi, Japanese)
+- Runtime locale switching
+- Full RTL support for Arabic
+- Screen reader optimized cards
+- Dynamic text scaling with constraints
+- High contrast mode support
+- Accessible navigation and focus management
+
+## Complete App Code
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:intl/intl.dart';
+import 'generated/app_localizations.dart';
+
+void main() {
+  runApp(const GlobalNewsApp());
+}
+
+// ==================== LOCALE PROVIDER ====================
+class LocaleProvider extends ChangeNotifier {
+  Locale _locale = const Locale('en');
+
+  Locale get locale => _locale;
+
+  final List<LocaleOption> supportedLocales = const [
+    LocaleOption(Locale('en'), 'English', '🇺🇸'),
+    LocaleOption(Locale('fr'), 'Français', '🇫🇷'),
+    LocaleOption(Locale('es'), 'Español', '🇪🇸'),
+    LocaleOption(Locale('ar'), 'العربية', '🇸🇦'),
+    LocaleOption(Locale('hi'), 'हिन्दी', '🇮🇳'),
+    LocaleOption(Locale('ja'), '日本語', '🇯🇵'),
+  ];
+
+  void setLocale(Locale locale) {
+    final isSupported = supportedLocales.any(
+      (l) => l.locale.languageCode == locale.languageCode,
+    );
+    if (!isSupported) return;
+
+    _locale = locale;
+    notifyListeners();
+  }
+
+  bool get isRtl => _locale.languageCode == 'ar';
+}
+
+class LocaleOption {
+  final Locale locale;
+  final String name;
+  final String flag;
+
+  const LocaleOption(this.locale, this.name, this.flag);
+}
+
+// ==================== APP ROOT ====================
+class GlobalNewsApp extends StatelessWidget {
+  const GlobalNewsApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) => LocaleProvider(),
+      child: Consumer<LocaleProvider>(
+        builder: (context, provider, child) {
+          return MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: MediaQuery.of(context).textScaler.clamp(
+                minScaleFactor: 0.8,
+                maxScaleFactor: 1.6,
+              ),
+            ),
+            child: MaterialApp(
+              title: 'GlobalNews',
+              debugShowCheckedModeBanner: false,
+              locale: provider.locale,
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              supportedLocales: provider.supportedLocales.map((l) => l.locale).toList(),
+              theme: ThemeData(
+                useMaterial3: true,
+                colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+              ),
+              darkTheme: ThemeData(
+                useMaterial3: true,
+                brightness: Brightness.dark,
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: Colors.indigo,
+                  brightness: Brightness.dark,
+                ),
+              ),
+              home: const HomeScreen(),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ==================== ARTICLE MODEL ====================
+class Article {
+  final String id;
+  final String title;
+  final String summary;
+  final String imageUrl;
+  final String category;
+  final DateTime publishedAt;
+  final int readTimeMinutes;
+
+  const Article({
+    required this.id,
+    required this.title,
+    required this.summary,
+    required this.imageUrl,
+    required this.category,
+    required this.publishedAt,
+    required this.readTimeMinutes,
+  });
+}
+
+// ==================== MOCK DATA ====================
+final mockArticles = [
+  Article(
+    id: '1',
+    title: 'Flutter 3.24 Released with Major Performance Improvements',
+    summary: 'The latest Flutter release brings significant improvements to rendering performance and new widgets for adaptive layouts.',
+    imageUrl: 'https://picsum.photos/seed/flutter/800/400',
+    category: 'Technology',
+    publishedAt: DateTime.now().subtract(const Duration(hours: 2)),
+    readTimeMinutes: 5,
+  ),
+  Article(
+    id: '2',
+    title: 'Building Accessible Apps: A Complete Guide',
+    summary: 'Learn how to make your Flutter applications usable by everyone, including users with visual and motor impairments.',
+    imageUrl: 'https://picsum.photos/seed/accessibility/800/400',
+    category: 'Design',
+    publishedAt: DateTime.now().subtract(const Duration(hours: 5)),
+    readTimeMinutes: 8,
+  ),
+  Article(
+    id: '3',
+    title: 'Internationalization Best Practices for 2026',
+    summary: 'From ARB files to RTL layouts, discover the complete workflow for building truly global Flutter applications.',
+    imageUrl: 'https://picsum.photos/seed/i18n/800/400',
+    category: 'Development',
+    publishedAt: DateTime.now().subtract(const Duration(days: 1)),
+    readTimeMinutes: 6,
+  ),
+];
+
+// ==================== HOME SCREEN ====================
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final provider = context.watch<LocaleProvider>();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l10n.appTitle),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.language),
+            tooltip: l10n.language,
+            onPressed: () => _showLanguageDialog(context),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: l10n.settingsTitle,
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            ),
+          ),
+        ],
+      ),
+      body: mockArticles.isEmpty
+          ? _buildEmptyState(context, l10n)
+          : ListView.builder(
+              itemCount: mockArticles.length,
+              itemBuilder: (context, index) {
+                return ArticleCard(article: mockArticles[index]);
+              },
+            ),
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context, AppLocalizations l10n) {
+    return Center(
+      child: Semantics(
+        label: l10n.emptyStateTitle,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.article_outlined, size: 80, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              l10n.emptyStateTitle,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              l10n.emptyStateSubtitle,
+              style: TextStyle(color: Colors.grey.shade600),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLanguageDialog(BuildContext context) {
+    final provider = context.read<LocaleProvider>();
+    final l10n = AppLocalizations.of(context)!;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.language),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: provider.supportedLocales.map((option) {
+            return RadioListTile<Locale>(
+              title: Text('${option.flag} ${option.name}'),
+              value: option.locale,
+              groupValue: provider.locale,
+              onChanged: (locale) {
+                provider.setLocale(locale!);
+                Navigator.pop(context);
+              },
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== ARTICLE CARD ====================
+class ArticleCard extends StatelessWidget {
+  final Article article;
+
+  const ArticleCard({super.key, required this.article});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final locale = Localizations.localeOf(context).languageCode;
+
+    return Semantics(
+      button: true,
+      label: '${article.title}. ${article.summary}',
+      hint: l10n.readMore,
+      child: Card(
+        margin: const EdgeInsetsDirectional.fromSTEB(16, 8, 16, 8),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _openArticle(context),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ExcludeSemantics(
+                child: Image.network(
+                  article.imageUrl,
+                  height: 200,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsetsDirectional.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsetsDirectional.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        article.category,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onPrimaryContainer,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      article.title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      article.summary,
+                      style: TextStyle(color: Colors.grey.shade600),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 12),
+                    MergeSemantics(
+                      child: Row(
+                        children: [
+                          Icon(Icons.access_time, size: 16, color: Colors.grey.shade500),
+                          const SizedBox(width: 4),
+                          Text(
+                            Formatters.formatRelativeTime(article.publishedAt, locale),
+                            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                          ),
+                          const SizedBox(width: 16),
+                          Icon(Icons.timer, size: 16, color: Colors.grey.shade500),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${article.readTimeMinutes} min read',
+                            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openArticle(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ArticleDetailScreen(article: article),
+      ),
+    );
+  }
+}
+
+// ==================== ARTICLE DETAIL ====================
+class ArticleDetailScreen extends StatelessWidget {
+  final Article article;
+
+  const ArticleDetailScreen({super.key, required this.article});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final locale = Localizations.localeOf(context).languageCode;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(article.category),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share),
+            tooltip: l10n.shareArticle,
+            onPressed: () {},
+          ),
+          IconButton(
+            icon: const Icon(Icons.bookmark_border),
+            tooltip: l10n.bookmarkAdded,
+            onPressed: () {},
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Image.network(
+              article.imageUrl,
+              height: 250,
+              width: double.infinity,
+              fit: BoxFit.cover,
+            ),
+            Padding(
+              padding: const EdgeInsetsDirectional.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    article.title,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Icon(Icons.calendar_today, size: 16, color: Colors.grey.shade500),
+                      const SizedBox(width: 8),
+                      Text(
+                        Formatters.formatDateLong(article.publishedAt, locale),
+                        style: TextStyle(color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    article.summary * 5, // Simulated full content
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      height: 1.6,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== SETTINGS SCREEN ====================
+class SettingsScreen extends StatelessWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final provider = context.watch<LocaleProvider>();
+
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.settingsTitle)),
+      body: ListView(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.dark_mode),
+            title: Text(l10n.darkMode),
+            trailing: Switch(
+              value: Theme.of(context).brightness == Brightness.dark,
+              onChanged: (v) {},
+            ),
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.language),
+            title: Text(l10n.language),
+            subtitle: Text(
+              provider.supportedLocales
+                  .firstWhere((l) => l.locale == provider.locale)
+                  .name,
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showLanguageBottomSheet(context),
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.notifications),
+            title: Text(l10n.notifications),
+            trailing: Switch(value: true, onChanged: (v) {}),
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.info),
+            title: Text(l10n.about),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {},
+          ),
+          const Divider(),
+          ListTile(
+            leading: Icon(Icons.logout, color: Colors.red.shade400),
+            title: Text(l10n.logout, style: TextStyle(color: Colors.red.shade400)),
+            onTap: () => _showLogoutDialog(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showLanguageBottomSheet(BuildContext context) {
+    final provider = context.read<LocaleProvider>();
+
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: provider.supportedLocales.map((option) {
+            return ListTile(
+              leading: Text(option.flag, style: const TextStyle(fontSize: 24)),
+              title: Text(option.name),
+              trailing: provider.locale == option.locale
+                  ? Icon(Icons.check, color: Theme.of(context).colorScheme.primary)
+                  : null,
+              onTap: () {
+                provider.setLocale(option.locale);
+                Navigator.pop(context);
+              },
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  void _showLogoutDialog(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.logout),
+        content: Text(l10n.confirmDelete),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pop(context);
+            },
+            child: Text(l10n.logout),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==================== FORMATTERS ====================
+class Formatters {
+  static String formatDate(DateTime date, String locale) {
+    return DateFormat.yMMMd(locale).format(date);
+  }
+
+  static String formatDateLong(DateTime date, String locale) {
+    return DateFormat.yMMMMEEEEd(locale).format(date);
+  }
+
+  static String formatRelativeTime(DateTime date, String locale) {
+    final now = DateTime.now();
+    final diff = now.difference(date);
+
+    if (diff.inDays > 365) {
+      return DateFormat.yMMMd(locale).format(date);
+    } else if (diff.inDays > 30) {
+      return _getLocalizedString(locale, 'monthsAgo', diff.inDays ~/ 30);
+    } else if (diff.inDays > 0) {
+      return _getLocalizedString(locale, 'daysAgo', diff.inDays);
+    } else if (diff.inHours > 0) {
+      return _getLocalizedString(locale, 'hoursAgo', diff.inHours);
+    } else if (diff.inMinutes > 0) {
+      return _getLocalizedString(locale, 'minutesAgo', diff.inMinutes);
+    } else {
+      return _getLocalizedString(locale, 'justNow', 0);
+    }
+  }
+
+  static String _getLocalizedString(String locale, String key, int value) {
+    // Simplified - in production use ARB files for these too
+    final Map<String, Map<String, String>> strings = {
+      'en': {
+        'monthsAgo': '$value months ago',
+        'daysAgo': '$value days ago',
+        'hoursAgo': '$value hours ago',
+        'minutesAgo': '$value minutes ago',
+        'justNow': 'Just now',
+      },
+      'fr': {
+        'monthsAgo': 'il y a $value mois',
+        'daysAgo': 'il y a $value jours',
+        'hoursAgo': 'il y a $value heures',
+        'minutesAgo': 'il y a $value minutes',
+        'justNow': 'À l\'instant',
+      },
+      'ar': {
+        'monthsAgo': 'منذ $value شهر',
+        'daysAgo': 'منذ $value يوم',
+        'hoursAgo': 'منذ $value ساعة',
+        'minutesAgo': 'منذ $value دقيقة',
+        'justNow': 'الآن',
+      },
+    };
+
+    return strings[locale]?[key] ?? strings['en']![key]!;
+  }
+}
+
+// ==================== PROVIDER HELPER ====================
+class ChangeNotifierProvider extends InheritedWidget {
+  final LocaleProvider provider;
+
+  const ChangeNotifierProvider({
+    super.key,
+    required this.provider,
+    required super.child,
+  });
+
+  static LocaleProvider of(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<ChangeNotifierProvider>()!.provider;
+  }
+
+  @override
+  bool updateShouldNotify(covariant ChangeNotifierProvider oldWidget) {
+    return true;
+  }
+}
+
+class Consumer extends StatelessWidget {
+  final Widget Function(BuildContext context, LocaleProvider provider, Widget? child) builder;
+
+  const Consumer({super.key, required this.builder});
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = ChangeNotifierProvider.of(context);
+    return AnimatedBuilder(
+      animation: provider,
+      builder: (context, child) => builder(context, provider, child),
+    );
+  }
+}
+
+extension BuildContextX on BuildContext {
+  LocaleProvider get read => ChangeNotifierProvider.of(this);
+  LocaleProvider get watch => ChangeNotifierProvider.of(this);
+}
+```
+
+---
+
+# 12. Common Mistakes & How to Avoid Them
+
+## Mistake 1: Hardcoded Strings
+```dart
+// ❌ WRONG - Not localizable
+Text('Hello World')
+Text('Save')
+Text('Error occurred')
+
+// ✅ CORRECT - Use ARB generated strings
+Text(AppLocalizations.of(context)!.welcomeMessage)
+Text(AppLocalizations.of(context)!.save)
+```
+
+## Mistake 2: Concatenating Localized Strings
+```dart
+// ❌ WRONG - Breaks in RTL and many languages
+Text('Hello, ' + userName + '!')
+
+// ✅ CORRECT - Use placeholders in ARB
+// ARB: "userGreeting": "Hello, {name}!"
+Text(AppLocalizations.of(context)!.userGreeting(userName))
+```
+
+## Mistake 3: Hardcoded LTR Layout
+```dart
+// ❌ WRONG - Breaks in Arabic/Hebrew
+Padding(padding: EdgeInsets.only(left: 16, right: 8))
+Row(children: [Icon(Icons.arrow_back), Text('Back')])
+
+// ✅ CORRECT - Use directional variants
+Padding(padding: EdgeInsetsDirectional.only(start: 16, end: 8))
+Row(children: [Icon(context.isRtl ? Icons.arrow_forward : Icons.arrow_back), Text(l10n.back)])
+```
+
+## Mistake 4: Missing Semantic Labels
+```dart
+// ❌ WRONG - Screen reader says "Button" or nothing
+IconButton(onPressed: () {}, icon: Icon(Icons.delete))
+Image.network('https://example.com/photo.jpg')
+
+// ✅ CORRECT - Add semantics
+IconButton(
+  onPressed: () {},
+  icon: Icon(Icons.delete),
+  tooltip: 'Delete article',  // Sets semantics automatically
+)
+ExcludeSemantics(child: Image.network(...))  // Decorative image
+```
+
+## Mistake 5: Not Testing with Screen Readers
+```dart
+// ❌ WRONG - Only visual testing
+// "It looks fine on my phone"
+
+// ✅ CORRECT - Test with actual assistive technology
+// iOS: Settings → Accessibility → VoiceOver
+// Android: Settings → Accessibility → TalkBack
+```
+
+## Mistake 6: Ignoring Text Scale
+```dart
+// ❌ WRONG - Fixed text sizes overflow
+Text('Title', style: TextStyle(fontSize: 20))
+Container(height: 40, child: Text('Content'))
+
+// ✅ CORRECT - Use responsive text and flexible containers
+Text('Title', style: Theme.of(context).textTheme.titleLarge)
+ConstrainedBox(
+  constraints: BoxConstraints(minHeight: 40),
+  child: Text('Content'),
+)
+```
+
+## Mistake 7: Forgetting Locale in Formatters
+```dart
+// ❌ WRONG - Always uses English formatting
+DateFormat.yMMMd().format(date)  // Always English
+NumberFormat.currency().format(amount)  // Always USD
+
+// ✅ CORRECT - Pass locale
+DateFormat.yMMMd(locale).format(date)
+NumberFormat.currency(locale: locale, symbol: symbol).format(amount)
+```
+
+---
+
+# 13. Day 24 Checklist
+
+Use this checklist to verify mastery:
+
+- [ ] Understands difference between i18n, l10n, and a11y
+- [ ] Can configure `flutter_localizations` and `intl`
+- [ ] Can set up `l10n.yaml` for code generation
+- [ ] Can create ARB template files with descriptions
+- [ ] Can use placeholders and pluralization in ARB
+- [ ] Can generate Dart localization code with `flutter gen-l10n`
+- [ ] Can configure `MaterialApp` with delegates and supported locales
+- [ ] Can access localized strings in widgets
+- [ ] Can implement runtime locale switching
+- [ ] Can persist user locale preference
+- [ ] Can implement RTL layout support
+- [ ] Uses `EdgeInsetsDirectional` instead of `EdgeInsets`
+- [ ] Can format dates, numbers, and currency per locale
+- [ ] Can format relative time ("2 hours ago")
+- [ ] Can add semantic labels to interactive widgets
+- [ ] Can use `Semantics`, `ExcludeSemantics`, `MergeSemantics`
+- [ ] Can add tooltips for automatic accessibility
+- [ ] Can manage focus for keyboard navigation
+- [ ] Can handle dynamic text scaling
+- [ ] Can constrain text scale to prevent layout breaks
+- [ ] Can detect and adapt to high contrast mode
+- [ ] Ensures minimum 48x48 touch targets
+- [ ] Can test localized widgets with specific locales
+- [ ] Can test RTL layouts in widget tests
+- [ ] Can test semantics with `tester.getSemantics`
+- [ ] Built the GlobalNews app
+- [ ] App supports 6 languages
+- [ ] App has runtime locale switching
+- [ ] App has full RTL support
+- [ ] App has screen reader optimized cards
+- [ ] App has dynamic text scaling
+- [ ] App has accessible navigation
+- [ ] Pushed the project to GitHub
+
+---
+
+# Key Takeaways (Memorize These!)
+
+1. **i18n is engineering, l10n is translation** — Build your app to support multiple locales from day one. Adding i18n later is 10x harder.
+
+2. **ARB files are the source of truth** — Never hardcode strings. Every user-facing string belongs in an ARB file with a description.
+
+3. **Use placeholders, never concatenate** — `"Hello, {name}!"` not `"Hello, " + name`. Concatenation breaks grammar in many languages.
+
+4. **RTL is not just text direction** — Icons, animations, padding, and navigation all mirror. Use `EdgeInsetsDirectional` and `start/end` everywhere.
+
+5. **Accessibility is not a feature, it's a requirement** — 1 in 7 people have a disability. Screen reader support is not optional for professional apps.
+
+6. **Tooltips serve dual purpose** — They show on long-press AND set semantic labels automatically. Always add tooltips to icon buttons.
+
+7. **Test with actual assistive technology** — Simulators don't catch real accessibility issues. Use TalkBack (Android) and VoiceOver (iOS).
+
+8. **Text scale can break layouts** — Cap at 1.6x or design fluid layouts. Never assume fixed text sizes.
+
+9. **Date/number formatting requires locale** — `DateFormat.yMMMd('fr')` not `DateFormat.yMMMd()`. Always pass locale to formatters.
+
+10. **Internationalization expands your market** — English is only 25% of internet users. Every language you add multiplies your addressable market.
+
+---
+
+# Extra Practice (Do These Tonight!)
+
+1. **Multi-Language Onboarding:** Build an onboarding flow that detects device locale and shows localized slides with RTL-aware illustrations.
+
+2. **Accessible Form:** Create a complex form (registration, checkout) that works perfectly with TalkBack/VoiceOver, including error announcements and focus management.
+
+3. **Right-to-Left E-Commerce:** Build a product catalog that fully mirrors for Arabic, including image carousels, price formatting, and checkout flow.
+
+4. **High Contrast Theme:** Implement a high-contrast mode that passes WCAG AAA standards with pure black/white and bold outlines.
+
+5. **Locale-Aware Data Visualization:** Build charts that format numbers, dates, and currencies correctly for 5 different locales with appropriate number compacting.
+
+---
+
+**Congratulations!** You've completed Day 24. You now master internationalization and accessibility in Flutter — from ARB files and RTL layouts to screen readers, dynamic text scaling, and inclusive design.
+
+**Next Up → Day 25: Background Processing & Advanced Features**
+
+---
+
+*Generated for 30Days Flutter: Zero to Hero (2026 Edition)*  
+*Day 24: Internationalization & Accessibility — Complete Deep Dive*
+
 *Day 23: Performance Optimization — Complete Deep Dive*
 
