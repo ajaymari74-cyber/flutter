@@ -33483,6 +33483,1824 @@ Use this checklist to verify mastery:
 
 *Generated for 30Days Flutter: Zero to Hero (2026 Edition)*  
 *Day 20: Native Features & Platform Channels — Complete Deep Dive*
+# Day 21: Testing
+# Complete Deep Dive
+
+**Goal:** Master testing in Flutter. Write robust unit tests with the test package, build widget tests with flutter_test, implement integration tests for end-to-end flows, mock dependencies with mocktail, create golden tests for UI regression, and achieve production-grade code coverage.
+
+---
+
+# Table of Contents
+1. Why Testing is Non-Negotiable in 2026
+2. Testing Pyramid & Architecture
+3. Unit Testing with test package
+4. Widget Testing with flutter_test
+5. Integration Testing with integration_test
+6. Mocking with mocktail
+7. Golden Tests for UI Regression
+8. Code Coverage & CI Integration
+9. Testing Best Practices & Patterns
+10. Hands-On Project: Test-Driven Expense Tracker
+11. Common Mistakes & How to Avoid Them
+12. Day 21 Checklist
+
+---
+
+# 1. Why Testing is Non-Negotiable in 2026
+
+## The Cost of Bugs by Stage
+| Stage | Cost to Fix | Testing Prevention |
+|:---|:---|:---|
+| **Development** | 1x (minutes) | Unit tests catch logic errors |
+| **Code Review** | 3x (hours) | Widget tests catch UI regressions |
+| **QA/Staging** | 10x (days) | Integration tests catch flow breaks |
+| **Production** | 100x (weeks + reputation) | Golden tests catch visual regressions |
+
+## Testing ROI in Flutter
+- **Hot Reload + Tests:** Fastest feedback loop in mobile development
+- **Single Codebase:** One test suite covers Android, iOS, Web, Desktop
+- **Refactoring Confidence:** Change anything without fear of breaking
+- **Documentation:** Tests describe expected behavior better than comments
+- **CI/CD Gate:** Block broken code from reaching production automatically
+
+---
+
+# 2. Testing Pyramid & Architecture
+
+## The Flutter Testing Pyramid
+```
+         /\
+        /  \     Golden Tests (Visual regression)
+       /----\    ~5% of tests
+      /      \
+     / Widget \   Widget Tests (UI + Interaction)
+    /----------\  ~30% of tests
+   /            \
+  /    Unit      \  Unit Tests (Logic + Business)
+ /----------------\ ~65% of tests
+/   Integration     \  Integration Tests (End-to-End)
+/----------------------\ ~5-10 tests per major flow
+```
+
+## Test Types Explained
+| Test Type | Speed | Scope | Tool |
+|:---|:---|:---|:---|
+| **Unit** | < 1ms | Single function/class | `test` package |
+| **Widget** | 10-100ms | Single widget tree | `flutter_test` |
+| **Integration** | 1-10s | Full app flow | `integration_test` |
+| **Golden** | 100-500ms | Pixel-perfect UI | `flutter_test` + `matchesGoldenFile` |
+
+## Test File Structure
+```
+lib/
+  models/
+    expense.dart
+  services/
+    expense_service.dart
+  widgets/
+    expense_card.dart
+  screens/
+    home_screen.dart
+test/
+  unit/
+    models/
+      expense_test.dart
+    services/
+      expense_service_test.dart
+  widget/
+    widgets/
+      expense_card_test.dart
+    screens/
+      home_screen_test.dart
+  goldens/
+    expense_card_golden_test.dart
+integration_test/
+  app_test.dart
+```
+
+---
+
+# 3. Unit Testing with test package
+
+## Setup
+
+**pubspec.yaml:**
+```yaml
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  test: ^1.25.0
+  mocktail: ^1.0.0
+  bloc_test: ^9.1.0
+```
+
+## Complete Unit Test Template
+```dart
+import 'package:test/test.dart';
+
+class Calculator {
+  int add(int a, int b) => a + b;
+  int subtract(int a, int b) => a - b;
+  int multiply(int a, int b) => a * b;
+  double divide(int a, int b) {
+    if (b == 0) throw ArgumentError('Cannot divide by zero');
+    return a / b;
+  }
+  int factorial(int n) {
+    if (n < 0) throw ArgumentError('Negative numbers not allowed');
+    if (n == 0 || n == 1) return 1;
+    return n * factorial(n - 1);
+  }
+}
+
+void main() {
+  group('Calculator', () {
+    late Calculator calculator;
+
+    setUp(() {
+      calculator = Calculator();
+    });
+
+    tearDown(() {
+      // Cleanup if needed
+    });
+
+    group('add', () {
+      test('returns correct sum for positive numbers', () {
+        expect(calculator.add(2, 3), equals(5));
+      });
+
+      test('returns correct sum for negative numbers', () {
+        expect(calculator.add(-2, -3), equals(-5));
+      });
+
+      test('returns same number when adding zero', () {
+        expect(calculator.add(5, 0), equals(5));
+      });
+    });
+
+    group('divide', () {
+      test('returns correct quotient', () {
+        expect(calculator.divide(10, 2), equals(5.0));
+      });
+
+      test('throws ArgumentError when dividing by zero', () {
+        expect(
+          () => calculator.divide(10, 0),
+          throwsA(isA<ArgumentError>()),
+        );
+      });
+
+      test('error message is descriptive', () {
+        expect(
+          () => calculator.divide(10, 0),
+          throwsA(
+            isA<ArgumentError>().having(
+              (e) => e.message,
+              'message',
+              'Cannot divide by zero',
+            ),
+          ),
+        );
+      });
+    });
+
+    group('factorial', () {
+      test('returns 1 for 0', () {
+        expect(calculator.factorial(0), equals(1));
+      });
+
+      test('returns 1 for 1', () {
+        expect(calculator.factorial(1), equals(1));
+      });
+
+      test('returns correct factorial for positive numbers', () {
+        expect(calculator.factorial(5), equals(120));
+      });
+
+      test('throws for negative numbers', () {
+        expect(
+          () => calculator.factorial(-1),
+          throwsArgumentError,
+        );
+      });
+    });
+  });
+}
+```
+
+## Matchers Reference
+| Matcher | Description | Example |
+|:---|:---|:---|
+| `equals(value)` | Deep equality | `expect(list, equals([1, 2, 3]))` |
+| `isA<Type>()` | Type check | `expect(obj, isA<String>())` |
+| `isNull` / `isNotNull` | Null check | `expect(value, isNotNull)` |
+| `isTrue` / `isFalse` | Boolean | `expect(flag, isTrue)` |
+| `isEmpty` / `isNotEmpty` | Collection | `expect(list, isEmpty)` |
+| `contains(element)` | Collection contains | `expect(list, contains(2))` |
+| `hasLength(n)` | Collection size | `expect(list, hasLength(3))` |
+| `throwsA(matcher)` | Exception | `expect(() => fn(), throwsA(isA<Error>()))` |
+| `throwsArgumentError` | Specific exception | `expect(() => fn(), throwsArgumentError)` |
+| `completion(matcher)` | Future completes | `expect(future, completion(equals(42)))` |
+| `emits(matcher)` | Stream event | `expect(stream, emits(equals(1)))` |
+| `emitsInOrder(list)` | Stream sequence | `expect(stream, emitsInOrder([1, 2, 3]))` |
+| `emitsError(matcher)` | Stream error | `expect(stream, emitsError(isA<Exception>()))` |
+
+## Async Testing
+```dart
+import 'dart:async';
+import 'package:test/test.dart';
+
+void main() {
+  group('Async Testing', () {
+    test('Future completes with expected value', () async {
+      final result = await Future.delayed(
+        const Duration(milliseconds: 100),
+        () => 42,
+      );
+      expect(result, equals(42));
+    });
+
+    test('Future using completion matcher', () {
+      final future = Future.value(42);
+      expect(future, completion(equals(42)));
+    });
+
+    test('Stream emits expected values', () {
+      final stream = Stream.fromIterable([1, 2, 3]);
+      expect(stream, emitsInOrder([1, 2, 3]));
+    });
+
+    test('Stream emits error', () {
+      final stream = Stream.error(Exception('Oops'));
+      expect(stream, emitsError(isA<Exception>()));
+    });
+
+    test('Timeout test', () async {
+      await expectLater(
+        Future.delayed(const Duration(seconds: 2)),
+        completes,
+      );
+    }, timeout: const Timeout(Duration(seconds: 3)));
+  });
+}
+```
+
+---
+
+# 4. Widget Testing with flutter_test
+
+## The Widget Test Lifecycle
+```
+1. pumpWidget(MyApp())     -> Build widget tree
+2. find.text('Hello')      -> Locate widget
+3. tap(find.button)        -> Simulate interaction
+4. pump() / pumpAndSettle() -> Rebuild after state change
+5. expect(find.text, findsOneWidget) -> Assert result
+```
+
+## Complete Widget Test
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+class LoginForm extends StatefulWidget {
+  final Function(String email, String password) onSubmit;
+
+  const LoginForm({super.key, required this.onSubmit});
+
+  @override
+  State<LoginForm> createState() => _LoginFormState();
+}
+
+class _LoginFormState extends State<LoginForm> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  Future<void> _submit() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() => _errorMessage = 'Enter a valid email');
+      return;
+    }
+    if (password.length < 6) {
+      setState(() => _errorMessage = 'Password must be at least 6 characters');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    await Future.delayed(const Duration(milliseconds: 500));
+    widget.onSubmit(email, password);
+
+    setState(() => _isLoading = false);
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        TextField(
+          key: const Key('email_field'),
+          controller: _emailController,
+          decoration: const InputDecoration(labelText: 'Email'),
+          keyboardType: TextInputType.emailAddress,
+        ),
+        TextField(
+          key: const Key('password_field'),
+          controller: _passwordController,
+          decoration: const InputDecoration(labelText: 'Password'),
+          obscureText: true,
+        ),
+        if (_errorMessage != null)
+          Text(
+            _errorMessage!,
+            key: const Key('error_message'),
+            style: const TextStyle(color: Colors.red),
+          ),
+        ElevatedButton(
+          key: const Key('submit_button'),
+          onPressed: _isLoading ? null : _submit,
+          child: _isLoading
+              ? const SizedBox(
+                  key: Key('loading_indicator'),
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Login'),
+        ),
+      ],
+    );
+  }
+}
+
+void main() {
+  group('LoginForm Widget Tests', () {
+    testWidgets('renders email and password fields', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LoginForm(onSubmit: (_, __) {}),
+          ),
+        ),
+      );
+
+      expect(find.byKey(const Key('email_field')), findsOneWidget);
+      expect(find.byKey(const Key('password_field')), findsOneWidget);
+      expect(find.byKey(const Key('submit_button')), findsOneWidget);
+    });
+
+    testWidgets('shows error for invalid email', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LoginForm(onSubmit: (_, __) {}),
+          ),
+        ),
+      );
+
+      // Enter invalid email
+      await tester.enterText(find.byKey(const Key('email_field')), 'invalid');
+      await tester.enterText(find.byKey(const Key('password_field')), 'password123');
+      await tester.tap(find.byKey(const Key('submit_button')));
+      await tester.pump();
+
+      expect(find.byKey(const Key('error_message')), findsOneWidget);
+      expect(find.text('Enter a valid email'), findsOneWidget);
+    });
+
+    testWidgets('shows error for short password', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LoginForm(onSubmit: (_, __) {}),
+          ),
+        ),
+      );
+
+      await tester.enterText(find.byKey(const Key('email_field')), 'test@email.com');
+      await tester.enterText(find.byKey(const Key('password_field')), '123');
+      await tester.tap(find.byKey(const Key('submit_button')));
+      await tester.pump();
+
+      expect(find.text('Password must be at least 6 characters'), findsOneWidget);
+    });
+
+    testWidgets('calls onSubmit with valid credentials', (tester) async {
+      String? capturedEmail;
+      String? capturedPassword;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LoginForm(
+              onSubmit: (email, password) {
+                capturedEmail = email;
+                capturedPassword = password;
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.enterText(find.byKey(const Key('email_field')), 'user@test.com');
+      await tester.enterText(find.byKey(const Key('password_field')), 'securepass');
+      await tester.tap(find.byKey(const Key('submit_button')));
+      await tester.pump(); // Start loading
+      await tester.pump(const Duration(milliseconds: 600)); // Wait for async
+
+      expect(capturedEmail, equals('user@test.com'));
+      expect(capturedPassword, equals('securepass'));
+      expect(find.byKey(const Key('loading_indicator')), findsNothing);
+    });
+
+    testWidgets('shows loading indicator during submission', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LoginForm(onSubmit: (_, __) {}),
+          ),
+        ),
+      );
+
+      await tester.enterText(find.byKey(const Key('email_field')), 'test@test.com');
+      await tester.enterText(find.byKey(const Key('password_field')), 'password123');
+      await tester.tap(find.byKey(const Key('submit_button')));
+      await tester.pump(); // Trigger build after setState
+
+      expect(find.byKey(const Key('loading_indicator')), findsOneWidget);
+      expect(find.text('Login'), findsNothing); // Button text hidden
+    });
+  });
+}
+```
+
+## Finders Reference
+| Finder | Description | Example |
+|:---|:---|:---|
+| `find.text('Hello')` | By exact text | `find.text('Submit')` |
+| `find.widgetWithText(Button, 'OK')` | Text inside widget type | `find.widgetWithText(ElevatedButton, 'Save')` |
+| `find.byType(ListView)` | By widget type | `find.byType(CircularProgressIndicator)` |
+| `find.byKey(Key('id'))` | By Key | `find.byKey(const Key('submit'))` |
+| `find.byIcon(Icons.add)` | By icon | `find.byIcon(Icons.delete)` |
+| `find.byTooltip('Add')` | By tooltip | `find.byTooltip('Search')` |
+| `find.descendant/of` | Nested finder | `find.descendant(of: find.byType(Card), matching: find.text('Title'))` |
+| `find.ancestor/of` | Parent finder | `find.ancestor(of: find.text('Child'), matching: find.byType(Row))` |
+| `find.bySemanticsLabel` | Accessibility | `find.bySemanticsLabel('Username')` |
+
+## Actions Reference
+| Action | Description | Example |
+|:---|:---|:---|
+| `tap(finder)` | Tap widget | `await tester.tap(find.byType(Button))` |
+| `longPress(finder)` | Long press | `await tester.longPress(find.text('Item'))` |
+| `drag(finder, offset)` | Drag | `await tester.drag(find.byType(ListView), const Offset(0, -300))` |
+| `enterText(finder, text)` | Type text | `await tester.enterText(find.byType(TextField), 'Hello')` |
+| `scrollUntilVisible(finder, delta)` | Scroll to find | `await tester.scrollUntilVisible(find.text('Bottom'), 50)` |
+| `pump()` | Rebuild frame | `await tester.pump()` |
+| `pumpAndSettle()` | Rebuild until idle | `await tester.pumpAndSettle(const Duration(seconds: 2))` |
+| `pumpWidget(widget)` | Build new tree | `await tester.pumpWidget(MyApp())` |
+
+---
+
+# 5. Integration Testing with integration_test
+
+## Setup
+
+**pubspec.yaml:**
+```yaml
+dev_dependencies:
+  integration_test:
+    sdk: flutter
+  flutter_test:
+    sdk: flutter
+```
+
+**test_driver/integration_test.dart:**
+```dart
+import 'package:integration_test/integration_test_driver.dart';
+
+Future<void> main() => integrationDriver();
+```
+
+## Complete Integration Test
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:integration_test/integration_test.dart';
+import 'package:my_app/main.dart' as app;
+
+void main() {
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  group('End-to-End App Test', () {
+    testWidgets('complete login flow', (tester) async {
+      app.main();
+      await tester.pumpAndSettle();
+
+      // Verify login screen
+      expect(find.byKey(const Key('login_screen')), findsOneWidget);
+      expect(find.byKey(const Key('email_field')), findsOneWidget);
+
+      // Enter credentials
+      await tester.enterText(find.byKey(const Key('email_field')), 'test@example.com');
+      await tester.enterText(find.byKey(const Key('password_field')), 'password123');
+      await tester.pump();
+
+      // Submit login
+      await tester.tap(find.byKey(const Key('login_button')));
+      await tester.pumpAndSettle(const Duration(seconds: 3));
+
+      // Verify home screen
+      expect(find.byKey(const Key('home_screen')), findsOneWidget);
+      expect(find.text('Welcome back!'), findsOneWidget);
+    });
+
+    testWidgets('add expense and verify in list', (tester) async {
+      app.main();
+      await tester.pumpAndSettle();
+
+      // Login first
+      await tester.enterText(find.byKey(const Key('email_field')), 'test@example.com');
+      await tester.enterText(find.byKey(const Key('password_field')), 'password123');
+      await tester.tap(find.byKey(const Key('login_button')));
+      await tester.pumpAndSettle();
+
+      // Navigate to add expense
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+
+      // Fill form
+      await tester.enterText(find.byKey(const Key('title_field')), 'Groceries');
+      await tester.enterText(find.byKey(const Key('amount_field')), '50.00');
+      await tester.tap(find.byKey(const Key('category_dropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Food').last);
+      await tester.pumpAndSettle();
+
+      // Save
+      await tester.tap(find.byKey(const Key('save_button')));
+      await tester.pumpAndSettle();
+
+      // Verify in list
+      expect(find.text('Groceries'), findsOneWidget);
+      expect(find.text('\$50.00'), findsOneWidget);
+    });
+
+    testWidgets('logout flow', (tester) async {
+      app.main();
+      await tester.pumpAndSettle();
+
+      // Login
+      await tester.enterText(find.byKey(const Key('email_field')), 'test@example.com');
+      await tester.enterText(find.byKey(const Key('password_field')), 'password123');
+      await tester.tap(find.byKey(const Key('login_button')));
+      await tester.pumpAndSettle();
+
+      // Open drawer and logout
+      await tester.tap(find.byIcon(Icons.menu));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('logout_button')));
+      await tester.pumpAndSettle();
+
+      // Verify back at login
+      expect(find.byKey(const Key('login_screen')), findsOneWidget);
+    });
+  });
+}
+```
+
+## Running Integration Tests
+```bash
+# Android
+flutter test integration_test/app_test.dart
+
+# iOS Simulator
+flutter test integration_test/app_test.dart
+
+# With device ID
+flutter test integration_test/app_test.dart -d <device_id>
+
+# Generate performance timeline
+flutter test integration_test/app_test.dart --trace-startup
+
+# With coverage
+flutter test integration_test/app_test.dart --coverage
+```
+
+---
+
+# 6. Mocking with mocktail
+
+## Why Mocking?
+- **Isolate tests:** Test one component without real dependencies
+- **Control behavior:** Force errors, delays, specific return values
+- **Speed:** Avoid real network calls, database writes, GPS locks
+- **Determinism:** Same test always produces same result
+
+## Complete Mocktail Example
+```dart
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
+
+// === INTERFACES ===
+abstract class AuthRepository {
+  Future<String> login(String email, String password);
+  Future<void> logout();
+  Future<bool> isAuthenticated();
+}
+
+abstract class AnalyticsService {
+  void logEvent(String name, Map<String, dynamic> params);
+}
+
+// === MOCKS ===
+class MockAuthRepository extends Mock implements AuthRepository {}
+class MockAnalyticsService extends Mock implements AnalyticsService {}
+
+// === CLASS UNDER TEST ===
+class AuthBloc {
+  final AuthRepository _authRepository;
+  final AnalyticsService _analytics;
+
+  AuthBloc(this._authRepository, this._analytics);
+
+  String? _token;
+  String? get token => _token;
+  bool get isAuthenticated => _token != null;
+
+  Future<bool> login(String email, String password) async {
+    try {
+      _token = await _authRepository.login(email, password);
+      _analytics.logEvent('login_success', {'email': email});
+      return true;
+    } catch (e) {
+      _analytics.logEvent('login_failure', {'error': e.toString()});
+      return false;
+    }
+  }
+
+  Future<void> logout() async {
+    await _authRepository.logout();
+    _token = null;
+    _analytics.logEvent('logout', {});
+  }
+}
+
+void main() {
+  group('AuthBloc with Mocktail', () {
+    late MockAuthRepository mockAuthRepository;
+    late MockAnalyticsService mockAnalytics;
+    late AuthBloc authBloc;
+
+    setUp(() {
+      mockAuthRepository = MockAuthRepository();
+      mockAnalytics = MockAnalyticsService();
+      authBloc = AuthBloc(mockAuthRepository, mockAnalytics);
+
+      // Register fallback values for any()
+      registerFallbackValue({'key': 'value'});
+    });
+
+    test('successful login sets token and logs analytics', () async {
+      // Arrange
+      when(() => mockAuthRepository.login('test@email.com', 'password123'))
+          .thenAnswer((_) async => 'fake_jwt_token_123');
+      when(() => mockAnalytics.logEvent(any(), any())).thenReturn(null);
+
+      // Act
+      final result = await authBloc.login('test@email.com', 'password123');
+
+      // Assert
+      expect(result, isTrue);
+      expect(authBloc.token, equals('fake_jwt_token_123'));
+      expect(authBloc.isAuthenticated, isTrue);
+
+      // Verify interactions
+      verify(() => mockAuthRepository.login('test@email.com', 'password123')).called(1);
+      verify(() => mockAnalytics.logEvent('login_success', {'email': 'test@email.com'})).called(1);
+    });
+
+    test('failed login returns false and logs failure', () async {
+      // Arrange
+      when(() => mockAuthRepository.login(any(), any()))
+          .thenThrow(Exception('Invalid credentials'));
+      when(() => mockAnalytics.logEvent(any(), any())).thenReturn(null);
+
+      // Act
+      final result = await authBloc.login('wrong@email.com', 'wrongpass');
+
+      // Assert
+      expect(result, isFalse);
+      expect(authBloc.token, isNull);
+      expect(authBloc.isAuthenticated, isFalse);
+
+      verify(() => mockAnalytics.logEvent('login_failure', any(that: containsPair('error', 'Exception: Invalid credentials')))).called(1);
+    });
+
+    test('logout clears token and calls repository', () async {
+      // Arrange - first login
+      when(() => mockAuthRepository.login(any(), any()))
+          .thenAnswer((_) async => 'token');
+      when(() => mockAuthRepository.logout()).thenAnswer((_) async {});
+      when(() => mockAnalytics.logEvent(any(), any())).thenReturn(null);
+
+      await authBloc.login('test@email.com', 'password');
+      expect(authBloc.isAuthenticated, isTrue);
+
+      // Act
+      await authBloc.logout();
+
+      // Assert
+      expect(authBloc.isAuthenticated, isFalse);
+      expect(authBloc.token, isNull);
+      verify(() => mockAuthRepository.logout()).called(1);
+      verify(() => mockAnalytics.logEvent('logout', any())).called(1);
+    });
+
+    test('verifies no unexpected interactions', () async {
+      when(() => mockAuthRepository.login(any(), any()))
+          .thenAnswer((_) async => 'token');
+      when(() => mockAnalytics.logEvent(any(), any())).thenReturn(null);
+
+      await authBloc.login('test@email.com', 'password');
+
+      // Verify only expected calls were made
+      verify(() => mockAuthRepository.login(any(), any())).called(1);
+      verify(() => mockAnalytics.logEvent(any(), any())).called(1);
+      verifyNoMoreInteractions(mockAuthRepository);
+    });
+  });
+}
+```
+
+## Mocktail Matchers
+| Matcher | Description | Example |
+|:---|:---|:---|
+| `any()` | Any value | `when(() => repo.login(any(), any()))` |
+| `any(that: equals(5))` | Any matching condition | `when(() => fn(any(that: isPositive)))` |
+| `captureAny()` | Capture argument for assertion | `verify(() => fn(captureAny()))` |
+| `captureThat(matcher)` | Capture with condition | `verify(() => fn(captureThat(isA<String>())))` |
+
+## BLoC Testing with bloc_test
+```dart
+import 'package:bloc_test/bloc_test.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+class CounterCubit extends Cubit<int> {
+  CounterCubit() : super(0);
+  void increment() => emit(state + 1);
+  void decrement() => emit(state - 1);
+  void reset() => emit(0);
+}
+
+void main() {
+  group('CounterCubit', () {
+    blocTest<CounterCubit, int>(
+      'emits [1] when increment is called',
+      build: CounterCubit.new,
+      act: (cubit) => cubit.increment(),
+      expect: () => [1],
+    );
+
+    blocTest<CounterCubit, int>(
+      'emits [-1] when decrement is called',
+      build: CounterCubit.new,
+      act: (cubit) => cubit.decrement(),
+      expect: () => [-1],
+    );
+
+    blocTest<CounterCubit, int>(
+      'emits [1, 2, 3] when increment called 3 times',
+      build: CounterCubit.new,
+      act: (cubit) {
+        cubit.increment();
+        cubit.increment();
+        cubit.increment();
+      },
+      expect: () => [1, 2, 3],
+    );
+
+    blocTest<CounterCubit, int>(
+      'emits [0] when reset after increment',
+      build: CounterCubit.new,
+      seed: () => 5,
+      act: (cubit) => cubit.reset(),
+      expect: () => [0],
+    );
+  });
+}
+```
+
+---
+
+# 7. Golden Tests for UI Regression
+
+## What are Golden Tests?
+Golden tests capture a rendered widget as an image and compare it against a "golden" (reference) image. They catch unintended visual changes.
+
+## Setup
+```yaml
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  alchemist: ^0.7.0  # Or golden_toolkit: ^0.11.0
+```
+
+## Golden Test Implementation
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+class ExpenseCard extends StatelessWidget {
+  final String title;
+  final double amount;
+  final String category;
+  final Color categoryColor;
+  final DateTime date;
+
+  const ExpenseCard({
+    super.key,
+    required this.title,
+    required this.amount,
+    required this.category,
+    required this.categoryColor,
+    required this.date,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: categoryColor.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.receipt, color: categoryColor),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text(category, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '-\$${amount.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Colors.red,
+                  ),
+                ),
+                Text(
+                  '${date.month}/${date.day}/${date.year}',
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+void main() {
+  group('ExpenseCard Golden Tests', () {
+    testWidgets('renders correctly - Food category', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: Scaffold(
+            body: ExpenseCard(
+              title: 'Grocery Shopping',
+              amount: 45.67,
+              category: 'Food',
+              categoryColor: Colors.orange,
+              date: DateTime(2026, 3, 15),
+            ),
+          ),
+        ),
+      );
+
+      await expectLater(
+        find.byType(ExpenseCard),
+        matchesGoldenFile('goldens/expense_card_food.png'),
+      );
+    });
+
+    testWidgets('renders correctly - Transport category', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: Scaffold(
+            body: ExpenseCard(
+              title: 'Uber Ride',
+              amount: 12.50,
+              category: 'Transport',
+              categoryColor: Colors.blue,
+              date: DateTime(2026, 3, 14),
+            ),
+          ),
+        ),
+      );
+
+      await expectLater(
+        find.byType(ExpenseCard),
+        matchesGoldenFile('goldens/expense_card_transport.png'),
+      );
+    });
+
+    testWidgets('renders correctly - long title', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: Scaffold(
+            body: ExpenseCard(
+              title: 'Very Long Expense Title That Should Truncate Nicely',
+              amount: 199.99,
+              category: 'Shopping',
+              categoryColor: Colors.purple,
+              date: DateTime(2026, 3, 10),
+            ),
+          ),
+        ),
+      );
+
+      await expectLater(
+        find.byType(ExpenseCard),
+        matchesGoldenFile('goldens/expense_card_long_title.png'),
+      );
+    });
+  });
+}
+```
+
+## Running Golden Tests
+```bash
+# Run golden tests (fails if images differ)
+flutter test test/goldens/
+
+# Update golden files (after intentional UI change)
+flutter test --update-goldens test/goldens/
+
+# Run with specific device size
+flutter test --dart-define=FLUTTER_TEST_GOLDEN_DEVICE=phone
+```
+
+## Golden File Best Practices
+| Practice | Why |
+|:---|:---|
+| **Version control golden files** | Team shares same baseline |
+| **Run on same OS** | Linux/Mac/Windows render fonts differently |
+| **Use CI for validation** | Block PRs that change UI unexpectedly |
+| **Update goldens in separate commit** | Easy to review visual changes |
+| **Test different themes** | Dark mode, high contrast, different font sizes |
+
+---
+
+# 8. Code Coverage & CI Integration
+
+## Generating Coverage
+```bash
+# Run all tests with coverage
+flutter test --coverage
+
+# The above generates coverage/lcov.info
+
+# View coverage report (install lcov first)
+genhtml coverage/lcov.info -o coverage/html
+
+# Open report
+open coverage/html/index.html
+```
+
+## Coverage Configuration (coverage_exclusions.yaml)
+```yaml
+# Exclude generated files
+generated:
+  - "**/*.g.dart"
+  - "**/*.freezed.dart"
+  - "**/*.mocks.dart"
+
+# Exclude UI-only files
+ui:
+  - "lib/main.dart"
+  - "lib/app.dart"
+  - "lib/**/widgets/**"
+
+# Exclude third-party wrappers
+external:
+  - "lib/generated_plugin_registrant.dart"
+```
+
+## CI/CD with GitHub Actions
+```yaml
+# .github/workflows/test.yml
+name: Flutter Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze code
+        run: flutter analyze
+
+      - name: Run unit and widget tests
+        run: flutter test --coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage/lcov.info
+          fail_ci_if_error: true
+
+      - name: Run integration tests
+        run: flutter test integration_test/
+```
+
+## Coverage Badges (README.md)
+```markdown
+![Coverage](https://img.shields.io/codecov/c/github/yourusername/yourrepo)
+![Tests](https://img.shields.io/github/workflow/status/yourusername/yourrepo/Flutter%20Tests)
+```
+
+## Coverage Targets by Layer
+| Layer | Minimum Coverage | Ideal Coverage |
+|:---|:---|:---|
+| **Models / Entities** | 90% | 100% |
+| **Services / Repositories** | 80% | 95% |
+| **BLoC / Cubit** | 85% | 100% |
+| **Widgets** | 60% | 80% |
+| **Screens** | 50% | 70% |
+| **Integration** | 3-5 critical flows | All major flows |
+
+---
+
+# 9. Testing Best Practices & Patterns
+
+## The AAA Pattern
+```dart
+test('calculates total correctly', () {
+  // Arrange
+  final cart = Cart();
+  cart.addItem(Item(price: 10));
+  cart.addItem(Item(price: 20));
+
+  // Act
+  final total = cart.calculateTotal();
+
+  // Assert
+  expect(total, equals(30));
+});
+```
+
+## Test Naming Convention
+```dart
+// Pattern: should [expected behavior] when [condition]
+test('should return error when email is empty', () { ... });
+test('should emit loading then success when login is valid', () { ... });
+test('should navigate to home when authentication succeeds', () { ... });
+```
+
+## Widget Test Helpers
+```dart
+// test_helpers.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+extension WidgetTesterX on WidgetTester {
+  Future<void> pumpApp(Widget widget) async {
+    await pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: widget),
+      ),
+    );
+  }
+
+  Future<void> tapButton(String text) async {
+    await tap(find.widgetWithText(ElevatedButton, text));
+    await pump();
+  }
+
+  Future<void> enterTextField(String key, String text) async {
+    await enterText(find.byKey(Key(key)), text);
+    await pump();
+  }
+
+  void expectText(String text, {Matcher? matcher}) {
+    expect(find.text(text), matcher ?? findsOneWidget);
+  }
+
+  void expectWidget(Type type, {Matcher? matcher}) {
+    expect(find.byType(type), matcher ?? findsOneWidget);
+  }
+}
+
+// Usage in tests
+await tester.pumpApp(MyWidget());
+await tester.enterTextField('email_field', 'test@email.com');
+await tester.tapButton('Submit');
+tester.expectText('Success!');
+```
+
+## Testing with Riverpod
+```dart
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  testWidgets('counter increments with Riverpod', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(home: CounterScreen()),
+      ),
+    );
+
+    expect(find.text('0'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pump();
+
+    expect(find.text('1'), findsOneWidget);
+  });
+}
+```
+
+## Testing Navigation
+```dart
+import 'package:mocktail/mocktail.dart';
+
+class MockNavigatorObserver extends Mock implements NavigatorObserver {}
+
+void main() {
+  testWidgets('navigates to detail on tap', (tester) async {
+    final mockObserver = MockNavigatorObserver();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProductListScreen(),
+        navigatorObservers: [mockObserver],
+      ),
+    );
+
+    await tester.tap(find.text('Product 1'));
+    await tester.pumpAndSettle();
+
+    verify(() => mockObserver.didPush(any(), any())).called(1);
+    expect(find.byType(ProductDetailScreen), findsOneWidget);
+  });
+}
+```
+
+---
+
+# 10. Hands-On Project: Test-Driven Expense Tracker
+
+## Project Overview
+Build **TestDriven Expense Tracker** — a fully tested expense management app with:
+- Unit tests for expense calculations and validation
+- Widget tests for all UI components
+- BLoC tests for state management
+- Golden tests for expense cards
+- Integration test for complete add-expense flow
+- 80%+ code coverage target
+
+## Complete Test Suite
+
+```dart
+// ==================== MODELS ====================
+class Expense {
+  final String id;
+  final String title;
+  final double amount;
+  final String category;
+  final DateTime date;
+
+  Expense({
+    required this.id,
+    required this.title,
+    required this.amount,
+    required this.category,
+    required this.date,
+  });
+
+  factory Expense.create({
+    required String title,
+    required double amount,
+    required String category,
+  }) {
+    return Expense(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: title,
+      amount: amount,
+      category: category,
+      date: DateTime.now(),
+    );
+  }
+
+  bool get isValid => title.isNotEmpty && amount > 0 && category.isNotEmpty;
+}
+
+// ==================== SERVICE ====================
+class ExpenseService {
+  final List<Expense> _expenses = [];
+
+  List<Expense> get expenses => List.unmodifiable(_expenses);
+
+  void addExpense(Expense expense) {
+    if (!expense.isValid) throw ArgumentError('Invalid expense');
+    _expenses.add(expense);
+  }
+
+  void deleteExpense(String id) {
+    _expenses.removeWhere((e) => e.id == id);
+  }
+
+  double get totalExpenses => _expenses.fold(0, (sum, e) => sum + e.amount);
+
+  Map<String, double> get expensesByCategory {
+    final map = <String, double>{};
+    for (final expense in _expenses) {
+      map[expense.category] = (map[expense.category] ?? 0) + expense.amount;
+    }
+    return map;
+  }
+
+  List<Expense> getExpensesForMonth(int year, int month) {
+    return _expenses.where((e) =>
+      e.date.year == year && e.date.month == month
+    ).toList();
+  }
+}
+
+// ==================== UNIT TESTS ====================
+import 'package:test/test.dart';
+
+void main() {
+  group('Expense Model', () {
+    test('create generates unique id', () {
+      final expense1 = Expense.create(title: 'Test', amount: 10, category: 'Food');
+      final expense2 = Expense.create(title: 'Test', amount: 10, category: 'Food');
+      expect(expense1.id, isNot(equals(expense2.id)));
+    });
+
+    test('isValid returns true for valid expense', () {
+      final expense = Expense.create(title: 'Grocery', amount: 50, category: 'Food');
+      expect(expense.isValid, isTrue);
+    });
+
+    test('isValid returns false for empty title', () {
+      final expense = Expense.create(title: '', amount: 50, category: 'Food');
+      expect(expense.isValid, isFalse);
+    });
+
+    test('isValid returns false for zero amount', () {
+      final expense = Expense.create(title: 'Free', amount: 0, category: 'Food');
+      expect(expense.isValid, isFalse);
+    });
+
+    test('isValid returns false for negative amount', () {
+      final expense = Expense.create(title: 'Refund', amount: -10, category: 'Food');
+      expect(expense.isValid, isFalse);
+    });
+
+    test('isValid returns false for empty category', () {
+      final expense = Expense.create(title: 'Test', amount: 10, category: '');
+      expect(expense.isValid, isFalse);
+    });
+  });
+
+  group('ExpenseService', () {
+    late ExpenseService service;
+
+    setUp(() => service = ExpenseService());
+
+    test('adds valid expense', () {
+      final expense = Expense.create(title: 'Coffee', amount: 5.50, category: 'Food');
+      service.addExpense(expense);
+      expect(service.expenses, hasLength(1));
+      expect(service.expenses.first.title, equals('Coffee'));
+    });
+
+    test('throws for invalid expense', () {
+      final expense = Expense.create(title: '', amount: -5, category: '');
+      expect(() => service.addExpense(expense), throwsArgumentError);
+    });
+
+    test('deletes expense by id', () {
+      final expense = Expense.create(title: 'Test', amount: 10, category: 'Food');
+      service.addExpense(expense);
+      service.deleteExpense(expense.id);
+      expect(service.expenses, isEmpty);
+    });
+
+    test('calculates total expenses', () {
+      service.addExpense(Expense.create(title: 'A', amount: 10, category: 'Food'));
+      service.addExpense(Expense.create(title: 'B', amount: 20, category: 'Transport'));
+      service.addExpense(Expense.create(title: 'C', amount: 30, category: 'Food'));
+      expect(service.totalExpenses, equals(60));
+    });
+
+    test('groups expenses by category', () {
+      service.addExpense(Expense.create(title: 'A', amount: 10, category: 'Food'));
+      service.addExpense(Expense.create(title: 'B', amount: 20, category: 'Transport'));
+      service.addExpense(Expense.create(title: 'C', amount: 30, category: 'Food'));
+
+      final byCategory = service.expensesByCategory;
+      expect(byCategory['Food'], equals(40));
+      expect(byCategory['Transport'], equals(20));
+    });
+
+    test('filters expenses by month', () {
+      service.addExpense(Expense(
+        id: '1', title: 'Jan', amount: 10, category: 'Food', date: DateTime(2026, 1, 15),
+      ));
+      service.addExpense(Expense(
+        id: '2', title: 'Feb', amount: 20, category: 'Food', date: DateTime(2026, 2, 15),
+      ));
+      service.addExpense(Expense(
+        id: '3', title: 'Jan2', amount: 30, category: 'Food', date: DateTime(2026, 1, 20),
+      ));
+
+      final janExpenses = service.getExpensesForMonth(2026, 1);
+      expect(janExpenses, hasLength(2));
+      expect(janExpenses.fold(0, (s, e) => s + e.amount), equals(40));
+    });
+  });
+}
+```
+
+```dart
+// ==================== WIDGET TESTS ====================
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+class ExpenseForm extends StatefulWidget {
+  final Function(String title, double amount, String category) onSubmit;
+
+  const ExpenseForm({super.key, required this.onSubmit});
+
+  @override
+  State<ExpenseForm> createState() => _ExpenseFormState();
+}
+
+class _ExpenseFormState extends State<ExpenseForm> {
+  final _titleController = TextEditingController();
+  final _amountController = TextEditingController();
+  String _category = 'Food';
+  String? _error;
+
+  void _submit() {
+    final title = _titleController.text.trim();
+    final amount = double.tryParse(_amountController.text) ?? 0;
+
+    if (title.isEmpty || amount <= 0) {
+      setState(() => _error = 'Please fill all fields correctly');
+      return;
+    }
+
+    widget.onSubmit(title, amount, _category);
+    _titleController.clear();
+    _amountController.clear();
+    setState(() => _error = null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        TextField(
+          key: const Key('title_input'),
+          controller: _titleController,
+          decoration: const InputDecoration(labelText: 'Title'),
+        ),
+        TextField(
+          key: const Key('amount_input'),
+          controller: _amountController,
+          decoration: const InputDecoration(labelText: 'Amount'),
+          keyboardType: TextInputType.number,
+        ),
+        DropdownButtonFormField<String>(
+          key: const Key('category_dropdown'),
+          value: _category,
+          items: ['Food', 'Transport', 'Shopping', 'Bills']
+              .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+              .toList(),
+          onChanged: (value) => setState(() => _category = value!),
+        ),
+        if (_error != null)
+          Text(_error!, key: const Key('error_text'), style: const TextStyle(color: Colors.red)),
+        ElevatedButton(
+          key: const Key('submit_button'),
+          onPressed: _submit,
+          child: const Text('Add Expense'),
+        ),
+      ],
+    );
+  }
+}
+
+void main() {
+  group('ExpenseForm Widget Tests', () {
+    testWidgets('renders all input fields', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: ExpenseForm(onSubmit: (_, __, ___) {}))),
+      );
+
+      expect(find.byKey(const Key('title_input')), findsOneWidget);
+      expect(find.byKey(const Key('amount_input')), findsOneWidget);
+      expect(find.byKey(const Key('category_dropdown')), findsOneWidget);
+      expect(find.byKey(const Key('submit_button')), findsOneWidget);
+    });
+
+    testWidgets('shows error for empty fields', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: ExpenseForm(onSubmit: (_, __, ___) {}))),
+      );
+
+      await tester.tap(find.byKey(const Key('submit_button')));
+      await tester.pump();
+
+      expect(find.byKey(const Key('error_text')), findsOneWidget);
+      expect(find.text('Please fill all fields correctly'), findsOneWidget);
+    });
+
+    testWidgets('shows error for invalid amount', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: ExpenseForm(onSubmit: (_, __, ___) {}))),
+      );
+
+      await tester.enterText(find.byKey(const Key('title_input')), 'Test');
+      await tester.enterText(find.byKey(const Key('amount_input')), '-10');
+      await tester.tap(find.byKey(const Key('submit_button')));
+      await tester.pump();
+
+      expect(find.byKey(const Key('error_text')), findsOneWidget);
+    });
+
+    testWidgets('submits valid expense', (tester) async {
+      String? capturedTitle;
+      double? capturedAmount;
+      String? capturedCategory;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ExpenseForm(
+              onSubmit: (title, amount, category) {
+                capturedTitle = title;
+                capturedAmount = amount;
+                capturedCategory = category;
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.enterText(find.byKey(const Key('title_input')), 'Coffee');
+      await tester.enterText(find.byKey(const Key('amount_input')), '5.50');
+      await tester.tap(find.byKey(const Key('category_dropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Transport').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('submit_button')));
+      await tester.pump();
+
+      expect(capturedTitle, equals('Coffee'));
+      expect(capturedAmount, equals(5.50));
+      expect(capturedCategory, equals('Transport'));
+      expect(find.byKey(const Key('error_text')), findsNothing);
+    });
+
+    testWidgets('clears fields after successful submit', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: ExpenseForm(onSubmit: (_, __, ___) {}))),
+      );
+
+      await tester.enterText(find.byKey(const Key('title_input')), 'Coffee');
+      await tester.enterText(find.byKey(const Key('amount_input')), '5.50');
+      await tester.tap(find.byKey(const Key('submit_button')));
+      await tester.pump();
+
+      final titleField = tester.widget<TextField>(find.byKey(const Key('title_input')));
+      final amountField = tester.widget<TextField>(find.byKey(const Key('amount_input')));
+      expect(titleField.controller?.text, isEmpty);
+      expect(amountField.controller?.text, isEmpty);
+    });
+  });
+}
+```
+
+```dart
+// ==================== INTEGRATION TEST ====================
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:integration_test/integration_test.dart';
+
+// Assume main.dart exports MyApp
+import 'package:testdriven_expense_tracker/main.dart' as app;
+
+void main() {
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  group('Expense Tracker E2E', () {
+    testWidgets('add expense and verify in list', (tester) async {
+      app.main();
+      await tester.pumpAndSettle();
+
+      // Verify empty state
+      expect(find.text('No expenses yet'), findsOneWidget);
+
+      // Tap add button
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+
+      // Fill form
+      await tester.enterText(find.byKey(const Key('title_input')), 'Lunch');
+      await tester.enterText(find.byKey(const Key('amount_input')), '12.50');
+      await tester.tap(find.byKey(const Key('category_dropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Food').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('submit_button')));
+      await tester.pumpAndSettle();
+
+      // Verify in list
+      expect(find.text('Lunch'), findsOneWidget);
+      expect(find.text('\$12.50'), findsOneWidget);
+      expect(find.text('Food'), findsOneWidget);
+
+      // Verify total updated
+      expect(find.text('Total: \$12.50'), findsOneWidget);
+    });
+
+    testWidgets('delete expense and verify removal', (tester) async {
+      app.main();
+      await tester.pumpAndSettle();
+
+      // Add expense first
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('title_input')), 'Delete Me');
+      await tester.enterText(find.byKey(const Key('amount_input')), '10.00');
+      await tester.tap(find.byKey(const Key('submit_button')));
+      await tester.pumpAndSettle();
+
+      // Delete
+      await tester.tap(find.byIcon(Icons.delete).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete').last);
+      await tester.pumpAndSettle();
+
+      // Verify removed
+      expect(find.text('Delete Me'), findsNothing);
+    });
+  });
+}
+```
+
+---
+
+# 11. Common Mistakes & How to Avoid Them
+
+## Mistake 1: Testing Implementation Instead of Behavior
+```dart
+// ❌ WRONG - Tests internal state
+test('sets _isLoading to true', () {
+  bloc.add(LoginEvent());
+  expect(bloc.state.isLoading, isTrue); // Tests internal flag
+});
+
+// ✅ CORRECT - Tests observable behavior
+test('emits loading then success', () {
+  expectLater(
+    bloc.stream,
+    emitsInOrder([LoginLoading(), LoginSuccess()]),
+  );
+  bloc.add(LoginEvent());
+});
+```
+
+## Mistake 2: Not Pumping After Async Operations
+```dart
+// ❌ WRONG - Misses state update after Future
+await tester.tap(find.byType(ElevatedButton));
+// Missing pump!
+expect(find.text('Loaded'), findsOneWidget); // Fails
+
+// ✅ CORRECT - Pump after async
+await tester.tap(find.byType(ElevatedButton));
+await tester.pump(); // For microtasks
+await tester.pump(const Duration(seconds: 1)); // For delayed Futures
+expect(find.text('Loaded'), findsOneWidget);
+
+// ✅ BETTER - pumpAndSettle waits for all animations
+await tester.tap(find.byType(ElevatedButton));
+await tester.pumpAndSettle();
+```
+
+## Mistake 3: Shared State Between Tests
+```dart
+// ❌ WRONG - Shared mutable state
+late ExpenseService service; // Shared!
+
+setUp(() {
+  // If service is initialized outside, state leaks between tests
+});
+
+// ✅ CORRECT - Fresh instance per test
+setUp(() {
+  service = ExpenseService(); // New instance every time
+});
+```
+
+## Mistake 4: Testing Multiple Things in One Test
+```dart
+// ❌ WRONG - Hard to identify failure point
+test('login flow works', () async {
+  await auth.login('email', 'pass');
+  expect(auth.isAuthenticated, isTrue);
+  await auth.logout();
+  expect(auth.isAuthenticated, isFalse);
+  await auth.login('wrong', 'wrong');
+  expect(auth.isAuthenticated, isFalse);
+});
+
+// ✅ CORRECT - One behavior per test
+test('login sets authenticated to true', () async { ... });
+test('logout sets authenticated to false', () async { ... });
+test('failed login keeps authenticated false', () async { ... });
+```
+
+## Mistake 5: Not Using Keys for Finder Targets
+```dart
+// ❌ WRONG - Fragile, breaks when text changes
+await tester.tap(find.text('Submit'));
+
+// ✅ CORRECT - Stable, semantic finders
+await tester.tap(find.byKey(const Key('submit_button')));
+// Or
+await tester.tap(find.bySemanticsLabel('Submit expense'));
+```
+
+## Mistake 6: Ignoring Code Coverage Gaps
+```dart
+// ❌ WRONG - Only testing happy path
+test('adds expense', () {
+  service.addExpense(validExpense);
+  expect(service.expenses, hasLength(1));
+});
+
+// ✅ CORRECT - Test edge cases and errors
+test('throws for invalid expense', () { ... });
+test('handles empty list', () { ... });
+test('handles very large amount', () { ... });
+test('handles special characters in title', () { ... });
+```
+
+## Mistake 7: Running Integration Tests Without Binding
+```dart
+// ❌ WRONG - Missing binding initialization
+void main() {
+  // IntegrationTestWidgetsFlutterBinding.ensureInitialized(); // Forgot!
+  testWidgets('app test', (tester) async { ... });
+}
+
+// ✅ CORRECT - Always initialize binding first
+void main() {
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('app test', (tester) async { ... });
+}
+```
+
+---
+
+# 12. Day 21 Checklist
+
+Use this checklist to verify mastery:
+
+- [ ] Understands the testing pyramid (Unit > Widget > Integration)
+- [ ] Can write unit tests with `test` package
+- [ ] Can use `setUp` and `tearDown` for test preparation
+- [ ] Can use matchers: `equals`, `isA`, `throwsA`, `isNull`, `isEmpty`
+- [ ] Can test async code with `async/await` and `completion` matcher
+- [ ] Can test streams with `emits`, `emitsInOrder`, `emitsError`
+- [ ] Can write widget tests with `flutter_test`
+- [ ] Can find widgets using `find.text`, `find.byType`, `find.byKey`
+- [ ] Can simulate user interactions: `tap`, `enterText`, `drag`
+- [ ] Understands `pump()` vs `pumpAndSettle()`
+- [ ] Can write integration tests with `integration_test`
+- [ ] Can mock dependencies with `mocktail`
+- [ ] Can verify mock interactions with `verify()` and `verifyNoMoreInteractions()`
+- [ ] Can use `registerFallbackValue` for mocktail generic types
+- [ ] Can write BLoC tests with `bloc_test`
+- [ ] Can create golden tests with `matchesGoldenFile`
+- [ ] Can update golden files with `--update-goldens`
+- [ ] Can generate code coverage with `--coverage`
+- [ ] Can interpret lcov reports
+- [ ] Can configure CI/CD for automated testing
+- [ ] Understands AAA pattern (Arrange, Act, Assert)
+- [ ] Uses semantic test names: "should X when Y"
+- [ ] Tests edge cases and error paths, not just happy path
+- [ ] Uses Keys for stable widget finders
+- [ ] Built the TestDriven Expense Tracker
+- [ ] App has unit tests for models and services
+- [ ] App has widget tests for forms and cards
+- [ ] App has golden tests for UI components
+- [ ] App has integration test for full flow
+- [ ] Achieved 80%+ code coverage
+- [ ] Pushed the project to GitHub
+
+---
+
+# Key Takeaways (Memorize These!)
+
+1. **Unit tests are the foundation** — Fast, isolated, and should cover 65%+ of your code. Test business logic, calculations, and validation.
+
+2. **Widget tests verify UI behavior** — Test rendering, user interactions, and state changes. Use Keys for stable finders.
+
+3. **Integration tests validate flows** — Only test critical end-to-end paths. They're slow, so keep the count low (5-10 per app).
+
+4. **Mock external dependencies** — Never call real APIs, databases, or GPS in unit/widget tests. Use mocktail for predictable, fast tests.
+
+5. **pump() rebuilds, pumpAndSettle() waits** — Use `pump()` for microtasks, `pumpAndSettle()` for animations and async operations.
+
+6. **Golden tests catch visual regressions** — One pixel change fails the test. Update goldens intentionally, never accidentally.
+
+7. **Coverage is a guide, not a goal** — 100% coverage with bad tests is worse than 80% with meaningful tests. Focus on behavior, not lines.
+
+8. **Test behavior, not implementation** — If you refactor internals, tests should still pass. Test what the user observes.
+
+9. **One behavior per test** — Each test should have exactly one reason to fail. Name it clearly: "should X when Y".
+
+10. **Run tests in CI on every PR** — Automated testing is the only way to prevent regressions at scale. Block merges on test failures.
+
+---
+
+# Extra Practice (Do These Tonight!)
+
+1. **TDD Calculator:** Build a calculator app using strict TDD. Write the test first, watch it fail, implement the minimum code, watch it pass, refactor.
+
+2. **Mocked API Client:** Create a repository that fetches weather data. Write unit tests with mocktail that simulate network errors, timeouts, and malformed JSON.
+
+3. **Accessibility Widget Tests:** Test that all interactive widgets have proper semantics labels, and screen readers can navigate your app correctly.
+
+4. **Performance Integration Test:** Write an integration test that measures frame build times using `IntegrationTestWidgetsFlutterBinding.traceAction`.
+
+5. **Mutation Testing:** Use `muter` or manual mutation to verify your tests actually catch bugs. Introduce a small logic error and confirm a test fails.
+
+---
+
+**Congratulations!** You've completed Day 21. You now master testing in Flutter — from unit tests and widget tests to integration tests, mocking, golden tests, and CI/CD automation.
+
+**Next Up → Day 22: Architecture & Clean Code**
+
+---
+
+*Generated for 30Days Flutter: Zero to Hero (2026 Edition)*  
+*Day 21: Testing — Complete Deep Dive*
+
 
 *Generated for 30Days Flutter: Zero to Hero (2026 Edition)*  
 *Day 18: Animations — Complete Deep Dive*
