@@ -45437,5 +45437,1018 @@ Use this checklist to verify mastery:
 *Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*  
 *Day 27: CI/CD & DevOps — Complete Deep Dive*
 
+# Day 28: App Store & Play Store Deployment
+# Complete Deep Dive
+
+**Goal:** Master end-to-end app store publishing for both Google Play Store and Apple App Store. Prepare release builds, create store assets, handle app signing, navigate review guidelines, manage in-app purchases, and successfully publish a production-grade Flutter app.
+
+---
+
+# Table of Contents
+
+1. Why Store Deployment Mastery Is Essential in 2026
+2. App Store Ecosystem Overview
+3. Google Play Console: Complete Walkthrough
+4. App Store Connect: Complete Walkthrough
+5. Release Build Configuration
+6. App Signing & Certificates
+7. Store Assets & Metadata
+8. App Review Guidelines & Compliance
+9. In-App Purchases & Subscriptions
+10. Post-Launch: Analytics, Updates & Maintenance
+11. Hands-On Project: Publish Your Capstone
+12. Common Mistakes & How to Avoid Them
+13. Day 28 Checklist
+
+---
+
+# 1. Why Store Deployment Mastery Is Essential in 2026
+
+## The Store Economy
+
+| Statistic | Impact |
+|:---|:---|
+| Google Play hosts 3.5M+ apps; App Store 1.8M+ | Competition = quality threshold |
+| 50% of apps are rejected on first submission | Preparation = approval |
+| Average review time: 24-48h (App Store), 2-4h (Play Store) | Planning = predictable launches |
+| Top 1% of apps earn 94% of revenue | Monetization setup = survival |
+| 70% of users discover apps via store search | ASO = organic growth |
+| App updates with release notes see 30% higher retention | Communication = engagement |
+
+## Store Comparison
+
+| Aspect | Google Play Store | Apple App Store |
+|:---|:---|:---|
+ **One-time fee** | $25 | $99/year |
+| **Review time** | Hours | 1-2 days |
+| **Update rollout** | Staged (0%-100%) | Immediate after review |
+| **A/B testing** | Native (store listing) | Via third-party |
+| **Beta channels** | Internal, Closed, Open | TestFlight |
+| **Refund policy** | 2 hours automatic | Case-by-case |
+| **Content policies** | More permissive | Stricter |
+| **Revenue share** | 15% (first $1M), 30% after | 15% (small biz), 30% standard |
+
+---
+
+# 2. App Store Ecosystem Overview
+
+## The Publishing Flow
+
+```
+Development Complete
+        |
+        v
+[Release Build] --> Sign --> Validate
+        |
+        v
+[Store Assets] --> Screenshots, Icons, Descriptions
+        |
+        v
+[Upload Build] --> Play Console / App Store Connect
+        |
+        v
+[Content Rating] --> Questionnaire --> Age Rating
+        |
+        v
+[Pricing & Distribution] --> Countries, Price Tier
+        |
+        v
+[App Review] --> Automated + Human Review
+        |
+        v
+[Release] --> Staged Rollout / Immediate
+        |
+        v
+[Post-Launch] --> Analytics, Crash Reports, Updates
+```
+
+---
+
+# 3. Google Play Console: Complete Walkthrough
+
+## Account Setup
+
+1. Go to [play.google.com/console](https://play.google.com/console)
+2. Pay $25 one-time developer fee
+3. Verify identity (business or individual)
+4. Complete account verification (2-3 days)
+
+## Creating Your App
+
+```
+Play Console Dashboard
+    |
+    +---> Create App
+    |         |
+    |         +---> App Name (30 chars max)
+    |         +---> Default Language
+    |         +---> App Type (Game / App)
+    |         +---> Free / Paid
+    |         +---> Declarations (content guidelines, COPPA)
+    |
+    +---> Dashboard
+              |
+              +---> Set up your app (checklist)
+```
+
+## Store Listing Configuration
+
+```
+Store Presence
+    |
+    +---> Main Store Listing
+    |         |
+    |         +---> App Name (30 chars)
+    |         +---> Short Description (80 chars)
+    |         +---> Full Description (4000 chars)
+    |         +---> Screenshots (Phone: 2-8, 7-inch: up to 8, 10-inch: up to 8)
+    |         +---> Feature Graphic (1024x500)
+    |         +---> App Icon (512x512)
+    |         +---> Promo Video (YouTube URL, optional)
+    |
+    +---> Custom Store Listings (per country/segment)
+    +---> Store Listing Experiments (A/B testing)
+```
+
+## Content Rating
+
+```
+Content Rating Questionnaire
+    |
+    +---> Category: Reference, News, Shopping, etc.
+    +---> Violence: None, Cartoon, Realistic, etc.
+    +---> Sexuality: None, Suggestive, Nudity, etc.
+    +---> Language: None, Mild, Strong, etc.
+    +---> Controlled Substances: None, References, Use, etc.
+    +---> Gambling: None, Simulated, Real, etc.
+    |
+    v
+    IARC Rating (International Age Rating Coalition)
+```
+
+## Release Tracks
+
+| Track | Purpose | Audience | Review |
+|:---|:---|:---|:---|
+| **Internal** | Dev team testing | Up to 100 testers | None |
+| **Closed** | Beta testing | Invite-only | Light |
+| **Open** | Public beta | Anyone on Play Store | Yes |
+| **Production** | Live app | All users | Full |
+
+## Uploading an AAB
+
+```bash
+# Build signed AAB
+flutter build appbundle --release
+
+# Or with Fastlane
+cd android && fastlane deploy_internal
+```
+
+**Play Console Upload Steps:**
+1. Go to `Production` > `Create new release`
+2. Upload `app-release.aab`
+3. Add release notes (500 chars per language)
+4. Review changes
+5. Start rollout
+
+## Release Notes Best Practices
+
+```
+# English (United States) - 500 character limit
+What's new in v1.2.0:
+- Added dark mode support
+- Improved transaction search with filters
+- Fixed crash on report screen
+- Reduced app size by 15%
+
+# Use Fastlane to automate
+# android/fastlane/metadata/android/en-US/changelogs/120.txt
+```
+
+---
+
+# 4. App Store Connect: Complete Walkthrough
+
+## Account Setup
+
+1. Go to [appstoreconnect.apple.com](https://appstoreconnect.apple.com)
+2. Enroll in Apple Developer Program ($99/year)
+3. Complete D-U-N-S number verification (business) or identity verification (individual)
+4. Wait for approval (1-2 business days)
+
+## Creating Your App
+
+```
+App Store Connect
+    |
+    +---> My Apps
+    |         |
+    |         +---> + New App
+    |                   |
+    |                   +---> Platforms (iOS, macOS, tvOS, watchOS)
+    |                   +---> Name (30 chars)
+    |                   +---> Primary Language
+    |                   +---> Bundle ID (must match Xcode)
+    |                   +---> SKU (internal identifier)
+    |                   +---> User Access (full / admin)
+```
+
+## App Information
+
+```
+App Information
+    |
+    +---> Name (30 chars, must be unique globally)
+    +---> Subtitle (30 chars, appears below name)
+    +---> Category (Primary + Secondary)
+    +---> Content Rights (yes/no for third-party content)
+    +---> Age Rating (Complete questionnaire)
+    +---> License Agreement (Standard or Custom)
+```
+
+## Pricing & Availability
+
+```
+Pricing and Availability
+    |
+    +---> Price Schedule (Free, Tier 1 $0.99, Tier 2 $1.99, etc.)
+    +---> Availability (All countries or selected)
+    +---> Pre-Orders (Enable up to 180 days before release)
+    +---> Volume Purchase Program (for business/education)
+```
+
+## App Privacy Details
+
+```
+App Privacy (REQUIRED since 2021)
+    |
+    +---> Data Collection (What data types?)
+    |         +---> Contact Info, Location, Identifiers, Usage Data, Diagnostics
+    +---> Data Usage (How is it used?)
+    |         +---> Analytics, App Functionality, Personalization, etc.
+    +---> Data Linked to User (yes/no per data type)
+    +---> Tracking (Do you share data for advertising?)
+    |
+    v
+    Privacy Nutrition Label (auto-generated)
+```
+
+## Uploading an IPA
+
+```bash
+# Build and archive in Xcode
+# Or use Fastlane
+cd ios && fastlane deploy
+
+# Or manually with Transporter app
+xcrun altool --upload-app -f build/ios/ipa/*.ipa -t ios -u "apple-id@email.com" -p "app-specific-password"
+```
+
+## TestFlight Beta Testing
+
+```
+TestFlight
+    |
+    +---> Internal Testing (up to 100 team members)
+    |         +---> No review required
+    |         +---> Immediate availability
+    |
+    +---> External Testing (up to 10,000 testers)
+    |         +---> Requires Beta App Review (1-2 days)
+    |         +---> Public link or email invites
+    |         +---> Build expires after 90 days
+    |
+    +---> Test Information
+              +---> Beta App Description
+              +---> Feedback Email
+              +---> Review Notes (for beta review)
+```
+
+---
+
+# 5. Release Build Configuration
+
+## Android Release Build
+
+**`android/app/build.gradle`**
+```gradle
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+    id "com.google.gms.google-services"
+    id "com.google.firebase.crashlytics"
+}
+
+android {
+    namespace = "com.example.expensetracker"
+    compileSdkVersion 34
+    ndkVersion flutter.ndkVersion
+
+    defaultConfig {
+        applicationId "com.example.expensetracker"
+        minSdkVersion 21
+        targetSdkVersion 34
+        versionCode flutterVersionCode.toInteger()
+        versionName flutterVersionName
+    }
+
+    signingConfigs {
+        release {
+            keyAlias keystoreProperties['keyAlias']
+            keyPassword keystoreProperties['keyPassword']
+            storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+            storePassword keystoreProperties['storePassword']
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            ndk {
+                abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+            }
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}
+```
+
+**`android/proguard-rules.pro`**
+```proguard
+# Flutter Wrapper
+-keep class io.flutter.app.** { *; }
+-keep class io.flutter.plugin.** { *; }
+-keep class io.flutter.util.** { *; }
+-keep class io.flutter.view.** { *; }
+-keep class io.flutter.** { *; }
+-keep class io.flutter.plugins.** { *; }
+
+# Firebase
+-keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.** { *; }
+
+# JSON Serialization
+-keepclassmembers class * {
+  @com.google.gson.annotations.SerializedName <fields>;
+}
+```
+
+## iOS Release Build
+
+**`ios/Runner.xcconfig`**
+```
+#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"
+#include "Generated.xcconfig"
+
+FLUTTER_BUILD_NAME=1.2.0
+FLUTTER_BUILD_NUMBER=120
+```
+
+**`ios/Runner/Info.plist`**
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>$(DEVELOPMENT_LANGUAGE)</string>
+    <key>CFBundleDisplayName</key>
+    <string>Expense Tracker</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>expense_tracker</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$(FLUTTER_BUILD_NAME)</string>
+    <key>CFBundleSignature</key>
+    <string>????</string>
+    <key>CFBundleVersion</key>
+    <string>$(FLUTTER_BUILD_NUMBER)</string>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+    <key>UILaunchStoryboardName</key>
+    <string>LaunchScreen</string>
+    <key>UIMainStoryboardFile</key>
+    <string>Main</string>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+    <key>UISupportedInterfaceOrientations~ipad</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+    <key>UIViewControllerBasedStatusBarAppearance</key>
+    <false/>
+
+    <!-- Required for camera/photo access -->
+    <key>NSCameraUsageDescription</key>
+    <string>This app needs camera access to scan receipts</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>This app needs photo access to attach receipt images</string>
+
+    <!-- Required for location -->
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>This app uses location to tag transaction locations</string>
+</dict>
+</plist>
+```
+
+---
+
+# 6. App Signing & Certificates
+
+## Android App Signing
+
+```bash
+# Step 1: Generate upload keystore
+keytool -genkey -v -keystore upload-keystore.jks \
+  -keyalg RSA -keysize 2048 -validity 10000 \
+  -alias upload \
+  -storepass YOUR_STORE_PASSWORD \
+  -keypass YOUR_KEY_PASSWORD \
+  -dname "CN=Your Name, OU=Your Org, O=Your Company, L=Your City, ST=Your State, C=Your Country"
+
+# Step 2: Extract certificate for Play App Signing
+keytool -export -rfc -keystore upload-keystore.jks \
+  -alias upload -file upload_certificate.pem \
+  -storepass YOUR_STORE_PASSWORD
+
+# Step 3: Enable Play App Signing in Play Console
+# Go to: App > Setup > App Integrity > App Signing
+# Upload upload_certificate.pem
+
+# Step 4: Configure Gradle (see build.gradle above)
+```
+
+## iOS Certificates & Provisioning
+
+```bash
+# Using Fastlane Match (recommended for teams)
+fastlane match init
+
+# Generate certificates
+fastlane match development
+fastlane match adhoc
+fastlane match appstore
+
+# Team members download (readonly)
+fastlane match development --readonly
+```
+
+**Certificate Types:**
+
+| Certificate | Purpose | Validity |
+|:---|:---|:---|
+| **Development** | Debug on physical devices | 1 year |
+| **Ad Hoc** | Distribute to registered devices | 1 year |
+| **App Store** | Submit to App Store | 1 year |
+| **Enterprise** | In-house distribution | 1 year |
+
+---
+
+# 7. Store Assets & Metadata
+
+## Screenshot Requirements
+
+| Platform | Size | Format | Max Count |
+|:---|:---|:---|:---|
+| **Google Play (Phone)** | 1080x1920 or 1920x1080 | PNG/JPEG | 8 |
+| **Google Play (7-inch)** | 1080x1920 | PNG/JPEG | 8 |
+| **Google Play (10-inch)** | 1080x1920 | PNG/JPEG | 8 |
+| **App Store (iPhone 6.7")** | 1290x2796 | PNG/JPEG | 10 |
+| **App Store (iPhone 6.5")** | 1284x2778 | PNG/JPEG | 10 |
+| **App Store (iPhone 5.5")** | 1242x2208 | PNG/JPEG | 10 |
+| **App Store (iPad Pro 6th Gen)** | 2048x2732 | PNG/JPEG | 10 |
+
+## Screenshot Best Practices
+
+```
+Screenshot Strategy
+    |
+    +---> Frame 1: Hero Shot (app's main value prop)
+    +---> Frame 2: Key Feature 1 (e.g., Add Transaction)
+    +---> Frame 3: Key Feature 2 (e.g., Reports & Charts)
+    +---> Frame 4: Key Feature 3 (e.g., Budget Tracking)
+    +---> Frame 5: Social Proof / Call to Action
+    |
+    +---> Use device frames (iPhone/Android mockups)
+    +---> Add text overlays (short, benefit-focused)
+    +---> Maintain consistent branding (colors, fonts)
+    +---> Localize text for each market
+```
+
+## App Icon Requirements
+
+| Platform | Size | Format | Background |
+|:---|:---|:---|:---|
+| **Google Play** | 512x512 | PNG-24, 32-bit | Transparent or solid |
+| **App Store** | 1024x1024 | PNG, no alpha | Solid background |
+
+## App Store Optimization (ASO)
+
+```
+ASO Checklist
+    |
+    +---> Title (30 chars) - Include primary keyword
+    +---> Subtitle (30 chars) - Secondary keyword + value prop
+    +---> Keywords (100 chars, iOS only) - Comma-separated, no spaces
+    +---> Description (4000 chars Play, no limit App Store) - SEO-friendly, scannable
+    +---> Screenshots - Feature-first, text overlay, localized
+    +---> Promo Video (30-120s) - Show app in action
+    +---> Ratings & Reviews - Respond to all, incentivize feedback ethically
+```
+
+---
+
+# 8. App Review Guidelines & Compliance
+
+## Google Play Policies
+
+| Policy Area | Common Violations | How to Comply |
+|:---|:---|:---|
+| **Content** | Copyright infringement, adult content | Use original assets, content rating accurate |
+| **Security** | Exporting user data insecurely | HTTPS, encrypted storage, no hardcoded keys |
+| **Deceptive** | Fake reviews, misleading screenshots | Accurate screenshots, honest descriptions |
+| **Monetization** | Hidden charges, unclear subscriptions | Transparent pricing, easy cancellation |
+| **Permissions** | Requesting unnecessary permissions | Only ask for what you need, explain why |
+| **Malware** | Code injection, spyware | Regular security audits, dependency checks |
+
+## Apple App Store Review Guidelines
+
+| Guideline | Section | Common Rejection |
+|:---|:---|:---|
+| **2.1 Performance** | App Completeness | Crashes, broken links, placeholder content |
+| **2.3 Accurate Metadata** | Screenshots/Description | Misleading screenshots, incorrect info |
+| **3.1 Payments** | In-App Purchase | Using third-party payment for digital goods |
+| **4.0 Design** | Minimum Functionality | Apps that are just websites, too simple |
+| **5.1 Privacy** | Data Collection | Missing privacy policy, excessive data |
+| **5.2 Intellectual Property** | Copyright | Using Apple trademarks, copied content |
+
+## Pre-Submission Checklist
+
+```
+Before Submitting
+    |
+    +---> [ ] App launches without crashes
+    +---> [ ] All buttons and features work
+    +---> [ ] No placeholder text or images
+    +---> [ ] Tested on real devices (not just emulator)
+    +---> [ ] Privacy policy URL is live and accessible
+    +---> [ ] Support URL is live and accessible
+    +---> [ ] App works in airplane mode (if offline features)
+    +---> [ ] Login works (provide test account credentials)
+    +---> [ ] In-app purchases tested in sandbox
+    +---> [ ] App size is reasonable (<150MB ideally)
+    +---> [ ] No debugging code or test data in release
+    +---> [ ] ProGuard/R8 doesn't break functionality
+    +---> [ ] App handles low memory gracefully
+```
+
+---
+
+# 9. In-App Purchases & Subscriptions
+
+## Google Play Billing
+
+**pubspec.yaml**
+```yaml
+dependencies:
+  in_app_purchase: ^3.2.0
+```
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
+
+class PurchaseService {
+  static final InAppPurchase _iap = InAppPurchase.instance;
+  static late StreamSubscription<List<PurchaseDetails>> _subscription;
+  static final List<ProductDetails> _products = [];
+
+  static Future<void> initialize() async {
+    final bool available = await _iap.isAvailable();
+    if (!available) return;
+
+    _subscription = _iap.purchaseStream.listen(
+      _handlePurchaseUpdates,
+      onDone: () => _subscription.cancel(),
+    );
+
+    await _loadProducts();
+  }
+
+  static Future<void> _loadProducts() async {
+    const Set<String> productIds = {
+      'premium_monthly',
+      'premium_yearly',
+      'premium_lifetime',
+    };
+
+    final ProductDetailsResponse response = 
+        await _iap.queryProductDetails(productIds);
+
+    _products.clear();
+    _products.addAll(response.productDetails);
+  }
+
+  static Future<void> purchaseProduct(ProductDetails product) async {
+    final PurchaseParam purchaseParam = PurchaseParam(productDetails: product);
+    await _iap.buyNonConsumable(purchaseParam: purchaseParam);
+  }
+
+  static Future<void> purchaseSubscription(ProductDetails product) async {
+    final PurchaseParam purchaseParam = PurchaseParam(productDetails: product);
+    await _iap.buyNonConsumable(purchaseParam: purchaseParam);
+  }
+
+  static void _handlePurchaseUpdates(List<PurchaseDetails> purchases) {
+    for (final purchase in purchases) {
+      switch (purchase.status) {
+        case PurchaseStatus.purchased:
+          _verifyAndDeliverProduct(purchase);
+          break;
+        case PurchaseStatus.error:
+          print('Purchase error: ${purchase.error}');
+          break;
+        case PurchaseStatus.restored:
+          _verifyAndDeliverProduct(purchase);
+          break;
+        case PurchaseStatus.pending:
+          print('Purchase pending');
+          break;
+        case PurchaseStatus.canceled:
+          print('Purchase canceled');
+          break;
+      }
+
+      if (purchase.pendingCompletePurchase) {
+        _iap.completePurchase(purchase);
+      }
+    }
+  }
+
+  static Future<void> _verifyAndDeliverProduct(PurchaseDetails purchase) async {
+    // Verify receipt with backend
+    // final isValid = await ApiService.verifyPurchase(purchase.verificationData.serverVerificationData);
+
+    // Deliver premium features
+    // await UserService.activatePremium();
+  }
+
+  static Future<void> restorePurchases() async {
+    await _iap.restorePurchases();
+  }
+
+  static List<ProductDetails> get products => List.unmodifiable(_products);
+
+  static void dispose() {
+    _subscription.cancel();
+  }
+}
+```
+
+## App Store Connect: In-App Purchase Setup
+
+```
+App Store Connect
+    |
+    +---> Features
+    |         |
+    |         +---> In-App Purchases
+    |                   |
+    |                   +---> Create New
+    |                             |
+    |                             +---> Reference Name (internal)
+    |                             +---> Product ID (unique, e.g., com.app.premium_monthly)
+    |                             +---> Type (Consumable, Non-Consumable, Auto-Renewable, Non-Renewing)
+    |                             +---> Price Tier
+    |                             +---> Localization (Display name, Description)
+    |                             +---> Review Screenshot (must show purchase UI)
+    |                             +---> Promotional Image (optional)
+```
+
+## Google Play Console: In-App Product Setup
+
+```
+Play Console
+    |
+    +---> Monetize
+    |         |
+    |         +---> Products
+    |                   |
+    |                   +---> Create Product
+    |                             |
+    |                             +---> Product ID (unique)
+    |                             +---> Name
+    |                             +---> Description
+    |                             +---> Price (per country or auto-convert)
+    |                             +---> Type (Managed, Subscription)
+```
+
+---
+
+# 10. Post-Launch: Analytics, Updates & Maintenance
+
+## Firebase Analytics Integration
+
+**pubspec.yaml**
+```yaml
+dependencies:
+  firebase_analytics: ^11.0.0
+```
+
+```dart
+import 'package:firebase_analytics/firebase_analytics.dart';
+
+class AnalyticsService {
+  static final FirebaseAnalytics _analytics = FirebaseAnalytics.instance;
+
+  static Future<void> logScreenView(String screenName) async {
+    await _analytics.logScreenView(screenName: screenName);
+  }
+
+  static Future<void> logEvent(String name, Map<String, dynamic> parameters) async {
+    await _analytics.logEvent(
+      name: name,
+      parameters: parameters.map((k, v) => MapEntry(k, v.toString())),
+    );
+  }
+
+  static Future<void> logPurchase(double value, String currency) async {
+    await _analytics.logPurchase(
+      value: value,
+      currency: currency,
+    );
+  }
+
+  static Future<void> setUserProperty(String name, String? value) async {
+    await _analytics.setUserProperty(name: name, value: value);
+  }
+}
+```
+
+## Update Strategy
+
+| Update Type | Trigger | User Impact | Implementation |
+|:---|:---|:---|:---|
+| **Hotfix** | Critical crash/bug | Immediate | Force update dialog |
+| **Feature** | New functionality | Optional | In-app update prompt |
+| **Major** | Breaking changes | Required | Store update + migration |
+
+```dart
+import 'package:in_app_update/in_app_update.dart';
+
+class UpdateService {
+  static Future<void> checkForUpdate() async {
+    if (!Platform.isAndroid) return;
+
+    final updateInfo = await InAppUpdate.checkForUpdate();
+
+    if (updateInfo.updateAvailability == UpdateAvailability.updateAvailable) {
+      if (updateInfo.immediateUpdateAllowed) {
+        await InAppUpdate.startFlexibleUpdate();
+      } else if (updateInfo.flexibleUpdateAllowed) {
+        await InAppUpdate.startFlexibleUpdate();
+      }
+    }
+  }
+}
+```
+
+---
+
+# 11. Hands-On Project: Publish Your Capstone
+
+## Project Overview
+
+Publish your **Social Fitness Tracker** capstone project to both stores with:
+- Signed release builds for Android (AAB) and iOS (IPA)
+- Complete store listings with screenshots and descriptions
+- Privacy policy and terms of service
+- In-app purchase configuration (Premium subscription)
+- Firebase Crashlytics for monitoring
+- Staged rollout on Play Store, TestFlight on App Store
+
+## Pre-Launch Checklist
+
+```
+Capstone Publishing Checklist
+    |
+    +---> Code Quality
+    |         +---> [ ] All tests passing (unit + widget + integration)
+    |         +---> [ ] No lint warnings
+    |         +---> [ ] Performance profiling complete
+    |         +---> [ ] Memory leak check passed
+    |         +---> [ ] Accessibility audit passed
+    |
+    +---> Store Assets
+    |         +---> [ ] App icon (512x512 Play, 1024x1024 App Store)
+    |         +---> [ ] Feature graphic (1024x500 Play)
+    |         +---> [ ] Screenshots for all required sizes
+    |         +---> [ ] Promo video (optional but recommended)
+    |         +---> [ ] Store description localized (min 3 languages)
+    |
+    +---> Legal & Compliance
+    |         +---> [ ] Privacy policy published (live URL)
+    |         +---> [ ] Terms of service published (live URL)
+    |         +---> [ ] Content rating completed
+    |         +---> [ ] App permissions justified
+    |         +---> [ ] COPPA compliance (if targeting children)
+    |
+    +---> Monetization
+    |         +---> [ ] In-app products created in console
+    |         +---> [ ] Pricing verified per country
+    |         +---> [ ] Subscription terms clear in UI
+    |         +---> [ ] Restore purchases implemented
+    |
+    +---> Testing
+    |         +---> [ ] Beta tested on Play (Internal/Closed)
+    |         +---> [ ] Beta tested on App Store (TestFlight)
+    |         +---> [ ] Real device testing (10+ devices)
+    |         +---> [ ] Network condition testing (slow/offline)
+    |
+    +---> Backend
+    |         +---> [ ] API deployed to production
+    |         +---> [ ] Database backups configured
+    |         +---> [ ] Rate limiting enabled
+    |         +---> [ ] SSL certificate valid
+    |
+    +---> Monitoring
+    |         +---> [ ] Crashlytics integrated
+    |         +---> [ ] Analytics events tracked
+    |         +---> [ ] Performance monitoring enabled
+    |         +---> [ ] Alerting configured for errors
+```
+
+---
+
+# 12. Common Mistakes & How to Avoid Them
+
+## Mistake 1: Rejections Due to Placeholder Content
+
+```
+WRONG: "Lorem ipsum" in description, empty screens, "Coming soon" buttons
+
+CORRECT: Every screen functional, every text finalized, every link working
+```
+
+## Mistake 2: Missing Privacy Policy
+
+```
+WRONG: No privacy policy URL, or URL returns 404
+
+CORRECT: Live privacy policy at https://yourdomain.com/privacy
+Must cover: what data collected, how used, how shared, user rights
+```
+
+## Mistake 3: Hardcoded Test Data in Release
+
+```dart
+// WRONG
+final user = User(name: "Test User", email: "test@test.com");
+
+// CORRECT
+// Remove all test data, use production API endpoints
+```
+
+## Mistake 4: Incorrect Version Codes
+
+```yaml
+# WRONG - Version code not incremented
+version: 1.0.0+1  # Every release must increment
+
+# CORRECT
+version: 1.2.3+123  # Name + build number
+```
+
+## Mistake 5: Using Debug Build for Store
+
+```bash
+# WRONG
+flutter build apk
+
+# CORRECT
+flutter build appbundle --release  # Android
+flutter build ipa --release        # iOS
+```
+
+## Mistake 6: Not Testing on Real Devices
+
+```
+WRONG: "It works on the iOS simulator"
+
+CORRECT: Test on physical devices (minimum 3 Android, 3 iOS)
+Different OS versions, screen sizes, and manufacturers
+```
+
+## Mistake 7: Ignoring Store Feedback
+
+```
+WRONG: Submit and forget, ignoring review notes
+
+CORRECT: Monitor review status, respond to rejections promptly,
+address every point in rejection notice with clear explanation
+```
+
+---
+
+# 13. Day 28 Checklist
+
+Use this checklist to verify mastery:
+
+- [ ] Understands Google Play Console and App Store Connect interfaces
+- [ ] Can create a new app in both Play Console and App Store Connect
+- [ ] Can configure store listings (name, description, screenshots)
+- [ ] Can generate and manage Android signing keystores
+- [ ] Can configure iOS certificates and provisioning profiles
+- [ ] Can build signed release AAB for Android
+- [ ] Can build signed release IPA for iOS
+- [ ] Can complete content rating questionnaires for both stores
+- [ ] Can configure pricing and availability
+- [ ] Can set up privacy policy and terms of service URLs
+- [ ] Can create in-app purchase products in both stores
+- [ ] Can implement in-app purchase flow in Flutter
+- [ ] Can configure TestFlight beta testing
+- [ ] Can configure Google Play beta tracks (internal/closed/open)
+- [ ] Can handle app review rejections and resubmissions
+- [ ] Can set up Firebase Analytics for post-launch tracking
+- [ ] Can configure staged rollouts on Google Play
+- [ ] Understands ASO best practices
+- [ ] Can create store screenshots with proper dimensions
+- [ ] Can write effective app descriptions and release notes
+- [ ] Understands store policies and common rejection reasons
+- [ ] Can publish an update to an existing app
+- [ ] Has published the capstone project to at least one store
+
+---
+
+# Key Takeaways (Memorize These!)
+
+1. **Preparation prevents rejection** — 50% of first submissions are rejected. Use the pre-submission checklist, test on real devices, and never include placeholder content.
+
+2. **Signing is forever** — Your Android upload key and iOS distribution certificate are your identity. Back them up securely; losing them means losing your app identity.
+
+3. **Privacy policy is non-negotiable** — Both stores require a live privacy policy URL. It must accurately reflect your data collection practices or face removal.
+
+4. **Screenshots sell your app** — Users decide in 3 seconds. Your first 2 screenshots must communicate your app's core value instantly. Use device frames and benefit-focused text.
+
+5. **Beta test before launch** — Internal testing catches 80% of issues. Use TestFlight and Play Console beta tracks with real users before going live.
+
+6. **Version codes must increment** — Both stores reject builds with duplicate version codes. Automate this with Fastlane or CI/CD to never forget.
+
+7. **In-app purchases need server verification** — Never trust client-side purchase status. Always verify receipts with Google/Apple servers before delivering content.
+
+8. **Monitor after launch** — Publishing is day one, not the finish line. Watch crash rates, review sentiment, and analytics to iterate quickly.
+
+9. **Respond to reviews** — Users who see developer responses rate higher. Address negative reviews professionally and thank positive reviewers.
+
+10. **Store presence is marketing** — Your store listing is your landing page. Invest in ASO, A/B test screenshots, and localize for key markets.
+
+---
+
+# Extra Practice (Do These Tonight!)
+
+1. **Complete Store Listing**: Create a full store listing for your capstone with 5 screenshots, feature graphic, and localized descriptions in 3 languages.
+
+2. **Privacy Policy Generator**: Write a comprehensive privacy policy that covers all data your app collects, using a generator like AppPrivacy.io as a starting point.
+
+3. **In-App Purchase Sandbox**: Implement and test a premium subscription flow using TestFlight and Play Console internal testing with sandbox accounts.
+
+4. **Rejection Simulation**: Review Apple's top 10 rejection reasons and audit your app against each one, fixing any issues before submission.
+
+5. **Staged Rollout Analysis**: Publish a beta version to 10% of users, monitor crash rates and reviews for 48 hours, then increase to 50% and finally 100%.
+
+---
+
+**Congratulations!** You've completed Day 28. You now master app store deployment — from signing and store configuration to in-app purchases, review compliance, and post-launch monitoring. Your app is live in the world.
+
+**Next Up -> Day 29: Capstone Project — Part 1**
+
+---
+
+*Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*  
+*Day 28: App Store & Play Store Deployment — Complete Deep Dive*
+
+
 
 
