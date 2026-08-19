@@ -42374,4 +42374,1682 @@ Use this checklist to verify mastery:
 *Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*  
 *Day 25: Background Processing & Advanced Features — Complete Deep Dive*
 
+# Day 26: Flutter Web & Desktop
+# Complete Deep Dive
+
+**Goal:** Master cross-platform development by targeting web browsers and desktop operating systems. Implement responsive web layouts, platform-specific UI adaptations, conditional imports, SEO optimization, and deploy a single Flutter codebase to Web, Windows, macOS, and Linux.
+
+---
+
+# Table of Contents
+
+1. Why Flutter Web & Desktop Are Essential in 2026
+2. Multi-Platform Architecture Overview
+3. Flutter Web: Setup, Constraints & Best Practices
+4. Flutter Desktop: Windows, macOS & Linux
+5. Platform-Specific UI Adaptations
+6. Conditional Imports for Platform-Specific Code
+7. Responsive Web Layouts
+8. SEO & Web Performance
+9. Navigation & Routing for Web
+10. Hands-On Project: Expense Tracker — Web & Desktop
+11. Testing Multi-Platform Apps
+12. Performance & Bundle Size Optimization
+13. Common Mistakes & How to Avoid Them
+14. Day 26 Checklist
+
+---
+
+# 1. Why Flutter Web & Desktop Are Essential in 2026
+
+## The Multi-Platform Landscape
+
+| Statistic | Impact |
+|:---|:---|
+| 68% of developers target 3+ platforms with one codebase | Flutter multi-platform = cost reduction |
+| Web apps have 3x larger reach than mobile-only | Web = instant access, no store required |
+| Desktop apps command 40% higher ARPU than mobile | Desktop = power users & professionals |
+| 55% of enterprise apps need web + desktop + mobile | Single codebase = faster time-to-market |
+| Flutter Web improved 300% since 2023 (WASM, CanvasKit) | 2026 Flutter Web is production-ready |
+| macOS/Windows desktop apps growing 25% YoY | Native desktop feel = user trust |
+
+## Flutter Multi-Platform Targets
+
+| Platform | Renderer | Best For | Package |
+|:---|:---|:---|:---|
+| **Web (HTML)** | HTML renderer | Content-heavy, text-focused | Built-in |
+| **Web (CanvasKit)** | Skia WebAssembly | Pixel-perfect UI, complex graphics | Built-in |
+| **Web (WASM)** | WebAssembly | Maximum performance, near-native | Experimental |
+| **Windows** | DirectX/Vulkan | Enterprise tools, productivity apps | Built-in |
+| **macOS** | Metal | Creative tools, developer utilities | Built-in |
+| **Linux** | Vulkan | Open-source tools, dev environments | Built-in |
+
+---
+
+# 2. Multi-Platform Architecture Overview
+
+## The Single Codebase Flow
+
+```
+Shared Dart Code (lib/)
+     |
+     +---> Platform Embedders
+     |         |
+     |         +---> Web (Chrome, Firefox, Safari, Edge)
+     |         |         +---> HTML Renderer (DOM)
+     |         |         +---> CanvasKit Renderer (WebGL/Skia)
+     |         |         +---> WASM Renderer (Future)
+     |         |
+     |         +---> Desktop (Windows, macOS, Linux)
+     |                   +---> Platform Channels
+     |                   +---> Native File Pickers
+     |                   +---> Window Management
+     |
+     +---> Shared Packages (cross-platform)
+     +---> Conditional Imports (platform-specific)
+```
+
+## Platform Determination
+
+```dart
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+class PlatformHelper {
+  static bool get isWeb => kIsWeb;
+  static bool get isMobile => !kIsWeb && (Platform.isIOS || Platform.isAndroid);
+  static bool get isDesktop => !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+  static bool get isWindows => !kIsWeb && Platform.isWindows;
+  static bool get isMacOS => !kIsWeb && Platform.isMacOS;
+  static bool get isLinux => !kIsWeb && Platform.isLinux;
+
+  static TargetPlatform get targetPlatform {
+    if (kIsWeb) return TargetPlatform.linux; // Web uses linux as fallback
+    if (Platform.isIOS) return TargetPlatform.iOS;
+    if (Platform.isAndroid) return TargetPlatform.android;
+    if (Platform.isWindows) return TargetPlatform.windows;
+    if (Platform.isMacOS) return TargetPlatform.macOS;
+    if (Platform.isLinux) return TargetPlatform.linux;
+    return TargetPlatform.android;
+  }
+}
+```
+
+---
+
+# 3. Flutter Web: Setup, Constraints & Best Practices
+
+## Enabling Web Support
+
+```bash
+# Add web support to existing project
+flutter config --enable-web
+
+# Verify installation
+flutter devices
+
+# Run on Chrome
+flutter run -d chrome
+
+# Build for production
+flutter build web --release
+
+# Build with CanvasKit (recommended for apps)
+flutter build web --web-renderer canvaskit
+
+# Build with HTML renderer (recommended for text-heavy)
+flutter build web --web-renderer html
+
+# Build with auto (default: mobile=html, desktop=canvaskit)
+flutter build web --web-renderer auto
+```
+
+## Web Project Structure
+
+```
+web/
+├── index.html              # Entry point (DO NOT MODIFY Flutter tags)
+├── manifest.json           # PWA manifest
+├── favicon.png             # Browser tab icon
+├── icons/                  # PWA icons (192x192, 512x512)
+│   ├── Icon-192.png
+│   └── Icon-512.png
+└── flutter_bootstrap.js    # Flutter web bootstrap (generated)
+```
+
+## Custom index.html (SEO & Analytics)
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+
+  <!-- SEO Meta Tags -->
+  <meta name="description" content="Expense Tracker - Manage your finances across all devices">
+  <meta name="keywords" content="expense tracker, finance, budget, flutter">
+  <meta name="author" content="Your Name">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Open Graph / Social Media -->
+  <meta property="og:title" content="Expense Tracker">
+  <meta property="og:description" content="Track expenses on Web, Mobile & Desktop">
+  <meta property="og:image" content="https://yourdomain.com/og-image.png">
+
+  <!-- PWA -->
+  <meta name="theme-color" content="#6750A4">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Expense Tracker</title>
+
+  <!-- Google Analytics -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=GA_MEASUREMENT_ID"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'GA_MEASUREMENT_ID');
+  </script>
+
+  <script>
+    // The value below is injected by flutter build, do not touch.
+    var serviceWorkerVersion = null;
+  </script>
+  <script src="flutter.js" defer></script>
+</head>
+<body>
+  <!-- Loading indicator -->
+  <div id="loading">
+    <style>
+      body { margin: 0; background: #6750A4; }
+      #loading { 
+        display: flex; 
+        justify-content: center; 
+        align-items: center; 
+        height: 100vh; 
+      }
+      .spinner {
+        width: 40px; height: 40px;
+        border: 4px solid #fff;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+    <div class="spinner"></div>
+  </div>
+
+  <script>
+    window.addEventListener('load', function(ev) {
+      _flutter.loader.loadEntrypoint({
+        serviceWorker: {
+          serviceWorkerVersion: serviceWorkerVersion,
+        },
+        onEntrypointLoaded: function(engineInitializer) {
+          engineInitializer.initializeEngine().then(function(appRunner) {
+            appRunner.runApp();
+          });
+        }
+      });
+    });
+  </script>
+</body>
+</html>
+```
+
+## PWA manifest.json
+
+```json
+{
+    "name": "Expense Tracker",
+    "short_name": "Expenses",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#6750A4",
+    "theme_color": "#6750A4",
+    "description": "Track your expenses across all devices",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}
+```
+
+## Web-Specific Constraints
+
+| Constraint | Impact | Solution |
+|:---|:---|:---|
+| No dart:io Platform | Can't use Platform.isX on web | Use `kIsWeb` + conditional imports |
+| File system access | Can't use dart:io File | Use `file_picker` + `image_picker_for_web` |
+| No shared_preferences on web | Data storage different | Use `shared_preferences` (web-supported) |
+| CORS restrictions | API calls blocked | Configure server headers or use proxy |
+| Browser back button | Breaks Flutter navigation | Use `url_strategy` for path-based routing |
+| Right-click context menu | Shows browser menu | Disable or customize context menu |
+| Text selection | Default browser behavior | Use `SelectionArea` or disable |
+| Scroll physics | Mobile scroll feels wrong on web | Use `BouncingScrollPhysics` conditionally |
+
+---
+
+# 4. Flutter Desktop: Windows, macOS & Linux
+
+## Enabling Desktop Support
+
+```bash
+# Enable desktop platforms
+flutter config --enable-windows-desktop
+flutter config --enable-macos-desktop
+flutter config --enable-linux-desktop
+
+# Verify
+flutter devices
+
+# Run on desktop
+flutter run -d windows
+flutter run -d macos
+flutter run -d linux
+
+# Build release
+flutter build windows
+flutter build macos
+flutter build linux
+```
+
+## Desktop Project Structure
+
+```
+macos/                      # macOS-specific
+├── Runner/
+│   ├── MainFlutterWindow.swift
+│   ├── AppDelegate.swift
+│   └── Info.plist
+├── Podfile
+└── Runner.xcworkspace
+
+windows/                    # Windows-specific
+├── runner/
+│   ├── main.cpp
+│   ├── flutter_window.cpp
+│   └── resource.h
+├── CMakeLists.txt
+└── runner.sln
+
+linux/                      # Linux-specific
+├── my_application.cc
+├── CMakeLists.txt
+└── main.cc
+```
+
+## Window Management (desktop_window package)
+
+**pubspec.yaml**
+```yaml
+dependencies:
+  desktop_window: ^0.4.0
+  window_manager: ^0.3.8
+```
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:window_manager/window_manager.dart';
+
+class WindowService {
+  static Future<void> initialize() async {
+    await windowManager.ensureInitialized();
+
+    WindowOptions windowOptions = const WindowOptions(
+      size: Size(1280, 800),
+      center: true,
+      backgroundColor: Colors.transparent,
+      skipTaskbar: false,
+      titleBarStyle: TitleBarStyle.hidden, // Custom title bar
+      minimumSize: Size(800, 600),
+    );
+
+    await windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
+  }
+
+  static Future<void> setFullScreen(bool isFullScreen) async {
+    await windowManager.setFullScreen(isFullScreen);
+  }
+
+  static Future<void> setMinimumSize(Size size) async {
+    await windowManager.setMinimumSize(size);
+  }
+
+  static Future<void> setTitle(String title) async {
+    await windowManager.setTitle(title);
+  }
+
+  static Future<void> close() async {
+    await windowManager.close();
+  }
+}
+
+// Custom Title Bar for Desktop
+class DesktopTitleBar extends StatelessWidget {
+  const DesktopTitleBar({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    if (PlatformHelper.isWeb || PlatformHelper.isMobile) return const SizedBox.shrink();
+
+    return Container(
+      height: 40,
+      color: Theme.of(context).colorScheme.surface,
+      child: Row(
+        children: [
+          const SizedBox(width: 16),
+          const Icon(Icons.account_balance_wallet, size: 20),
+          const SizedBox(width: 8),
+          const Text('Expense Tracker', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+          const Spacer(),
+          IconButton(
+            icon: const Icon(Icons.remove, size: 18),
+            onPressed: () => windowManager.minimize(),
+            splashRadius: 16,
+          ),
+          IconButton(
+            icon: const Icon(Icons.crop_square, size: 18),
+            onPressed: () async {
+              if (await windowManager.isMaximized()) {
+                await windowManager.unmaximize();
+              } else {
+                await windowManager.maximize();
+              }
+            },
+            splashRadius: 16,
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 18),
+            onPressed: () => windowManager.close(),
+            splashRadius: 16,
+          ),
+        ],
+      ),
+    );
+  }
+}
+```
+
+## Desktop Menus (macOS/Windows)
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:menubar/menubar.dart';
+
+class DesktopMenuService {
+  static void setApplicationMenu() {
+    if (!PlatformHelper.isDesktop) return;
+
+    setApplicationMenu([
+      NativeSubmenu(
+        label: 'File',
+        children: [
+          NativeMenuItem(
+            label: 'New Transaction',
+            onSelected: () => print('New Transaction'),
+          ),
+          NativeMenuItem(
+            label: 'Export CSV',
+            onSelected: () => print('Export'),
+          ),
+          const NativeMenuDivider(),
+          NativeMenuItem(
+            label: 'Quit',
+            onSelected: () => windowManager.close(),
+          ),
+        ],
+      ),
+      NativeSubmenu(
+        label: 'View',
+        children: [
+          NativeMenuItem(
+            label: 'Toggle Dark Mode',
+            onSelected: () => print('Toggle Theme'),
+          ),
+          NativeMenuItem(
+            label: 'Full Screen',
+            onSelected: () => windowManager.setFullScreen(true),
+          ),
+        ],
+      ),
+    ]);
+  }
+}
+```
+
+## Desktop Keyboard Shortcuts
+
+```dart
+class KeyboardShortcuts extends StatelessWidget {
+  final Widget child;
+  const KeyboardShortcuts({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!PlatformHelper.isDesktop) return child;
+
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.keyN, meta: true): () {
+          // Cmd/Ctrl + N = New Transaction
+          showDialog(context: context, builder: (_) => const NewTransactionDialog());
+        },
+        const SingleActivator(LogicalKeyboardKey.keyF, meta: true): () {
+          // Cmd/Ctrl + F = Search
+          FocusScope.of(context).requestFocus(searchFocusNode);
+        },
+        const SingleActivator(LogicalKeyboardKey.keyQ, meta: true): () {
+          // Cmd/Ctrl + Q = Quit
+          windowManager.close();
+        },
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          // Escape = Close dialog / Go back
+          Navigator.of(context).maybePop();
+        },
+      },
+      child: Focus(
+        autofocus: true,
+        child: child,
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 5. Platform-Specific UI Adaptations
+
+## Adaptive Navigation
+
+```dart
+import 'package:flutter/material.dart';
+
+class AdaptiveScaffold extends StatelessWidget {
+  final Widget title;
+  final List<Widget> actions;
+  final Widget body;
+  final int selectedIndex;
+  final List<NavigationDestination> destinations;
+  final ValueChanged<int> onDestinationSelected;
+  final Widget? floatingActionButton;
+
+  const AdaptiveScaffold({
+    super.key,
+    required this.title,
+    required this.actions,
+    required this.body,
+    required this.selectedIndex,
+    required this.destinations,
+    required this.onDestinationSelected,
+    this.floatingActionButton,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktopLayout = screenWidth >= 1200;
+    final isTabletLayout = screenWidth >= 800 && screenWidth < 1200;
+
+    // Desktop: Permanent Drawer (Navigation Rail extended)
+    if (isDesktopLayout) {
+      return Scaffold(
+        body: Row(
+          children: [
+            NavigationRail(
+              extended: true,
+              minExtendedWidth: 240,
+              selectedIndex: selectedIndex,
+              onDestinationSelected: onDestinationSelected,
+              leading: Padding(
+                padding: const EdgeInsets.all(16),
+                child: title,
+              ),
+              destinations: destinations.map((d) => NavigationRailDestination(
+                icon: d.icon,
+                label: Text(d.label),
+                selectedIcon: d.selectedIcon,
+              )).toList(),
+            ),
+            const VerticalDivider(thickness: 1, width: 1),
+            Expanded(
+              child: Column(
+                children: [
+                  if (PlatformHelper.isDesktop) const DesktopTitleBar(),
+                  AppBar(
+                    title: const SizedBox.shrink(),
+                    actions: actions,
+                    elevation: 0,
+                  ),
+                  Expanded(child: body),
+                ],
+              ),
+            ),
+          ],
+        ),
+        floatingActionButton: floatingActionButton,
+      );
+    }
+
+    // Tablet: Navigation Rail (compact)
+    if (isTabletLayout) {
+      return Scaffold(
+        body: Row(
+          children: [
+            NavigationRail(
+              selectedIndex: selectedIndex,
+              onDestinationSelected: onDestinationSelected,
+              destinations: destinations.map((d) => NavigationRailDestination(
+                icon: d.icon,
+                label: Text(d.label),
+                selectedIcon: d.selectedIcon,
+              )).toList(),
+            ),
+            const VerticalDivider(thickness: 1, width: 1),
+            Expanded(child: body),
+          ],
+        ),
+        floatingActionButton: floatingActionButton,
+      );
+    }
+
+    // Mobile: Bottom Navigation Bar
+    return Scaffold(
+      appBar: AppBar(title: title, actions: actions),
+      body: body,
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: selectedIndex,
+        onDestinationSelected: onDestinationSelected,
+        destinations: destinations,
+      ),
+      floatingActionButton: floatingActionButton,
+    );
+  }
+}
+```
+
+## Adaptive Data Tables
+
+```dart
+class AdaptiveTransactionList extends StatelessWidget {
+  final List<Transaction> transactions;
+  const AdaptiveTransactionList({super.key, required this.transactions});
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWide = screenWidth >= 800;
+
+    if (isWide) {
+      // Desktop/Tablet: Data Table with sorting
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('Date')),
+            DataColumn(label: Text('Category')),
+            DataColumn(label: Text('Description')),
+            DataColumn(label: Text('Amount'), numeric: true),
+            DataColumn(label: Text('Actions')),
+          ],
+          rows: transactions.map((t) => DataRow(
+            cells: [
+              DataCell(Text(_formatDate(t.date))),
+              DataCell(Chip(label: Text(t.category))),
+              DataCell(Text(t.description)),
+              DataCell(Text('\$${t.amount.toStringAsFixed(2)}')),
+              DataCell(Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(icon: const Icon(Icons.edit), onPressed: () {}),
+                  IconButton(icon: const Icon(Icons.delete), onPressed: () {}),
+                ],
+              )),
+            ],
+          )).toList(),
+        ),
+      );
+    }
+
+    // Mobile: Card List
+    return ListView.builder(
+      itemCount: transactions.length,
+      itemBuilder: (context, index) {
+        final t = transactions[index];
+        return Dismissible(
+          key: Key(t.id),
+          child: ListTile(
+            leading: CircleAvatar(
+              child: Icon(_getCategoryIcon(t.category)),
+            ),
+            title: Text(t.description),
+            subtitle: Text('${t.category} · ${_formatDate(t.date)}'),
+            trailing: Text(
+              '\$${t.amount.toStringAsFixed(2)}',
+              style: TextStyle(
+                color: t.isExpense ? Colors.red : Colors.green,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+```
+
+## Mouse Cursor & Hover Effects
+
+```dart
+class DesktopHoverCard extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  const DesktopHoverCard({super.key, required this.child, this.onTap});
+
+  @override
+  State<DesktopHoverCard> createState() => _DesktopHoverCardState();
+}
+
+class _DesktopHoverCardState extends State<DesktopHoverCard> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            color: _isHovered 
+                ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3)
+                : Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: _isHovered
+                ? [BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  )]
+                : null,
+          ),
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 6. Conditional Imports for Platform-Specific Code
+
+## The Stub Pattern
+
+```dart
+// lib/platform/platform_stub.dart
+import 'package:flutter/material.dart';
+
+abstract class PlatformService {
+  Future<void> shareFile(String path, String mimeType);
+  Future<void> printDocument(String html);
+  Future<String?> pickFile();
+  void setStatusBarColor(Color color);
+}
+
+PlatformService getPlatformService() => throw UnsupportedError('Cannot create platform service');
+```
+
+```dart
+// lib/platform/platform_mobile.dart
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:file_picker/file_picker.dart';
+import 'platform_stub.dart';
+
+class MobilePlatformService implements PlatformService {
+  @override
+  Future<void> shareFile(String path, String mimeType) async {
+    await Share.shareXFiles([XFile(path)]);
+  }
+
+  @override
+  Future<void> printDocument(String html) async {
+    // Use printing package on mobile
+  }
+
+  @override
+  Future<String?> pickFile() async {
+    final result = await FilePicker.platform.pickFiles();
+    return result?.files.single.path;
+  }
+
+  @override
+  void setStatusBarColor(Color color) {
+    SystemChrome.setSystemUIOverlayStyle(
+      SystemUiOverlayStyle(statusBarColor: color),
+    );
+  }
+}
+
+PlatformService getPlatformService() => MobilePlatformService();
+```
+
+```dart
+// lib/platform/platform_web.dart
+import 'dart:html' as html;
+import 'package:flutter/material.dart';
+import 'platform_stub.dart';
+
+class WebPlatformService implements PlatformService {
+  @override
+  Future<void> shareFile(String path, String mimeType) async {
+    final anchor = html.AnchorElement(href: path)
+      ..setAttribute('download', 'export.csv')
+      ..click();
+  }
+
+  @override
+  Future<void> printDocument(String htmlContent) async {
+    final window = html.window.open('', '_blank');
+    window?.document?.write(htmlContent);
+    window?.print();
+  }
+
+  @override
+  Future<String?> pickFile() async {
+    final uploadInput = html.FileUploadInputElement()..click();
+    await uploadInput.onChange.first;
+    return uploadInput.files?.first.name;
+  }
+
+  @override
+  void setStatusBarColor(Color color) {
+    // No-op on web
+  }
+}
+
+PlatformService getPlatformService() => WebPlatformService();
+```
+
+```dart
+// lib/platform/platform_desktop.dart
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:printing/printing.dart';
+import 'platform_stub.dart';
+
+class DesktopPlatformService implements PlatformService {
+  @override
+  Future<void> shareFile(String path, String mimeType) async {
+    // Desktop: Open file in default app or save dialog
+    await Process.run('start', [path], runInShell: true);
+  }
+
+  @override
+  Future<void> printDocument(String html) async {
+    await Printing.layoutPdf(
+      onLayout: (format) => Printing.convertHtml(
+        format: format,
+        html: html,
+      ),
+    );
+  }
+
+  @override
+  Future<String?> pickFile() async {
+    final result = await FilePicker.platform.pickFiles();
+    return result?.files.single.path;
+  }
+
+  @override
+  void setStatusBarColor(Color color) {
+    // No-op on desktop
+  }
+}
+
+PlatformService getPlatformService() => DesktopPlatformService();
+```
+
+```dart
+// lib/platform/platform.dart
+export 'platform_stub.dart'
+    if (dart.library.io) 'platform_mobile.dart'
+    if (dart.library.html) 'platform_web.dart'
+    if (dart.library.io) 'platform_desktop.dart';
+```
+
+## Usage
+
+```dart
+import 'platform/platform.dart';
+
+class ExportService {
+  static final _platform = getPlatformService();
+
+  static Future<void> exportTransactions(List<Transaction> data) async {
+    final csv = _convertToCsv(data);
+
+    if (kIsWeb) {
+      // Web: Download file
+      final blob = html.Blob([csv], 'text/csv');
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      await _platform.shareFile(url, 'text/csv');
+      html.Url.revokeObjectUrl(url);
+    } else {
+      // Mobile/Desktop: Save to file then share
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/transactions.csv');
+      await file.writeAsString(csv);
+      await _platform.shareFile(file.path, 'text/csv');
+    }
+  }
+}
+```
+
+---
+
+# 7. Responsive Web Layouts
+
+## Breakpoint System
+
+```dart
+class Breakpoints {
+  static const double mobile = 600;
+  static const double tablet = 900;
+  static const double desktop = 1200;
+  static const double wide = 1536;
+
+  static bool isMobile(BuildContext context) => 
+      MediaQuery.of(context).size.width < mobile;
+  static bool isTablet(BuildContext context) => 
+      MediaQuery.of(context).size.width >= mobile && 
+      MediaQuery.of(context).size.width < desktop;
+  static bool isDesktop(BuildContext context) => 
+      MediaQuery.of(context).size.width >= desktop;
+  static bool isWide(BuildContext context) => 
+      MediaQuery.of(context).size.width >= wide;
+}
+```
+
+## Responsive Grid
+
+```dart
+class ResponsiveGrid extends StatelessWidget {
+  final List<Widget> children;
+  const ResponsiveGrid({super.key, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    int crossAxisCount;
+
+    if (width >= 1536) {
+      crossAxisCount = 4;
+    } else if (width >= 1200) {
+      crossAxisCount = 3;
+    } else if (width >= 900) {
+      crossAxisCount = 2;
+    } else {
+      crossAxisCount = 1;
+    }
+
+    return GridView.builder(
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        childAspectRatio: 16 / 9,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+      ),
+      itemCount: children.length,
+      itemBuilder: (context, index) => children[index],
+    );
+  }
+}
+```
+
+## Responsive Typography
+
+```dart
+class ResponsiveText extends StatelessWidget {
+  final String text;
+  final TextStyle? style;
+  const ResponsiveText(this.text, {super.key, this.style});
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    double scaleFactor;
+
+    if (width >= 1536) {
+      scaleFactor = 1.2;
+    } else if (width >= 1200) {
+      scaleFactor = 1.1;
+    } else if (width >= 900) {
+      scaleFactor = 1.0;
+    } else {
+      scaleFactor = 0.9;
+    }
+
+    return Text(
+      text,
+      style: style?.copyWith(
+        fontSize: (style?.fontSize ?? 16) * scaleFactor,
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 8. SEO & Web Performance
+
+## URL Strategy (Path-based Routing)
+
+**pubspec.yaml**
+```yaml
+dependencies:
+  url_strategy: ^0.2.0
+  go_router: ^14.0.0
+```
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:url_strategy/url_strategy.dart';
+import 'package:go_router/go_router.dart';
+
+void main() {
+  setPathUrlStrategy(); // Removes # from URLs
+  runApp(const MyApp());
+}
+
+final _router = GoRouter(
+  initialLocation: '/',
+  routes: [
+    GoRoute(
+      path: '/',
+      builder: (context, state) => const HomeScreen(),
+    ),
+    GoRoute(
+      path: '/transactions',
+      builder: (context, state) => const TransactionsScreen(),
+    ),
+    GoRoute(
+      path: '/transactions/:id',
+      builder: (context, state) => TransactionDetailScreen(
+        id: state.pathParameters['id']!,
+      ),
+    ),
+    GoRoute(
+      path: '/reports',
+      builder: (context, state) => const ReportsScreen(),
+    ),
+    GoRoute(
+      path: '/settings',
+      builder: (context, state) => const SettingsScreen(),
+    ),
+  ],
+  errorBuilder: (context, state) => const NotFoundScreen(),
+);
+```
+
+## Dynamic SEO with flutter_html
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:universal_html/html.dart' as html;
+
+class SeoService {
+  static void setTitle(String title) {
+    if (kIsWeb) {
+      html.document.title = '$title | Expense Tracker';
+    }
+  }
+
+  static void setDescription(String description) {
+    if (kIsWeb) {
+      final meta = html.document.querySelector('meta[name="description"]');
+      meta?.setAttribute('content', description);
+    }
+  }
+
+  static void setCanonicalUrl(String url) {
+    if (kIsWeb) {
+      final link = html.document.querySelector('link[rel="canonical"]') 
+          ?? html.document.createElement('link');
+      link.setAttribute('rel', 'canonical');
+      link.setAttribute('href', 'https://yourdomain.com$url');
+      html.document.head?.append(link);
+    }
+  }
+
+  static void setMetaTag(String property, String content) {
+    if (kIsWeb) {
+      final meta = html.document.querySelector('meta[property="$property"]') 
+          ?? html.document.createElement('meta');
+      meta.setAttribute('property', property);
+      meta.setAttribute('content', content);
+      html.document.head?.append(meta);
+    }
+  }
+}
+
+// Usage in screen
+class TransactionDetailScreen extends StatelessWidget {
+  final String id;
+  const TransactionDetailScreen({super.key, required this.id});
+
+  @override
+  Widget build(BuildContext context) {
+    // Set SEO tags when screen builds
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      SeoService.setTitle('Transaction #$id');
+      SeoService.setDescription('View details for transaction #$id in your expense tracker');
+      SeoService.setCanonicalUrl('/transactions/$id');
+      SeoService.setMetaTag('og:title', 'Transaction #$id');
+      SeoService.setMetaTag('og:type', 'website');
+    });
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Transaction Details')),
+      body: const TransactionDetailView(),
+    );
+  }
+}
+```
+
+## Web Performance Optimization
+
+| Technique | Impact | Implementation |
+|:---|:---|:---|
+| Code splitting | Faster initial load | `deferred` components |
+| Image optimization | Smaller bundle | `cached_network_image` with WebP |
+| Tree shaking | Remove unused code | `flutter build web --tree-shake-icons` |
+| Font subsetting | Smaller font files | Only load needed font weights |
+| Service Worker | Offline support | Generated by Flutter build |
+| CanvasKit caching | Faster reloads | Cache Skia WASM |
+| Deferred loading | Split routes | `GoRouter` lazy loading |
+
+---
+
+# 9. Navigation & Routing for Web
+
+## Browser Back Button Support
+
+```dart
+class WebAwareNavigator extends StatelessWidget {
+  final Widget child;
+  const WebAwareNavigator({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!kIsWeb) return child;
+
+    return BackButtonListener(
+      onBackButtonPressed: () async {
+        final router = GoRouter.of(context);
+        if (router.canPop()) {
+          router.pop();
+          return true;
+        }
+        return false;
+      },
+      child: child,
+    );
+  }
+}
+```
+
+## Deep Linking
+
+```dart
+// Android: AndroidManifest.xml
+<intent-filter>
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="https" android:host="yourdomain.com" />
+</intent-filter>
+
+// iOS: Info.plist
+<key>CFBundleURLTypes</key>
+<array>
+    <dict>
+        <key>CFBundleURLName</key>
+        <string>com.example.expensetracker</string>
+        <key>CFBundleURLSchemes</key>
+        <array>
+            <string>https</string>
+        </array>
+    </dict>
+</array>
+
+// Web: No additional config needed with path URL strategy
+```
+
+---
+
+# 10. Hands-On Project: Expense Tracker — Web & Desktop
+
+## Project Overview
+
+Port your **Expense Tracker** app to run seamlessly on:
+- **Web**: Responsive layout, SEO-optimized, PWA-ready
+- **Windows**: Native window management, keyboard shortcuts
+- **macOS**: Native menus, title bar, platform conventions
+- **Linux**: Consistent with Windows/macOS experience
+
+## Complete App Structure
+
+```
+lib/
+├── main.dart
+├── app.dart
+├── core/
+│   ├── constants/
+│   ├── theme/
+│   ├── utils/
+│   │   └── platform_helper.dart
+│   └── responsive/
+│       ├── breakpoints.dart
+│       ├── adaptive_scaffold.dart
+│       └── responsive_grid.dart
+├── platform/
+│   ├── platform_stub.dart
+│   ├── platform_mobile.dart
+│   ├── platform_web.dart
+│   └── platform_desktop.dart
+├── data/
+│   ├── models/
+│   ├── repositories/
+│   └── services/
+│       ├── export_service.dart
+│       └── window_service.dart
+├── presentation/
+│   ├── screens/
+│   ├── widgets/
+│   └── providers/
+└── router.dart
+```
+
+## Main Entry Point
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:url_strategy/url_strategy.dart';
+import 'app.dart';
+import 'core/utils/platform_helper.dart';
+import 'data/services/window_service.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Remove # from URLs
+  setPathUrlStrategy();
+
+  // Initialize desktop window
+  if (PlatformHelper.isDesktop) {
+    await WindowService.initialize();
+  }
+
+  runApp(const ExpenseTrackerApp());
+}
+```
+
+## App Root with Router
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'core/utils/platform_helper.dart';
+import 'core/responsive/adaptive_scaffold.dart';
+import 'presentation/screens/home_screen.dart';
+import 'presentation/screens/transactions_screen.dart';
+import 'presentation/screens/reports_screen.dart';
+import 'presentation/screens/settings_screen.dart';
+import 'presentation/screens/not_found_screen.dart';
+
+class ExpenseTrackerApp extends StatelessWidget {
+  const ExpenseTrackerApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp.router(
+      title: 'Expense Tracker',
+      debugShowCheckedModeBanner: false,
+      routerConfig: _router,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+      ),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.deepPurple,
+          brightness: Brightness.dark,
+        ),
+      ),
+    );
+  }
+}
+
+final _router = GoRouter(
+  initialLocation: '/',
+  routes: [
+    ShellRoute(
+      builder: (context, state, child) => AppShell(child: child),
+      routes: [
+        GoRoute(path: '/', builder: (_, __) => const HomeScreen()),
+        GoRoute(path: '/transactions', builder: (_, __) => const TransactionsScreen()),
+        GoRoute(path: '/reports', builder: (_, __) => const ReportsScreen()),
+        GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
+      ],
+    ),
+  ],
+  errorBuilder: (_, __) => const NotFoundScreen(),
+);
+
+class AppShell extends StatefulWidget {
+  final Widget child;
+  const AppShell({super.key, required this.child});
+
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  int _selectedIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return AdaptiveScaffold(
+      title: const Text('Expense Tracker'),
+      actions: [
+        if (PlatformHelper.isDesktop) ...[
+          IconButton(
+            icon: const Icon(Icons.minimize),
+            onPressed: () => windowManager.minimize(),
+          ),
+          IconButton(
+            icon: const Icon(Icons.crop_square),
+            onPressed: () async {
+              if (await windowManager.isMaximized()) {
+                await windowManager.unmaximize();
+              } else {
+                await windowManager.maximize();
+              }
+            },
+          ),
+        ],
+        IconButton(
+          icon: const Icon(Icons.settings),
+          onPressed: () => context.go('/settings'),
+        ),
+      ],
+      body: widget.child,
+      selectedIndex: _selectedIndex,
+      destinations: const [
+        NavigationDestination(icon: Icon(Icons.dashboard), label: 'Dashboard'),
+        NavigationDestination(icon: Icon(Icons.receipt_long), label: 'Transactions'),
+        NavigationDestination(icon: Icon(Icons.pie_chart), label: 'Reports'),
+        NavigationDestination(icon: Icon(Icons.settings), label: 'Settings'),
+      ],
+      onDestinationSelected: (index) {
+        setState(() => _selectedIndex = index);
+        switch (index) {
+          case 0: context.go('/'); break;
+          case 1: context.go('/transactions'); break;
+          case 2: context.go('/reports'); break;
+          case 3: context.go('/settings'); break;
+        }
+      },
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => showDialog(
+          context: context,
+          builder: (_) => const NewTransactionDialog(),
+        ),
+        icon: const Icon(Icons.add),
+        label: const Text('Add Transaction'),
+      ),
+    );
+  }
+}
+```
+
+## Export Service (Cross-Platform)
+
+```dart
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
+import '../platform/platform.dart';
+
+class ExportService {
+  static final _platform = getPlatformService();
+
+  static Future<void> exportToCsv(List<Transaction> transactions) async {
+    final csv = StringBuffer();
+    csv.writeln('Date,Category,Description,Amount,Type');
+
+    for (final t in transactions) {
+      csv.writeln('${t.date},${t.category},${t.description},${t.amount},${t.type}');
+    }
+
+    if (kIsWeb) {
+      await _platform.shareFile(csv.toString(), 'text/csv');
+    } else {
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/expenses.csv');
+      await file.writeAsString(csv.toString());
+      await _platform.shareFile(file.path, 'text/csv');
+    }
+  }
+
+  static Future<void> printReport(String html) async {
+    await _platform.printDocument(html);
+  }
+}
+```
+
+---
+
+# 11. Testing Multi-Platform Apps
+
+## Golden Tests for Responsive Layouts
+
+```dart
+import 'package:flutter_test/flutter_test.dart';
+import 'package:golden_toolkit/golden_toolkit.dart';
+
+void main() {
+  testGoldens('AdaptiveScaffold renders correctly on all screen sizes', (tester) async {
+    final builder = GoldenBuilder.grid(
+      columns: 2,
+      widthToHeightRatio: 1,
+    )
+      ..addScenario('Mobile', const AppShell(child: HomeScreen()),
+        autoHeight: true,
+        name: 'mobile_375x812',
+      )
+      ..addScenario('Tablet', const AppShell(child: HomeScreen()),
+        autoHeight: true,
+        name: 'tablet_768x1024',
+      )
+      ..addScenario('Desktop', const AppShell(child: HomeScreen()),
+        autoHeight: true,
+        name: 'desktop_1440x900',
+      );
+
+    await tester.pumpWidgetBuilder(builder.build());
+    await screenMatchesGolden(tester, 'adaptive_scaffold');
+  });
+}
+```
+
+## Platform-Specific Widget Tests
+
+```dart
+testWidgets('shows desktop title bar on desktop', (tester) async {
+  debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+
+  await tester.pumpWidget(
+    const MaterialApp(home: DesktopTitleBar()),
+  );
+
+  expect(find.byIcon(Icons.minimize), findsOneWidget);
+  expect(find.byIcon(Icons.close), findsOneWidget);
+
+  debugDefaultTargetPlatformOverride = null;
+});
+```
+
+---
+
+# 12. Performance & Bundle Size Optimization
+
+## Build Size Comparison
+
+| Platform | Default Size | Optimized Size | Techniques |
+|:---|:---|:---|:---|
+| Web (HTML) | 2.5 MB | 1.2 MB | Tree shake, compress |
+| Web (CanvasKit) | 8.5 MB | 4.5 MB | CDN loading, cache |
+| Windows | 45 MB | 25 MB | Strip symbols, UPX |
+| macOS | 50 MB | 30 MB | App thinning |
+| Linux | 40 MB | 22 MB | Strip debug |
+
+## Web Optimization
+
+```bash
+# Tree shake icons (removes unused Material icons)
+flutter build web --tree-shake-icons
+
+# Omit source maps for production
+flutter build web --no-source-maps
+
+# Use HTML renderer for smaller bundle
+flutter build web --web-renderer html
+
+# Enable CDN for CanvasKit (faster load)
+flutter build web --web-renderer canvaskit --dart-define=FLUTTER_WEB_CANVASKIT_URL=https://www.gstatic.com/flutter-canvaskit/
+```
+
+## Desktop Optimization
+
+```bash
+# Windows: Strip symbols
+strip build/windows/x64/runner/Release/expense_tracker.exe
+
+# macOS: Create compressed DMG
+hdiutil create -format UDZO -srcfolder build/macos/Build/Products/Release/expense_tracker.app expense_tracker.dmg
+
+# Linux: Build AppImage
+appimage-builder --recipe AppImageBuilder.yml
+```
+
+---
+
+# 13. Common Mistakes & How to Avoid Them
+
+## Mistake 1: Using dart:io Platform on Web
+
+```dart
+// WRONG - Crashes on web
+if (Platform.isAndroid) { }
+
+// CORRECT - Check kIsWeb first
+if (kIsWeb) { }
+else if (Platform.isAndroid) { }
+```
+
+## Mistake 2: Hardcoding Mobile Layouts
+
+```dart
+// WRONG - Always bottom nav
+Scaffold(bottomNavigationBar: BottomNavigationBar(...))
+
+// CORRECT - Adaptive layout
+AdaptiveScaffold(destinations: [...], body: ...)
+```
+
+## Mistake 3: Ignoring Web Scroll Behavior
+
+```dart
+// WRONG - Mobile scroll physics on web
+ListView(physics: const BouncingScrollPhysics())
+
+// CORRECT - Platform-aware physics
+ListView(physics: kIsWeb 
+    ? const ClampingScrollPhysics() 
+    : const BouncingScrollPhysics())
+```
+
+## Mistake 4: Not Disabling Context Menu on Web
+
+```dart
+// WRONG - Browser right-click menu shows
+GestureDetector(onSecondaryTap: () {})
+
+// CORRECT - Custom context menu or disable
+Listener(
+  onPointerDown: (event) {
+    if (event.kind == PointerDeviceKind.mouse && 
+        event.buttons == kSecondaryMouseButton) {
+      // Handle right click
+    }
+  },
+  child: child,
+)
+```
+
+## Mistake 5: Forgetting to Set Path URL Strategy
+
+```dart
+// WRONG - URLs look like domain.com/#/transactions
+
+// CORRECT - Clean URLs
+void main() {
+  setPathUrlStrategy();
+  runApp(MyApp());
+}
+```
+
+## Mistake 6: Using Mobile Packages on Web
+
+```dart
+// WRONG - local_auth doesn't support web
+import 'package:local_auth/local_auth.dart';
+
+// CORRECT - Conditional import or web alternative
+import 'platform/platform.dart';
+```
+
+## Mistake 7: Not Testing on Actual Desktop
+
+```dart
+// WRONG - Only test on mobile emulator
+// "It works on my phone"
+
+// CORRECT - Test on all targets
+flutter run -d chrome
+flutter run -d windows
+flutter run -d macos
+```
+
+---
+
+# 14. Day 26 Checklist
+
+Use this checklist to verify mastery:
+
+- [ ] Understands Flutter multi-platform architecture (web, mobile, desktop)
+- [ ] Can enable and configure Flutter Web support
+- [ ] Can build web with HTML, CanvasKit, and auto renderers
+- [ ] Can customize index.html for SEO and analytics
+- [ ] Can configure PWA manifest.json
+- [ ] Can enable and configure Windows, macOS, and Linux desktop
+- [ ] Can manage desktop windows (size, title, full screen)
+- [ ] Can implement custom title bars for desktop
+- [ ] Can add native desktop menus (macOS/Windows)
+- [ ] Can implement keyboard shortcuts for desktop
+- [ ] Can detect platform (web, mobile, desktop) at runtime
+- [ ] Can implement adaptive navigation (bottom nav, rail, drawer)
+- [ ] Can build responsive layouts with breakpoints
+- [ ] Can implement conditional imports for platform-specific code
+- [ ] Can create stub + implementation pattern for platform services
+- [ ] Can handle file operations across web, mobile, and desktop
+- [ ] Can implement path-based URL routing (no #)
+- [ ] Can set dynamic SEO meta tags on web
+- [ ] Can handle browser back button on web
+- [ ] Can implement deep linking across all platforms
+- [ ] Can test responsive layouts with golden tests
+- [ ] Can optimize web bundle size (tree shake, compress)
+- [ ] Can build release versions for all platforms
+- [ ] Pushed the multi-platform Expense Tracker to GitHub
+
+---
+
+# Key Takeaways (Memorize These!)
+
+1. **One codebase, multiple platforms** — Flutter's true power is writing once and deploying to 6+ platforms. Don't maintain separate web and desktop teams.
+
+2. **Web is not mobile** — Browser constraints (CORS, no dart:io, right-click) require different thinking. Always test on Chrome, not just mobile emulators.
+
+3. **Desktop needs window management** — Users expect native window controls, keyboard shortcuts, and menu bars. Use `window_manager` and `menubar` packages.
+
+4. **Responsive is mandatory for web** — Web users resize browsers. Your app must adapt from 320px mobile to 4K ultrawide. Use breakpoints and `LayoutBuilder`.
+
+5. **SEO requires path URLs** — Hash URLs (`/#/page`) hurt SEO. Always call `setPathUrlStrategy()` and use `go_router` for clean URLs.
+
+6. **Conditional imports are your friend** — The stub pattern (`platform_stub.dart` + conditional imports) cleanly separates web, mobile, and desktop code without `if (kIsWeb)` spaghetti.
+
+7. **CanvasKit vs HTML matters** — CanvasKit = pixel-perfect but 8MB. HTML = smaller but less consistent. Use auto-renderer or choose based on content type.
+
+8. **Desktop apps need keyboard support** — Power users expect Cmd+S, Cmd+F, Escape to close. Implement `Shortcuts` and `Actions` widgets.
+
+9. **Test on real hardware** — Web performance and desktop window behavior differ significantly between simulators and real devices/browsers.
+
+10. **PWA turns web into installable app** — With manifest.json and service workers, your Flutter web app works offline and installs like a native app.
+
+---
+
+# Extra Practice (Do These Tonight!)
+
+1. **Responsive Dashboard**: Build a finance dashboard that shows 1 column on mobile, 2 on tablet, 3 on desktop, and 4 on ultrawide using `GridView` and breakpoints.
+
+2. **Desktop-First Notes App**: Create a note-taking app with keyboard shortcuts (Cmd+N new note, Cmd+S save, Cmd+F search), custom title bar, and native menus.
+
+3. **Web Portfolio**: Build a personal portfolio site with Flutter Web, path-based routing, SEO meta tags, and PWA install support.
+
+4. **File Manager**: Build a cross-platform file manager that uses conditional imports to use `dart:io` on desktop and `dart:html` on web for file operations.
+
+5. **Multi-Platform Auth**: Implement authentication that uses biometric on mobile, WebAuthn on web, and system keychain on desktop.
+
+---
+
+**Congratulations!** You've completed Day 26. You now master Flutter Web & Desktop development — from responsive layouts and SEO optimization to native desktop window management and cross-platform conditional imports. Your apps now run everywhere.
+
+**Next Up -> Day 27: CI/CD & DevOps**
+
+---
+
+*Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*  
+*Day 26: Flutter Web & Desktop — Complete Deep Dive*
+
+
 
