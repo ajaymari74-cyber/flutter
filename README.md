@@ -46449,6 +46449,1199 @@ Use this checklist to verify mastery:
 *Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*  
 *Day 28: App Store & Play Store Deployment — Complete Deep Dive*
 
+# Day 29: Capstone Project — Part 1
+# Complete Deep Dive
+
+**Goal:** Build a production-grade **Social Fitness Tracker** app by synthesizing every concept from Days 1–28. You will architect a Firebase-backed, offline-first application with GPS activity tracking, camera photo sharing, a real-time social feed, push notifications, background sync, and Clean Architecture using Riverpod and BLoC. This is where you graduate from tutorial follower to professional Flutter engineer.
+
+---
+
+# Table of Contents
+1. Why the Capstone Matters: Synthesizing 28 Days of Knowledge
+2. Project Overview & System Architecture
+3. Development Environment & Project Setup
+4. Clean Architecture Foundation
+5. Firebase Authentication Implementation
+6. GPS Activity Tracking & Background Location
+7. Camera Integration & Photo Sharing Pipeline
+8. Social Feed with Cloud Firestore
+9. Push Notifications (FCM + Local)
+10. Offline-First Strategy & Background Sync
+11. State Management: Riverpod + BLoC Hybrid Approach
+12. Hands-On Project: Build Part 1 Features
+13. Testing & Quality Assurance for Capstone
+14. Day 29 Checklist
+15. Key Takeaways (Memorize These!)
+16. Extra Practice (Do These Tonight!)
+
+---
+
+# 1. Why the Capstone Matters: Synthesizing 28 Days of Knowledge
+
+| Week | Core Skills | Day 29 Application |
+|:---|:---|:---|
+| Week 1: Dart & Setup | OOP, Async, Null Safety | Domain models, JSON parsing, isolate computation |
+| Week 2: UI Mastery | Layouts, Navigation, Theming | Complex adaptive UI, Hero animations, responsive feed |
+| Week 3: State & Persistence | Provider, Riverpod, BLoC, Hive/SQLite | Hybrid state management, offline data layers |
+| Week 4: Advanced & Production | APIs, Auth, CI/CD, Deployment | Firebase integration, signed builds, store-ready assets |
+
+**The Professional Difference:** Tutorials teach isolated skills. A capstone forces you to resolve **integration conflicts**—where GPS background service meets battery optimization, where Firestore real-time listeners meet offline queues, and where Clean Architecture meets Firebase's opinionated SDK.
+
+> **Pro Tip:** Consistency beats intensity. Code every single day, even if just for 1 hour. Build in public, share your progress, and don't skip the fundamentals!
+
+---
+
+# 2. Project Overview & System Architecture
+
+## The Social Fitness Tracker
+
+| Feature Module | User Story | Technical Complexity |
+|:---|:---|:---|
+| **Auth** | Sign in with Google/Apple/Email | Medium |
+| **Activity Tracker** | Record GPS route, calculate distance/pace | High |
+| **Photo Journal** | Take workout photos, upload to cloud | Medium |
+| **Social Feed** | View friends' activities, like/comment | High |
+| **Push Notifications** | Get notified on likes, comments, milestones | Medium |
+| **Offline Sync** | Create posts offline; auto-sync when online | Very High |
+
+## High-Level Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│           Presentation Layer                │
+│  ┌─────────┐ ┌─────────┐ ┌──────────────┐  │
+│  │  Screens │ │ Widgets │ │ State Mgmt   │  │
+│  │ (Riverpod│ │         │ │  + BLoC)     │  │
+│  └────┬────┘ └─────────┘ └──────┬───────┘  │
+└───────┼───────────────────────────┼──────────┘
+        │                           │
+┌───────▼───────────────────────────▼───────┐
+│              Domain Layer                 │
+│  ┌─────────────┐      ┌─────────────────┐  │
+│  │   Entities  │◄────►│  Repository     │  │
+│  │  (User,Post,│      │  Interfaces     │  │
+│  │  Activity)  │      │                 │  │
+│  └─────────────┘      └─────────────────┘  │
+└───────┬───────────────────────┬─────────────┘
+        │                       │
+┌───────▼───────────────────────▼─────────────┐
+│               Data Layer                    │
+│  ┌──────────┐ ┌──────────┐ ┌─────────────┐  │
+│  │ Firebase │ │ Local DB │ │  Device     │  │
+│  │ (Auth,   │ │ (Hive/   │ │  Services   │  │
+│  │ Firestore│ │ SQLite)  │ │ (GPS,Camera)│  │
+│  │ Storage) │ │          │ │             │  │
+│  └──────────┘ └──────────┘ └─────────────┘  │
+└─────────────────────────────────────────────┘
+```
+
+---
+
+# 3. Development Environment & Project Setup
+
+## Firebase Configuration
+
+```bash
+# 1. Create Firebase project at console.firebase.google.com
+# 2. Enable Authentication, Firestore, Storage, and Cloud Messaging
+# 3. Install Firebase CLI and FlutterFire CLI
+
+dart pub global activate flutterfire_cli
+flutterfire configure --project=your-fitness-tracker
+```
+
+## pubspec.yaml Dependencies
+
+```yaml
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase
+  firebase_core: ^3.0.0
+  firebase_auth: ^5.0.0
+  cloud_firestore: ^5.0.0
+  firebase_storage: ^12.0.0
+  firebase_messaging: ^15.0.0
+  firebase_analytics: ^11.0.0
+  firebase_crashlytics: ^4.0.0
+
+  # State Management
+  flutter_riverpod: ^2.5.0
+  flutter_bloc: ^8.1.0
+  equatable: ^2.0.0
+
+  # Local Storage & Offline
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  sqflite: ^2.3.0
+  connectivity_plus: ^6.0.0
+
+  # Location & Maps
+  geolocator: ^12.0.0
+  google_maps_flutter: ^2.7.0
+  flutter_polyline_points: ^2.0.0
+
+  # Camera & Media
+  image_picker: ^1.1.0
+  camera: ^0.11.0
+  cached_network_image: ^3.3.0
+  photo_view: ^0.15.0
+
+  # Notifications
+  flutter_local_notifications: ^17.0.0
+
+  # Background Processing (Day 25)
+  workmanager: ^0.5.2
+
+  # Dependency Injection
+  get_it: ^7.7.0
+  injectable: ^2.4.0
+
+  # Utilities
+  freezed_annotation: ^2.4.0
+  json_serializable: ^6.8.0
+  dio: ^5.5.0
+  path_provider: ^2.1.0
+  permission_handler: ^11.3.0
+  intl: ^0.19.0
+
+dev_dependencies:
+  build_runner: ^2.4.0
+  freezed: ^2.5.0
+  injectable_generator: ^2.6.0
+  flutter_test:
+    sdk: flutter
+  mocktail: ^1.0.0
+  bloc_test: ^9.1.0
+```
+
+## Feature-First Folder Structure
+
+```
+lib/
+├── main.dart
+├── app.dart
+├── config/                    # Routes, themes, constants
+├── core/                      # Errors, usecases, network info
+├── features/
+│   ├── auth/
+│   │   ├── data/
+│   │   │   ├── models/
+│   │   │   ├── repositories/
+│   │   │   └── datasources/
+│   │   ├── domain/
+│   │   │   ├── entities/
+│   │   │   └── repositories/
+│   │   └── presentation/
+│   │       ├── bloc/
+│   │       ├── providers/
+│   │       └── screens/
+│   ├── activity/
+│   ├── photo/
+│   ├── feed/
+│   └── notifications/
+└── services/                  # Background sync, GPS service
+```
+
+---
+
+# 4. Clean Architecture Foundation
+
+## The Dependency Rule
+
+**Nothing in an inner circle can know anything about an outer circle.**
+
+| Layer | Depends On | Example |
+|:---|:---|:---|
+| **Presentation** | Domain | UI widgets know about `UserEntity`, not `FirebaseAuth` |
+| **Domain** | Nothing | Pure Dart: entities, repository interfaces, use cases |
+| **Data** | Domain | `AuthRepositoryImpl` implements `AuthRepository` |
+
+## Repository Pattern
+
+```dart
+// lib/features/auth/domain/repositories/auth_repository.dart
+abstract class AuthRepository {
+  Stream<UserEntity?> get authStateChanges;
+  Future<Either<Failure, UserEntity>> signInWithEmail(String email, String password);
+  Future<Either<Failure, UserEntity>> signInWithGoogle();
+  Future<Either<Failure, UserEntity>> signInWithApple();
+  Future<void> signOut();
+}
+```
+
+```dart
+// lib/features/auth/data/repositories/auth_repository_impl.dart
+class AuthRepositoryImpl implements AuthRepository {
+  final AuthRemoteDataSource remoteDataSource;
+  final NetworkInfo networkInfo;
+
+  AuthRepositoryImpl({required this.remoteDataSource, required this.networkInfo});
+
+  @override
+  Future<Either<Failure, UserEntity>> signInWithGoogle() async {
+    if (!await networkInfo.isConnected) {
+      return Left(NetworkFailure());
+    }
+    try {
+      final userModel = await remoteDataSource.signInWithGoogle();
+      return Right(userModel.toEntity());
+    } on FirebaseAuthException catch (e) {
+      return Left(AuthFailure(message: e.message));
+    }
+  }
+  // ... other implementations
+}
+```
+
+## Dependency Injection Setup
+
+```dart
+// lib/injection.dart
+import 'package:get_it/get_it.dart';
+import 'package:injectable/injectable.dart';
+
+final getIt = GetIt.instance;
+
+@InjectableInit()
+void configureDependencies() => getIt.init();
+```
+
+```dart
+// lib/main.dart
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  configureDependencies();
+  runApp(const ProviderScope(child: FitnessTrackerApp()));
+}
+```
+
+---
+
+# 5. Firebase Authentication Implementation
+
+## Auth Data Source
+
+```dart
+class AuthRemoteDataSource {
+  final FirebaseAuth _auth;
+  final GoogleSignIn _googleSignIn;
+
+  AuthRemoteDataSource(this._auth, this._googleSignIn);
+
+  Future<UserModel> signInWithGoogle() async {
+    final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+    if (googleUser == null) throw Exception('Sign-in aborted');
+
+    final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
+
+    final userCredential = await _auth.signInWithCredential(credential);
+    return UserModel.fromFirebase(userCredential.user!);
+  }
+
+  Future<UserModel> signInWithApple() async {
+    final appleCredential = await SignInWithApple.getAppleIDCredential(
+      scopes: [AppleIDAuthorizationScopes.email, AppleIDAuthorizationScopes.fullName],
+    );
+    final oauthCredential = OAuthProvider('apple.com').credential(
+      idToken: appleCredential.identityToken,
+      accessToken: appleCredential.authorizationCode,
+    );
+    final userCredential = await _auth.signInWithCredential(oauthCredential);
+    return UserModel.fromFirebase(userCredential.user!);
+  }
+}
+```
+
+## Auth BLoC Pattern
+
+```dart
+// lib/features/auth/presentation/bloc/auth_event.dart
+abstract class AuthEvent extends Equatable {
+  const AuthEvent();
+}
+
+class AppStarted extends AuthEvent {}
+class LoggedIn extends AuthEvent {
+  final UserEntity user;
+  const LoggedIn(this.user);
+}
+class LoggedOut extends AuthEvent {}
+
+// lib/features/auth/presentation/bloc/auth_state.dart
+abstract class AuthState extends Equatable {
+  const AuthState();
+}
+
+class AuthInitial extends AuthState {}
+class AuthLoading extends AuthState {}
+class AuthAuthenticated extends AuthState {
+  final UserEntity user;
+  const AuthAuthenticated(this.user);
+}
+class AuthUnauthenticated extends AuthState {}
+class AuthError extends AuthState {
+  final String message;
+  const AuthError(this.message);
+}
+```
+
+```dart
+// lib/features/auth/presentation/bloc/auth_bloc.dart
+class AuthBloc extends Bloc<AuthEvent, AuthState> {
+  final SignInWithGoogle signInWithGoogle;
+  final SignOut signOut;
+  final GetCurrentUser getCurrentUser;
+
+  AuthBloc({
+    required this.signInWithGoogle,
+    required this.signOut,
+    required this.getCurrentUser,
+  }) : super(AuthInitial()) {
+    on<AppStarted>(_onAppStarted);
+    on<LoggedIn>(_onLoggedIn);
+    on<LoggedOut>(_onLoggedOut);
+  }
+
+  Future<void> _onAppStarted(AppStarted event, Emitter<AuthState> emit) async {
+    emit(AuthLoading());
+    final result = await getCurrentUser();
+    result.fold(
+      (failure) => emit(AuthUnauthenticated()),
+      (user) => user != null ? emit(AuthAuthenticated(user)) : emit(AuthUnauthenticated()),
+    );
+  }
+
+  Future<void> _onLoggedOut(LoggedOut event, Emitter<AuthState> emit) async {
+    await signOut();
+    emit(AuthUnauthenticated());
+  }
+}
+```
+
+## Secure Token Management
+
+| Storage Type | Use Case | Package |
+|:---|:---|:---|
+| **SharedPreferences** | Non-sensitive flags | `shared_preferences` |
+| **Flutter Secure Storage** | JWT tokens, refresh tokens | `flutter_secure_storage` |
+| **Keychain/Keystore** | iOS/Android native secure storage | `flutter_secure_storage` |
+
+```dart
+class TokenService {
+  static const _storage = FlutterSecureStorage();
+
+  static Future<void> saveToken(String token) async {
+    await _storage.write(key: 'auth_token', value: token);
+  }
+
+  static Future<String?> getToken() async {
+    return await _storage.read(key: 'auth_token');
+  }
+}
+```
+
+---
+
+# 6. GPS Activity Tracking & Background Location
+
+## Permission Handling
+
+```dart
+class LocationService {
+  static Future<bool> handlePermission() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return false;
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) return false;
+    }
+    if (permission == LocationPermission.deniedForever) return false;
+
+    return true;
+  }
+}
+```
+
+## Foreground Tracking with Stream
+
+```dart
+class ActivityTracker {
+  StreamSubscription<Position>? _positionStream;
+
+  void startTracking() {
+    const locationSettings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 10, // meters
+    );
+
+    _positionStream = Geolocator.getPositionStream(locationSettings: locationSettings)
+      .listen((Position position) {
+        // Add to route polyline
+        _addPositionToRoute(position);
+        // Calculate distance, pace, calories
+        _updateActivityMetrics(position);
+      });
+  }
+
+  void stopTracking() {
+    _positionStream?.cancel();
+    _saveActivityToLocal();
+  }
+}
+```
+
+## Background Location (Day 25 Integration)
+
+For background tracking when the app is minimized, integrate with `workmanager` (Day 25):
+
+```dart
+// lib/services/background_location_service.dart
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    switch (task) {
+      case 'backgroundLocationTask':
+        final position = await Geolocator.getCurrentPosition();
+        await Hive.openBox('pending_locations');
+        final box = Hive.box('pending_locations');
+        await box.add({
+          'lat': position.latitude,
+          'lng': position.longitude,
+          'timestamp': DateTime.now().toIso8601String(),
+        });
+        break;
+    }
+    return Future.value(true);
+  });
+}
+
+// Register in main.dart
+void initBackgroundTasks() {
+  Workmanager().initialize(callbackDispatcher);
+  Workmanager().registerPeriodicTask(
+    'location-task',
+    'backgroundLocationTask',
+    frequency: const Duration(minutes: 15),
+    constraints: Constraints(networkType: NetworkType.connected),
+  );
+}
+```
+
+## Activity Entity (Domain Layer)
+
+```dart
+// lib/features/activity/domain/entities/activity.dart
+class Activity extends Equatable {
+  final String id;
+  final String userId;
+  final ActivityType type; // running, cycling, walking
+  final DateTime startTime;
+  final DateTime? endTime;
+  final List<GeoPoint> route;
+  final double distanceMeters;
+  final Duration duration;
+  final int caloriesBurned;
+  final String? photoUrl;
+
+  const Activity({
+    required this.id,
+    required this.userId,
+    required this.type,
+    required this.startTime,
+    this.endTime,
+    this.route = const [],
+    this.distanceMeters = 0.0,
+    this.duration = Duration.zero,
+    this.caloriesBurned = 0,
+    this.photoUrl,
+  });
+
+  Activity copyWith({...}) // immutable updates
+
+  @override
+  List<Object?> get props => [id, userId, type, startTime, endTime, route, distanceMeters, duration, caloriesBurned];
+}
+```
+
+---
+
+# 7. Camera Integration & Photo Sharing Pipeline
+
+## Camera vs Image Picker Strategy
+
+| Scenario | Package | Why |
+|:---|:---|:---|
+| Quick profile photo | `image_picker` | Simple, native UI |
+| In-app camera with custom UI | `camera` | Full control over preview, flash, zoom |
+| Multiple workout photos | `image_picker` with `multi_image` | User convenience |
+
+## Photo Capture & Compression
+
+```dart
+class PhotoService {
+  final ImagePicker _picker = ImagePicker();
+
+  Future<File?> capturePhoto() async {
+    final XFile? photo = await _picker.pickImage(
+      source: ImageSource.camera,
+      maxWidth: 1920,
+      maxHeight: 1080,
+      imageQuality: 85, // compress to 85%
+    );
+    return photo != null ? File(photo.path) : null;
+  }
+
+  Future<String?> uploadPhoto(File photo, String userId) async {
+    final fileName = '${userId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final ref = FirebaseStorage.instance.ref().child('workout_photos/$fileName');
+
+    // Upload with metadata
+    final metadata = SettableMetadata(
+      contentType: 'image/jpeg',
+      customMetadata: {'userId': userId, 'uploadedAt': DateTime.now().toIso8601String()},
+    );
+
+    await ref.putFile(photo, metadata);
+    return await ref.getDownloadURL();
+  }
+}
+```
+
+## Caching Strategy
+
+```dart
+// In your widget
+CachedNetworkImage(
+  imageUrl: activity.photoUrl!,
+  placeholder: (context, url) => const ShimmerLoading(),
+  errorWidget: (context, url, error) => const Icon(Icons.error),
+  memCacheWidth: 600, // Reduce memory footprint
+  maxAgeDiskCache: const Duration(days: 7),
+)
+```
+
+---
+
+# 8. Social Feed with Cloud Firestore
+
+## Firestore Data Model
+
+```
+users/{userId}          → User profile
+activities/{activityId} → Activity document (owner: userId)
+posts/{postId}          → Social post (references activityId)
+posts/{postId}/likes/{userId}    → Like document
+posts/{postId}/comments/{commentId} → Comment document
+followers/{userId}/userFollowers/{followerId}
+```
+
+## Repository Implementation
+
+```dart
+class FeedRepositoryImpl implements FeedRepository {
+  final FirebaseFirestore _firestore;
+
+  FeedRepositoryImpl(this._firestore);
+
+  @override
+  Stream<List<PostEntity>> getFeedStream(String userId) {
+    return _firestore
+      .collection('posts')
+      .where('authorId', whereIn: _getFollowingList(userId)) // Use cached list
+      .orderBy('createdAt', descending: true)
+      .limit(20)
+      .snapshots()
+      .map((snapshot) => snapshot.docs
+        .map((doc) => PostModel.fromFirestore(doc).toEntity())
+        .toList());
+  }
+
+  @override
+  Future<void> toggleLike(String postId, String userId) async {
+    final likeRef = _firestore
+      .collection('posts')
+      .doc(postId)
+      .collection('likes')
+      .doc(userId);
+
+    final doc = await likeRef.get();
+    if (doc.exists) {
+      await likeRef.delete();
+      await _decrementLikeCount(postId);
+    } else {
+      await likeRef.set({'createdAt': FieldValue.serverTimestamp()});
+      await _incrementLikeCount(postId);
+    }
+  }
+}
+```
+
+## Pagination with BLoC
+
+```dart
+class FeedBloc extends Bloc<FeedEvent, FeedState> {
+  DocumentSnapshot? _lastDocument;
+  final List<PostEntity> _posts = [];
+
+  FeedBloc() : super(FeedInitial()) {
+    on<LoadFeed>(_onLoadFeed);
+    on<LoadMoreFeed>(_onLoadMoreFeed);
+  }
+
+  Future<void> _onLoadFeed(LoadFeed event, Emitter<FeedState> emit) async {
+    emit(FeedLoading());
+    try {
+      final query = _firestore.collection('posts')
+        .orderBy('createdAt', descending: true)
+        .limit(15);
+
+      final snapshot = await query.get();
+      _lastDocument = snapshot.docs.last;
+      _posts.addAll(snapshot.docs.map((d) => PostModel.fromFirestore(d).toEntity()));
+
+      emit(FeedLoaded(posts: List.unmodifiable(_posts), hasReachedMax: false));
+    } catch (e) {
+      emit(FeedError(e.toString()));
+    }
+  }
+}
+```
+
+## Firestore Security Rules
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users can read any profile, but only update their own
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth.uid == userId;
+    }
+
+    // Posts: read public, write only owner
+    match /posts/{postId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth.uid == request.resource.data.authorId;
+      allow update, delete: if request.auth.uid == resource.data.authorId;
+    }
+
+    // Likes: users can only like/unlike as themselves
+    match /posts/{postId}/likes/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth.uid == userId;
+    }
+  }
+}
+```
+
+---
+
+# 9. Push Notifications (FCM + Local)
+
+## FCM Setup & Handlers
+
+```dart
+class NotificationService {
+  final FirebaseMessaging _fcm = FirebaseMessaging.instance;
+  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+
+  Future<void> initialize() async {
+    // Request permission (iOS critical)
+    await _fcm.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    // Foreground handler
+    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+
+    // Background handler (must be top-level function)
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+    // Token refresh
+    _fcm.onTokenRefresh.listen(_saveTokenToFirestore);
+  }
+
+  void _handleForegroundMessage(RemoteMessage message) {
+    _showLocalNotification(
+      id: message.hashCode,
+      title: message.notification?.title ?? 'New Activity',
+      body: message.notification?.body ?? '',
+      payload: message.data['postId'],
+    );
+  }
+
+  Future<void> _showLocalNotification({
+    required int id,
+    required String title,
+    required String body,
+    String? payload,
+  }) async {
+    const androidDetails = AndroidNotificationDetails(
+      'fitness_channel',
+      'Fitness Notifications',
+      importance: Importance.max,
+      priority: Priority.high,
+    );
+    const iosDetails = DarwinNotificationDetails();
+
+    await _localNotifications.show(
+      id,
+      title,
+      body,
+      const NotificationDetails(android: androidDetails, iOS: iosDetails),
+      payload: payload,
+    );
+  }
+}
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  // Store notification in local DB for "notification history" feature
+  await Hive.initFlutter();
+  final box = await Hive.openBox('notifications');
+  await box.add({
+    'title': message.notification?.title,
+    'body': message.notification?.body,
+    'receivedAt': DateTime.now().toIso8601String(),
+  });
+}
+```
+
+## Notification Types Table
+
+| Type | Trigger | Data Payload |
+|:---|:---|:---|
+| **Like** | User likes your post | `{"type": "like", "postId": "...", "userId": "..."}` |
+| **Comment** | User comments on your post | `{"type": "comment", "postId": "...", "commentId": "..."}` |
+| **Milestone** | User reaches activity goal | `{"type": "milestone", "activityId": "..."}` |
+| **Follow** | User follows you | `{"type": "follow", "followerId": "..."}` |
+
+---
+
+# 10. Offline-First Strategy & Background Sync
+
+## Connectivity Monitoring
+
+```dart
+class NetworkInfo {
+  final Connectivity _connectivity;
+
+  NetworkInfo(this._connectivity);
+
+  Future<bool> get isConnected async {
+    final result = await _connectivity.checkConnectivity();
+    return result != ConnectivityResult.none;
+  }
+
+  Stream<ConnectivityResult> get onConnectivityChanged => _connectivity.onConnectivityChanged;
+}
+```
+
+## Sync Queue with Hive
+
+```dart
+@HiveType(typeId: 1)
+class SyncOperation extends HiveObject {
+  @HiveField(0)
+  final String id;
+
+  @HiveField(1)
+  final String type; // 'create_post', 'like', 'comment'
+
+  @HiveField(2)
+  final Map<String, dynamic> payload;
+
+  @HiveField(3)
+  final DateTime createdAt;
+
+  @HiveField(4)
+  int retryCount;
+
+  SyncOperation({
+    required this.id,
+    required this.type,
+    required this.payload,
+    required this.createdAt,
+    this.retryCount = 0,
+  });
+}
+```
+
+## Background Sync Engine (Day 25 + Day 29 Integration)
+
+```dart
+class SyncEngine {
+  final Box<SyncOperation> _queue;
+  final FirebaseFirestore _firestore;
+
+  SyncEngine(this._queue, this._firestore);
+
+  Future<void> enqueue(SyncOperation operation) async {
+    await _queue.add(operation);
+    await _attemptSync();
+  }
+
+  Future<void> _attemptSync() async {
+    if (!await NetworkInfo(Connectivity()).isConnected) return;
+
+    final pending = _queue.values.toList();
+
+    for (final op in pending) {
+      try {
+        switch (op.type) {
+          case 'create_post':
+            await _firestore.collection('posts').add(op.payload);
+            break;
+          case 'like':
+            await _firestore.collection('posts')
+              .doc(op.payload['postId'])
+              .collection('likes')
+              .doc(op.payload['userId'])
+              .set({'createdAt': FieldValue.serverTimestamp()});
+            break;
+        }
+        await op.delete(); // Remove from queue on success
+      } catch (e) {
+        op.retryCount++;
+        if (op.retryCount > 3) {
+          await op.delete(); // Dead letter queue logic
+        }
+        await op.save();
+      }
+    }
+  }
+}
+```
+
+## Conflict Resolution Strategy
+
+| Strategy | Use Case | Implementation |
+|:---|:---|:---|
+| **Last-Write-Wins** | Likes, simple updates | Firestore `FieldValue.serverTimestamp()` |
+| **Server-Authoritative** | User profile changes | Cloud Function validates before write |
+| **Merge Fields** | Activity metadata | `SetOptions(merge: true)` |
+| **Queue + Retry** | Post creation offline | Hive queue with exponential backoff |
+
+---
+
+# 11. State Management: Riverpod + BLoC Hybrid Approach
+
+## Architectural Decision
+
+| Layer | State Management | Why |
+|:---|:---|:---|
+| **App-wide DI & simple state** | Riverpod | Less boilerplate, compile-safe |
+| **Complex feature flows** | BLoC | Event-driven, testable, time-travel |
+| **UI-only ephemeral state** | `ConsumerWidget` / `StatefulWidget` | Simple, localized |
+
+## Riverpod Providers for DI
+
+```dart
+// lib/core/providers.dart
+final firebaseAuthProvider = Provider<FirebaseAuth>((ref) => FirebaseAuth.instance);
+final firestoreProvider = Provider<FirebaseFirestore>((ref) => FirebaseFirestore.instance);
+
+final authRepositoryProvider = Provider<AuthRepository>((ref) {
+  return AuthRepositoryImpl(
+    remoteDataSource: AuthRemoteDataSource(
+      ref.watch(firebaseAuthProvider),
+      GoogleSignIn(),
+    ),
+    networkInfo: NetworkInfo(Connectivity()),
+  );
+});
+```
+
+## BLoC Provider Integration
+
+```dart
+final authBlocProvider = Provider<AuthBloc>((ref) {
+  return AuthBloc(
+    signInWithGoogle: SignInWithGoogle(ref.watch(authRepositoryProvider)),
+    signOut: SignOut(ref.watch(authRepositoryProvider)),
+    getCurrentUser: GetCurrentUser(ref.watch(authRepositoryProvider)),
+  );
+});
+
+// In your widget
+class AuthScreen extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authBloc = ref.watch(authBlocProvider);
+    return BlocProvider.value(
+      value: authBloc,
+      child: const AuthView(),
+    );
+  }
+}
+```
+
+---
+
+# 12. Hands-On Project: Build Part 1 Features
+
+## Project Milestones
+
+| Milestone | Features | Estimated Time |
+|:---|:---|:---|
+| **M1: Foundation** | Clean Architecture setup, DI, routing | 2 hours |
+| **M2: Auth** | Firebase Auth, Google/Apple sign-in, splash | 2 hours |
+| **M3: Activity** | GPS tracking, route polyline, activity save | 3 hours |
+| **M4: Media** | Camera, photo upload, Firebase Storage | 2 hours |
+| **M5: Social** | Feed UI, Firestore integration, like/comment | 3 hours |
+| **M6: Notifications** | FCM setup, local notifications, push handlers | 2 hours |
+| **M7: Offline** | Hive queue, sync engine, connectivity handling | 3 hours |
+
+## Step-by-Step: GPS Activity Screen
+
+```dart
+class ActivityTrackingScreen extends StatefulWidget {
+  @override
+  _ActivityTrackingScreenState createState() => _ActivityTrackingScreenState();
+}
+
+class _ActivityTrackingScreenState extends State<ActivityTrackingScreen> {
+  GoogleMapController? _mapController;
+  final List<LatLng> _polylinePoints = [];
+  bool _isTracking = false;
+  StreamSubscription<Position>? _positionStream;
+
+  void _startTracking() {
+    setState(() => _isTracking = true);
+
+    const settings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 5,
+    );
+
+    _positionStream = Geolocator.getPositionStream(locationSettings: settings)
+      .listen((position) {
+        final latLng = LatLng(position.latitude, position.longitude);
+        setState(() => _polylinePoints.add(latLng));
+
+        _mapController?.animateCamera(
+          CameraUpdate.newLatLng(latLng),
+        );
+      });
+  }
+
+  void _stopTracking() {
+    _positionStream?.cancel();
+    setState(() => _isTracking = false);
+    // Save activity to local DB + queue for sync
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: GoogleMap(
+        initialCameraPosition: const CameraPosition(target: LatLng(0, 0), zoom: 2),
+        onMapCreated: (controller) => _mapController = controller,
+        polylines: {
+          Polyline(
+            polylineId: const PolylineId('route'),
+            points: _polylinePoints,
+            color: Colors.blue,
+            width: 5,
+          ),
+        },
+        myLocationEnabled: true,
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _isTracking ? _stopTracking : _startTracking,
+        label: Text(_isTracking ? 'Stop' : 'Start'),
+        icon: Icon(_isTracking ? Icons.stop : Icons.play_arrow),
+      ),
+    );
+  }
+}
+```
+
+## Step-by-Step: Social Feed Card
+
+```dart
+class FeedCard extends StatelessWidget {
+  final PostEntity post;
+
+  const FeedCard({required this.post});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.all(8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            leading: CircleAvatar(
+              backgroundImage: CachedNetworkImageProvider(post.authorAvatarUrl),
+            ),
+            title: Text(post.authorName),
+            subtitle: Text(timeago.format(post.createdAt)),
+          ),
+          if (post.photoUrl != null)
+            CachedNetworkImage(imageUrl: post.photoUrl!),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(post.caption),
+          ),
+          Row(
+            children: [
+              IconButton(
+                icon: Icon(
+                  post.isLiked ? Icons.favorite : Icons.favorite_border,
+                  color: post.isLiked ? Colors.red : null,
+                ),
+                onPressed: () => context.read<FeedBloc>().add(ToggleLike(post.id)),
+              ),
+              Text('${post.likeCount}'),
+              const SizedBox(width: 16),
+              IconButton(
+                icon: const Icon(Icons.comment_outlined),
+                onPressed: () => _showComments(context),
+              ),
+              Text('${post.commentCount}'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+```
+
+---
+
+# 13. Testing & Quality Assurance for Capstone
+
+## Test Pyramid for Social Fitness Tracker
+
+| Test Type | Coverage Target | Tools |
+|:---|:---|:---|
+| **Unit Tests** | Use cases, repositories, BLoC logic | `test`, `bloc_test`, `mocktail` |
+| **Widget Tests** | Feed cards, auth screens, forms | `flutter_test`, `golden_toolkit` |
+| **Integration Tests** | E2E: login → track activity → post → like | `integration_test` |
+
+## BLoC Test Example
+
+```dart
+blocTest<AuthBloc, AuthState>(
+  'emits [AuthLoading, AuthAuthenticated] when Google sign-in succeeds',
+  build: () {
+    when(() => mockSignInWithGoogle()).thenAnswer((_) async => Right(testUser));
+    return AuthBloc(signInWithGoogle: mockSignInWithGoogle, ...);
+  },
+  act: (bloc) => bloc.add(SignInWithGooglePressed()),
+  expect: () => [AuthLoading(), AuthAuthenticated(testUser)],
+);
+```
+
+## Golden Tests for Feed UI
+
+```dart
+testGoldens('FeedCard renders correctly', (tester) async {
+  final builder = GoldenBuilder.grid(
+    columns: 1,
+    widthToHeightRatio: 1.2,
+  )..addScenario('Default', FeedCard(post: mockPost));
+
+  await tester.pumpWidgetBuilder(builder.build());
+  await screenMatchesGolden(tester, 'feed_card');
+});
+```
+
+---
+
+# 14. Day 29 Checklist
+
+Use this checklist to verify mastery:
+
+- [ ] Understands Clean Architecture layers (Presentation, Domain, Data)
+- [ ] Can implement Repository Pattern with proper abstractions
+- [ ] Can configure Firebase Auth (Email, Google, Apple) securely
+- [ ] Can manage auth state with BLoC pattern
+- [ ] Can request and handle GPS permissions (foreground + background)
+- [ ] Can track real-time location and draw polylines on Google Maps
+- [ ] Can capture photos with `image_picker` or `camera` package
+- [ ] Can compress and upload images to Firebase Storage
+- [ ] Can design Firestore data models for social features
+- [ ] Can implement real-time listeners with pagination
+- [ ] Can write Firestore Security Rules for data protection
+- [ ] Can configure Firebase Cloud Messaging for push notifications
+- [ ] Can display local notifications when app is foregrounded
+- [ ] Can implement an offline-first sync queue using Hive
+- [ ] Can detect network connectivity changes
+- [ ] Can resolve sync conflicts using server timestamps
+- [ ] Can integrate Riverpod for dependency injection
+- [ ] Can use BLoC for complex feature state management
+- [ ] Can write unit tests for repositories and BLoCs
+- [ ] Can write widget tests for custom UI components
+- [ ] Can write integration tests for critical user flows
+- [ ] Has completed Milestones M1 through M7
+- [ ] Has a working Social Fitness Tracker with Part 1 features
+
+---
+
+# 15. Key Takeaways (Memorize These!)
+
+1. **Architecture saves projects** — Clean Architecture seems like overhead on Day 1, but on Day 29 it prevents your GPS service from knowing your Firebase API keys. Always abstract external dependencies.
+
+2. **Offline-first is not an afterthought** — Design your local database schema before your Firestore schema. Users expect apps to work in subways and remote trails.
+
+3. **Auth state is the root of your app tree** — Every screen decision branches from authentication status. Use a top-level BLoC or Riverpod provider to gate your entire navigation flow.
+
+4. **GPS drains batteries** — Never track location at the highest accuracy continuously. Use `distanceFilter`, pause location updates when stationary, and respect Android/iOS background execution limits.
+
+5. **Firestore is not a relational database** — Denormalize data for read performance. Store user display names in posts so you don't query `users/` for every feed item.
+
+6. **Push notifications need a fallback** — FCM tokens expire. Always pair push notifications with an in-app notification center backed by Firestore or local storage.
+
+7. **Sync engines need retry logic with caps** — An exponential backoff prevents a failing API from destroying device battery. Cap retries at 3 attempts and log failures to Crashlytics.
+
+8. **State management is about boundaries** — Riverpod for global DI and simple state; BLoC for complex business logic. Don't force one pattern to solve every problem.
+
+9. **Security rules are your server-side validation** — Never trust the client. Firestore Security Rules must validate every write as if a malicious actor crafted the request.
+
+10. **Test the integration, not just the unit** — A repository can pass all unit tests and still fail when Firebase returns a `PERMISSION_DENIED` error. Integration tests catch the gaps.
+
+---
+
+# 16. Extra Practice (Do These Tonight!)
+
+1. **Background Sync Challenge:** Implement a background task (using `workmanager`) that uploads pending activities every 15 minutes, even when the app is killed. Handle the case where the upload fails due to network issues.
+
+2. **Conflict Resolution Drill:** Simulate two devices creating posts offline. When both come online, ensure the server timestamp resolves the ordering correctly and no data is lost.
+
+3. **Notification Deep Link:** Configure FCM so tapping a push notification navigates the user directly to the specific post in the social feed, even if the app was terminated.
+
+4. **Performance Audit:** Run your app with DevTools Performance overlay. Identify and fix at least 3 unnecessary widget rebuilds in your feed list.
+
+5. **Accessibility Audit:** Test your entire app with TalkBack (Android) and VoiceOver (iOS). Ensure every button in the activity tracking screen has a semantic label.
+
+---
+
+**Congratulations!** You've completed Day 29, Part 1. You have architected and built the core of a production-grade Social Fitness Tracker using professional Clean Architecture, hybrid state management, real-time Firestore feeds, GPS tracking, camera integration, push notifications, and offline-first sync. Your codebase is testable, scalable, and ready for Part 2 polish.
+
+**Next Up ->** Day 30: Capstone Project — Part 2 & Portfolio
+
+*Generated for 30Days Flutter: Zero to Hero (2026 Edition)*
+*Day 29: Capstone Project Part 1 — Complete Deep Dive*
+
 
 
 
