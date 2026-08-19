@@ -44052,4 +44052,1390 @@ Use this checklist to verify mastery:
 *Day 26: Flutter Web & Desktop — Complete Deep Dive*
 
 
+# Day 27: CI/CD & DevOps
+# Complete Deep Dive
+
+**Goal:** Master automated build pipelines, code signing, and deployment for Flutter apps. Implement GitHub Actions workflows, Fastlane lanes for store deployment, automated testing in CI, and secure app signing for both Android and iOS.
+
+---
+
+# Table of Contents
+
+1. Why CI/CD & DevOps Are Essential in 2026
+2. CI/CD Architecture Overview
+3. GitHub Actions for Flutter CI/CD
+4. Fastlane: Automated Deployment
+5. App Signing & Security
+6. Automated Testing in CI Pipeline
+7. Codemagic & Bitrise Overview
+8. Hands-On Project: Full CI/CD Pipeline
+9. Monitoring & Crash Analytics
+10. Performance & Pipeline Optimization
+11. Common Mistakes & How to Avoid Them
+12. Day 27 Checklist
+
+---
+
+# 1. Why CI/CD & DevOps Are Essential in 2026
+
+## The Deployment Landscape
+
+| Statistic | Impact |
+|:---|:---|
+| Teams with CI/CD deploy 208x more frequently | Automation = speed |
+| Manual deployment failure rate is 15x higher | Automation = reliability |
+| 70% of app store rejections are preventable with CI checks | Lint + test in pipeline = fewer rejections |
+| Average manual release takes 4 hours; CI/CD takes 15 minutes | Time savings = developer productivity |
+| 60% of Flutter devs still deploy manually in 2026 | CI/CD = competitive advantage |
+| Security breaches from leaked keys cost avg $4.45M | Proper signing = risk mitigation |
+
+## What You Will Master Today
+
+| Technology | Use Case | Tool |
+|:---|:---|:---|
+| GitHub Actions | CI/CD pipeline orchestration | `actions/checkout`, `subosito/flutter-action` |
+| Fastlane | Automated store deployment | `fastlane` Ruby gem |
+| Gradle Signing | Android APK/AAB signing | `keytool`, `jarsigner` |
+| Xcode Signing | iOS IPA signing | `match`, `cert`, `sigh` |
+| Codecov | Test coverage reporting | `codecov/codecov-action` |
+| Firebase App Distribution | Beta testing distribution | `firebase_app_distribution` |
+
+---
+
+# 2. CI/CD Architecture Overview
+
+## The Deployment Pipeline Flow
+
+```
+Developer Push
+      |
+      v
+[GitHub Actions Trigger]
+      |
+      +---> [Lint & Format] --> Fail? --> Notify
+      |         |
+      |         v
+      +---> [Unit Tests] --> Fail? --> Notify
+      |         |
+      |         v
+      +---> [Widget Tests] --> Fail? --> Notify
+      |         |
+      |         v
+      +---> [Integration Tests] --> Fail? --> Notify
+      |         |
+      |         v
+      +---> [Build Android] --> Sign AAB --> Upload Artifact
+      |         |
+      |         v
+      +---> [Build iOS] --> Sign IPA --> Upload Artifact
+      |         |
+      |         v
+      +---> [Fastlane Deploy] --> Play Store / App Store
+      |         |
+      |         v
+      +---> [Firebase Distribution] --> Beta Testers
+                |
+                v
+      [Slack/Email Notification]
+```
+
+## Pipeline Stages
+
+| Stage | Purpose | Average Duration |
+|:---|:---|:---|
+| **Checkout** | Clone repo, fetch dependencies | 30s |
+| **Analyze** | Dart analyze, format check | 1m |
+| **Unit Test** | Run `flutter test` | 2-5m |
+| **Build** | Compile APK/AAB/IPA | 5-15m |
+| **Sign** | Apply certificates and keystores | 30s |
+| **Deploy** | Upload to store or distribution | 2-5m |
+
+---
+
+# 3. GitHub Actions for Flutter CI/CD
+
+## Repository Structure
+
+```
+.github/
+├── workflows/
+│   ├── ci.yml              # Pull request checks
+│   ├── build_android.yml   # Android release build
+│   ├── build_ios.yml       # iOS release build
+│   └── deploy.yml          # Store deployment
+├── scripts/
+│   └── setup_keys.sh       # Key decryption script
+└── README.md
+```
+
+## Basic CI Workflow (Pull Requests)
+
+**`.github/workflows/ci.yml`**
+```yaml
+name: Flutter CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  FLUTTER_VERSION: "3.24.0"
+  JAVA_VERSION: "17"
+
+jobs:
+  analyze:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: "stable"
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Verify Formatting
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Analyze Project Source
+        run: flutter analyze --fatal-infos
+
+      - name: Check for Dependency Vulnerabilities
+        run: flutter pub audit
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: analyze
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Run Unit Tests
+        run: flutter test --coverage
+
+      - name: Upload Coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/lcov.info
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  widget-tests:
+    name: Widget Tests
+    runs-on: ubuntu-latest
+    needs: analyze
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Run Widget Tests
+        run: flutter test test/widget/
+
+  golden-tests:
+    name: Golden Tests
+    runs-on: ubuntu-latest
+    needs: analyze
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Run Golden Tests
+        run: flutter test --update-goldens test/goldens/
+        continue-on-error: true
+
+      - name: Upload Golden Failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-failures
+          path: test/failures/
+```
+
+## Android Release Build Workflow
+
+**`.github/workflows/build_android.yml`**
+```yaml
+name: Build Android Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Build type"
+        required: true
+        default: "aab"
+        type: choice
+        options:
+          - apk
+          - aab
+
+env:
+  FLUTTER_VERSION: "3.24.0"
+
+jobs:
+  build-android:
+    name: Build Android ${{ github.event.inputs.build_type || 'aab' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: "stable"
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/keystore.jks
+
+      - name: Create key.properties
+        run: |
+          cat > android/key.properties << EOF
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          storeFile=keystore.jks
+          EOF
+
+      - name: Build APK
+        if: github.event.inputs.build_type == 'apk' || github.event.inputs.build_type == null
+        run: flutter build apk --release
+
+      - name: Build AAB
+        if: github.event.inputs.build_type == 'aab'
+        run: flutter build appbundle --release
+
+      - name: Upload APK Artifact
+        if: github.event.inputs.build_type == 'apk' || github.event.inputs.build_type == null
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload AAB Artifact
+        if: github.event.inputs.build_type == 'aab'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-aab
+          path: build/app/outputs/bundle/release/app-release.aab
+
+      - name: Cleanup Keystore
+        if: always()
+        run: rm -f android/app/keystore.jks android/key.properties
+```
+
+## iOS Release Build Workflow
+
+**`.github/workflows/build_ios.yml`**
+```yaml
+name: Build iOS Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: "3.24.0"
+
+jobs:
+  build-ios:
+    name: Build iOS Release
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: "stable"
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install --repo-update
+
+      - name: Setup Ruby & Fastlane
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+          working-directory: ios
+
+      - name: Decode Apple Certificates
+        env:
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+        run: |
+          cd ios
+          bundle exec fastlane match appstore --readonly
+
+      - name: Build iOS Release
+        run: flutter build ipa --release
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-ipa
+          path: build/ios/ipa/*.ipa
+```
+
+## Environment Variables & Secrets Setup
+
+| Secret Name | Description | How to Generate |
+|:---|:---|:---|
+| `KEYSTORE_BASE64` | Base64-encoded Android keystore | `base64 -i upload-keystore.jks` |
+| `KEYSTORE_PASSWORD` | Keystore password | Set when creating keystore |
+| `KEY_PASSWORD` | Key password | Set when creating key |
+| `KEY_ALIAS` | Key alias | Set when creating key |
+| `MATCH_PASSWORD` | Fastlane Match encryption password | Set during match setup |
+| `CODECOV_TOKEN` | Codecov upload token | From codecov.io dashboard |
+| `SLACK_WEBHOOK` | Slack notification webhook | From Slack app settings |
+| `FIREBASE_TOKEN` | Firebase CLI token | `firebase login:ci` |
+
+---
+
+# 4. Fastlane: Automated Deployment
+
+## Installation & Setup
+
+```bash
+# Install Fastlane
+sudo gem install fastlane -NV
+
+# Or use Bundler
+cd ios && bundle init
+cd ios && bundle add fastlane
+cd android && bundle add fastlane
+
+# Initialize Fastlane
+cd ios && fastlane init
+cd android && fastlane init
+```
+
+## iOS Fastlane Configuration
+
+**`ios/Gemfile`**
+```ruby
+source "https://rubygems.org"
+
+gem "fastlane", "~> 2.220"
+gem "cocoapods", "~> 1.15"
+```
+
+**`ios/fastlane/Fastfile`**
+```ruby
+default_platform(:ios)
+
+platform :ios do
+  desc "Run all tests"
+  lane :test do
+    scan(
+      scheme: "Runner",
+      devices: ["iPhone 15 Pro"],
+      clean: true
+    )
+  end
+
+  desc "Build and sign IPA"
+  lane :build do
+    match(type: "appstore", readonly: true)
+
+    build_app(
+      scheme: "Runner",
+      export_method: "app-store",
+      export_options: {
+        provisioningProfiles: {
+          "com.example.expensetracker" => "match AppStore com.example.expensetracker"
+        }
+      },
+      build_path: "build/ios",
+      output_directory: "build/ios/ipa"
+    )
+  end
+
+  desc "Deploy to App Store Connect"
+  lane :deploy do
+    increment_build_number(xcodeproj: "Runner.xcodeproj")
+
+    build
+
+    upload_to_app_store(
+      skip_metadata: false,
+      skip_screenshots: false,
+      submit_for_review: false,
+      automatic_release: false,
+      precheck_include_in_app_purchases: false
+    )
+  end
+
+  desc "Deploy to Firebase App Distribution"
+  lane :beta do
+    increment_build_number(xcodeproj: "Runner.xcodeproj")
+
+    match(type: "adhoc", readonly: true)
+
+    build_app(
+      scheme: "Runner",
+      export_method: "ad-hoc"
+    )
+
+    firebase_app_distribution(
+      app: "1:123456789:ios:abcdef",
+      groups: "beta-testers",
+      release_notes: changelog_from_git_commits(commits_count: 5)
+    )
+  end
+
+  desc "Sync signing certificates"
+  lane :sync_certs do
+    match(type: "development")
+    match(type: "adhoc")
+    match(type: "appstore")
+  end
+end
+```
+
+**`ios/fastlane/Matchfile`**
+```ruby
+git_url("https://github.com/your-org/certificates-repo.git")
+storage_mode("git")
+type("appstore")
+app_identifier(["com.example.expensetracker"])
+username("your-apple-id@example.com")
+team_id("TEAM_ID_HERE")
+```
+
+## Android Fastlane Configuration
+
+**`android/Gemfile`**
+```ruby
+source "https://rubygems.org"
+
+gem "fastlane", "~> 2.220"
+```
+
+**`android/fastlane/Fastfile`**
+```ruby
+default_platform(:android)
+
+platform :android do
+  desc "Run all tests"
+  lane :test do
+    gradle(task: "test")
+  end
+
+  desc "Build release APK"
+  lane :build_apk do
+    gradle(
+      task: "assemble",
+      build_type: "Release",
+      properties: {
+        "android.injected.signing.store.file" => "keystore.jks",
+        "android.injected.signing.store.password" => ENV["KEYSTORE_PASSWORD"],
+        "android.injected.signing.key.alias" => ENV["KEY_ALIAS"],
+        "android.injected.signing.key.password" => ENV["KEY_PASSWORD"]
+      }
+    )
+  end
+
+  desc "Build release AAB"
+  lane :build_aab do
+    gradle(
+      task: "bundle",
+      build_type: "Release",
+      properties: {
+        "android.injected.signing.store.file" => "keystore.jks",
+        "android.injected.signing.store.password" => ENV["KEYSTORE_PASSWORD"],
+        "android.injected.signing.key.alias" => ENV["KEY_ALIAS"],
+        "android.injected.signing.key.password" => ENV["KEY_PASSWORD"]
+      }
+    )
+  end
+
+  desc "Deploy to Google Play Internal"
+  lane :deploy_internal do
+    build_aab
+
+    upload_to_play_store(
+      track: "internal",
+      aab: "../build/app/outputs/bundle/release/app-release.aab",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+
+  desc "Deploy to Google Play Production"
+  lane :deploy_production do
+    build_aab
+
+    upload_to_play_store(
+      track: "production",
+      aab: "../build/app/outputs/bundle/release/app-release.aab"
+    )
+  end
+
+  desc "Deploy to Firebase App Distribution"
+  lane :beta do
+    build_apk
+
+    firebase_app_distribution(
+      app: "1:123456789:android:abcdef",
+      groups: "beta-testers",
+      apk_path: "../build/app/outputs/flutter-apk/app-release.apk",
+      release_notes: changelog_from_git_commits(commits_count: 5)
+    )
+  end
+end
+```
+
+**`android/fastlane/Appfile`**
+```ruby
+json_key_file("play-store-service-account.json")
+package_name("com.example.expensetracker")
+```
+
+---
+
+# 5. App Signing & Security
+
+## Android Signing Setup
+
+```bash
+# Generate upload keystore
+keytool -genkey -v -keystore upload-keystore.jks \
+  -keyalg RSA -keysize 2048 -validity 10000 \
+  -alias upload \
+  -storepass YOUR_STORE_PASSWORD \
+  -keypass YOUR_KEY_PASSWORD
+
+# Extract certificate for Google Play
+keytool -export -rfc -keystore upload-keystore.jks \
+  -alias upload -file upload_certificate.pem
+
+# Convert keystore to base64 for CI
+base64 -i upload-keystore.jks -o keystore.base64
+```
+
+**`android/app/build.gradle`**
+```gradle
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+android {
+    signingConfigs {
+        release {
+            keyAlias keystoreProperties['keyAlias']
+            keyPassword keystoreProperties['keyPassword']
+            storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+            storePassword keystoreProperties['storePassword']
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+```
+
+## iOS Signing with Fastlane Match
+
+```bash
+# Setup match repository (one-time)
+fastlane match init
+
+# Generate and store certificates
+fastlane match development
+fastlane match adhoc
+fastlane match appstore
+
+# Team members fetch (readonly)
+fastlane match development --readonly
+fastlane match appstore --readonly
+```
+
+**Security Best Practices for Signing**
+
+| Practice | Why | Implementation |
+|:---|:---|:---|
+| Never commit keys to repo | Prevents credential leaks | Use GitHub Secrets + base64 |
+| Use match for iOS certs | Centralized, encrypted cert storage | Private Git repo for certs |
+| Separate upload vs signing keys | Google Play signing protects you | Use Play App Signing |
+| Rotate keys annually | Limits breach window | Calendar reminder |
+| Audit secret access | Know who accessed what | GitHub secret scanning |
+| Use service accounts for Play Store | Limited API scope | JSON key, not password |
+
+---
+
+# 6. Automated Testing in CI Pipeline
+
+## Integration Test Workflow
+
+**`.github/workflows/integration_tests.yml`**
+```yaml
+name: Integration Tests
+
+on:
+  schedule:
+    - cron: "0 2 * * *"  # Daily at 2 AM
+  workflow_dispatch:
+
+jobs:
+  android-integration:
+    name: Android Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.0"
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Setup Android Emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          script: flutter test integration_test/
+
+  ios-integration:
+    name: iOS Integration Tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.0"
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build iOS Test
+        run: flutter build ios --simulator
+
+      - name: Run iOS Integration Tests
+        run: flutter test integration_test/ -d iPhone
+```
+
+## Golden Test CI Workflow
+
+```yaml
+name: Golden Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  golden-tests:
+    name: Golden Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.0"
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Run Golden Tests
+        run: flutter test test/goldens/
+
+      - name: Upload Golden Failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-failures
+          path: test/failures/
+
+      - name: Update Goldens (Manual Trigger)
+        if: github.event_name == 'workflow_dispatch'
+        run: flutter test --update-goldens test/goldens/
+```
+
+---
+
+# 7. Codemagic & Bitrise Overview
+
+## Codemagic Configuration
+
+**`codemagic.yaml`**
+```yaml
+workflows:
+  android-workflow:
+    name: Android Release
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      groups:
+        - google_play
+    scripts:
+      - name: Get Flutter packages
+        script: flutter packages pub get
+
+      - name: Flutter analyze
+        script: flutter analyze
+
+      - name: Run tests
+        script: flutter test
+
+      - name: Build AAB
+        script: flutter build appbundle --release
+    artifacts:
+      - build/**/outputs/**/*.aab
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal
+
+  ios-workflow:
+    name: iOS Release
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.example.expensetracker
+    scripts:
+      - name: Install pods
+        script: |
+          find . -name "Podfile" -execdir pod install \;
+      - name: Build IPA
+        script: flutter build ipa --release
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+```
+
+## Bitrise Configuration
+
+**`bitrise.yml`**
+```yaml
+format_version: "13"
+default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
+
+workflows:
+  primary:
+    steps:
+      - activate-ssh-key@4: {}
+      - git-clone@8: {}
+      - flutter-installer@0:
+          inputs:
+            - version: stable
+      - cache-pull@2: {}
+      - flutter-analyze@0:
+          inputs:
+            - project_location: "$BITRISE_FLUTTER_PROJECT_LOCATION"
+      - flutter-test@1:
+          inputs:
+            - project_location: "$BITRISE_FLUTTER_PROJECT_LOCATION"
+      - flutter-build@0:
+          inputs:
+            - project_location: "$BITRISE_FLUTTER_PROJECT_LOCATION"
+            - platform: android
+            - additional_build_params: "--release"
+      - deploy-to-bitrise-io@2: {}
+      - cache-push@2: {}
+```
+
+---
+
+# 8. Hands-On Project: Full CI/CD Pipeline
+
+## Project Overview
+
+Build a complete CI/CD pipeline for your **Expense Tracker** app with:
+- Automated PR checks (lint, test, analyze)
+- Android AAB build with signing
+- iOS IPA build with signing
+- Firebase App Distribution for beta
+- Google Play Console deployment
+- App Store Connect deployment
+- Slack notifications
+
+## Complete GitHub Actions Setup
+
+**`.github/workflows/full_pipeline.yml`**
+```yaml
+name: Full CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+env:
+  FLUTTER_VERSION: "3.24.0"
+
+jobs:
+  # Stage 1: Quality Gates
+  quality-gates:
+    name: Quality Gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Check Formatting
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Analyze Code
+        run: flutter analyze --fatal-infos
+
+      - name: Run Unit Tests
+        run: flutter test --coverage
+
+      - name: Upload Coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  # Stage 2: Build Android
+  build-android:
+    name: Build Android Release
+    needs: quality-gates
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/keystore.jks
+          cat > android/key.properties << EOF
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          storeFile=keystore.jks
+          EOF
+
+      - name: Build AAB
+        run: flutter build appbundle --release
+
+      - name: Upload AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-aab
+          path: build/app/outputs/bundle/release/app-release.aab
+
+      - name: Cleanup
+        if: always()
+        run: rm -f android/app/keystore.jks android/key.properties
+
+  # Stage 3: Build iOS
+  build-ios:
+    name: Build iOS Release
+    needs: quality-gates
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+          working-directory: ios
+
+      - name: Match Certificates
+        env:
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+        run: |
+          cd ios
+          bundle exec fastlane match appstore --readonly
+
+      - name: Build IPA
+        run: flutter build ipa --release
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: build/ios/ipa/*.ipa
+
+  # Stage 4: Deploy to Firebase
+  deploy-firebase:
+    name: Firebase Distribution
+    needs: [build-android, build-ios]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-aab
+          path: artifacts/android/
+
+      - name: Setup Firebase CLI
+        uses: w9jds/setup-firebase@main
+        with:
+          tools-version: "13.0.0"
+          gcp_sa_key: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - name: Distribute Android
+        run: |
+          firebase appdistribution:distribute artifacts/android/*.aab \
+            --app ${{ secrets.FIREBASE_ANDROID_APP_ID }} \
+            --groups "beta-testers" \
+            --release-notes "Release ${{ github.ref_name }}"
+
+  # Stage 5: Deploy to Stores
+  deploy-stores:
+    name: Deploy to Stores
+    needs: [build-android, build-ios]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-aab
+          path: artifacts/android/
+      - uses: actions/download-artifact@v4
+        with:
+          name: ios-ipa
+          path: artifacts/ios/
+
+      - name: Deploy to Play Store
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT }}
+          packageName: com.example.expensetracker
+          releaseFiles: artifacts/android/*.aab
+          track: internal
+
+      - name: Deploy to App Store
+        uses: apple-actions/upload-testflight-build@v1
+        with:
+          app-path: artifacts/ios/*.ipa
+          issuer-id: ${{ secrets.APPSTORE_ISSUER_ID }}
+          api-key-id: ${{ secrets.APPSTORE_API_KEY_ID }}
+          api-private-key: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+
+  # Stage 6: Notify
+  notify:
+    name: Notify Team
+    needs: [deploy-stores]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Slack Notification
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: "#deployments"
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+```
+
+---
+
+# 9. Monitoring & Crash Analytics
+
+## Firebase Crashlytics Setup
+
+**pubspec.yaml**
+```yaml
+dependencies:
+  firebase_core: ^3.0.0
+  firebase_crashlytics: ^4.0.0
+```
+
+**`lib/main.dart`**
+```dart
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+
+  // Pass all uncaught errors to Crashlytics
+  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+
+  PlatformDispatcher.instance.onError = (error, stack) {
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    return true;
+  };
+
+  runApp(const MyApp());
+}
+```
+
+**`android/build.gradle`**
+```gradle
+buildscript {
+    dependencies {
+        classpath 'com.google.firebase:firebase-crashlytics-gradle:3.0.0'
+    }
+}
+```
+
+**`android/app/build.gradle`**
+```gradle
+plugins {
+    id "com.google.firebase.crashlytics"
+}
+
+android {
+    buildTypes {
+        release {
+            firebaseCrashlytics {
+                mappingFileUploadEnabled true
+            }
+        }
+    }
+}
+```
+
+## Custom Logging with Crashlytics
+
+```dart
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+
+class AnalyticsService {
+  static final _crashlytics = FirebaseCrashlytics.instance;
+
+  static void logEvent(String name, Map<String, dynamic> parameters) {
+    _crashlytics.log('Event: $name, Params: $parameters');
+  }
+
+  static void setUserId(String userId) {
+    _crashlytics.setUserIdentifier(userId);
+  }
+
+  static void recordError(dynamic exception, StackTrace? stack, {
+    String? reason,
+    bool fatal = false,
+  }) {
+    _crashlytics.recordError(exception, stack, reason: reason, fatal: fatal);
+  }
+
+  static void logBreadcrumb(String message) {
+    _crashlytics.log(message);
+  }
+}
+```
+
+---
+
+# 10. Performance & Pipeline Optimization
+
+## Pipeline Speed Optimization
+
+| Technique | Time Saved | Implementation |
+|:---|:---|:---|
+| Flutter cache | 2-3 min | `cache: true` in flutter-action |
+| Gradle cache | 3-5 min | `actions/cache` for `~/.gradle` |
+| CocoaPods cache | 2-3 min | Cache `ios/Pods` directory |
+| Build matrix | Parallel jobs | Separate Android/iOS jobs |
+| Conditional jobs | Skip unnecessary | `if: startsWith(github.ref, 'refs/tags/v')` |
+| Artifact reuse | Avoid rebuilds | Pass builds between jobs |
+
+## Cache Configuration
+
+```yaml
+- name: Cache Flutter
+  uses: actions/cache@v4
+  with:
+    path: /opt/hostedtoolcache/flutter
+    key: flutter-${{ env.FLUTTER_VERSION }}-${{ runner.os }}
+
+- name: Cache Gradle
+  uses: actions/cache@v4
+  with:
+    path: |
+      ~/.gradle/caches
+      ~/.gradle/wrapper
+    key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+
+- name: Cache CocoaPods
+  uses: actions/cache@v4
+  with:
+    path: ios/Pods
+    key: pods-${{ runner.os }}-${{ hashFiles('ios/Podfile.lock') }}
+```
+
+---
+
+# 11. Common Mistakes & How to Avoid Them
+
+## Mistake 1: Committing Keys to Repository
+
+```bash
+# WRONG - Keystore in repo
+android/app/keystore.jks        # NEVER COMMIT THIS
+android/key.properties          # NEVER COMMIT THIS
+ios/Runner.ipa                  # NEVER COMMIT THIS
+
+# CORRECT - Add to .gitignore
+echo "*.jks" >> .gitignore
+echo "key.properties" >> .gitignore
+echo "*.ipa" >> .gitignore
+echo "*.apk" >> .gitignore
+echo "play-store-service-account.json" >> .gitignore
+```
+
+## Mistake 2: Not Versioning Flutter in CI
+
+```yaml
+# WRONG - Uses whatever Flutter version is on runner
+- uses: subosito/flutter-action@v2
+
+# CORRECT - Pin Flutter version
+- uses: subosito/flutter-action@v2
+  with:
+    flutter-version: "3.24.0"
+    cache: true
+```
+
+## Mistake 3: Running All Jobs on Every Push
+
+```yaml
+# WRONG - Builds release on every commit
+- name: Build AAB
+  run: flutter build appbundle
+
+# CORRECT - Only build on tags or main
+build-android:
+  if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+```
+
+## Mistake 4: Missing Cleanup Steps
+
+```yaml
+# WRONG - Keystore persists after build
+- name: Decode Keystore
+  run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
+
+# CORRECT - Always cleanup
+- name: Cleanup Keystore
+  if: always()
+  run: rm -f keystore.jks
+```
+
+## Mistake 5: No Notification on Failure
+
+```yaml
+# WRONG - Silent failures
+- name: Deploy
+  run: fastlane deploy
+
+# CORRECT - Notify on failure
+- name: Notify Slack
+  if: failure()
+  uses: 8398a7/action-slack@v3
+  with:
+    status: ${{ job.status }}
+```
+
+## Mistake 6: Using Debug Builds for Distribution
+
+```bash
+# WRONG - Debug builds are huge and slow
+flutter build apk
+
+# CORRECT - Always release for distribution
+flutter build apk --release
+flutter build appbundle --release
+flutter build ipa --release
+```
+
+## Mistake 7: Not Testing the Pipeline Itself
+
+```bash
+# WRONG - "It worked on my machine"
+# Push to main and hope
+
+# CORRECT - Test pipeline on feature branches
+# Use workflow_dispatch for manual testing
+# Use act (https://github.com/nektos/act) for local testing
+```
+
+---
+
+# 12. Day 27 Checklist
+
+Use this checklist to verify mastery:
+
+- [ ] Understands CI/CD pipeline stages and flow
+- [ ] Can create GitHub Actions workflows for Flutter
+- [ ] Can configure Flutter version pinning in CI
+- [ ] Can run lint, analyze, and format checks in CI
+- [ ] Can run unit tests and widget tests in CI
+- [ ] Can generate and upload test coverage reports
+- [ ] Can configure Android signing with keystore
+- [ ] Can generate Android upload keystore with keytool
+- [ ] Can configure iOS signing with Fastlane Match
+- [ ] Can initialize and use Fastlane for deployment
+- [ ] Can create Fastfile lanes for build, test, deploy
+- [ ] Can deploy to Firebase App Distribution
+- [ ] Can deploy to Google Play Console
+- [ ] Can deploy to App Store Connect
+- [ ] Can use GitHub Secrets for secure credential storage
+- [ ] Can configure caching for Flutter, Gradle, and CocoaPods
+- [ ] Can set up conditional job execution
+- [ ] Can configure Slack notifications for pipeline status
+- [ ] Can set up Firebase Crashlytics for crash reporting
+- [ ] Can configure Codemagic YAML workflows
+- [ ] Understands Bitrise workflow configuration
+- [ ] Can optimize pipeline speed with caching and parallelism
+- [ ] Knows security best practices for CI/CD
+- [ ] Pushed CI/CD configuration to GitHub
+
+---
+
+# Key Takeaways (Memorize These!)
+
+1. **CI/CD is not optional for production apps** — Manual deployment is error-prone and slow. Automated pipelines catch issues before they reach users.
+
+2. **Never commit secrets to Git** — Use GitHub Secrets, Fastlane Match, and base64 encoding. A leaked keystore cannot be un-leaked.
+
+3. **Pin your Flutter version** — `flutter-version: "3.24.0"` prevents "works on my machine" bugs caused by version differences.
+
+4. **Separate build and deploy stages** — Build artifacts once, deploy them multiple times. Never rebuild for different targets.
+
+5. **Use Firebase Distribution before stores** — Beta testing with real users catches issues that automated tests miss.
+
+6. **Cache everything** — Flutter SDK, Gradle, CocoaPods. Caching turns 15-minute builds into 5-minute builds.
+
+7. **Test your pipeline like code** — Pipelines break too. Use `workflow_dispatch` for manual testing and `act` for local validation.
+
+8. **Notifications are part of the pipeline** — A failed deployment that nobody knows about is worse than no deployment at all.
+
+9. **Crashlytics in production is mandatory** — You cannot fix bugs you don't know about. Integrate Crashlytics before your first release.
+
+10. **CI/CD is a competitive advantage** — Teams that deploy 10x per day iterate faster, learn faster, and ship better products.
+
+---
+
+# Extra Practice (Do These Tonight!)
+
+1. **Full Pipeline Setup**: Configure GitHub Actions for an existing Flutter project with lint, test, build, and deploy stages.
+
+2. **Nightly Integration Tests**: Set up a scheduled workflow that runs integration tests on Android emulator and iOS simulator every night.
+
+3. **Multi-Environment Deployment**: Create separate lanes for development, staging, and production deployments with different Firebase projects.
+
+4. **Automated Version Bumping**: Implement a workflow that automatically increments build numbers and generates changelogs from Git commits.
+
+5. **Self-Hosted Runner**: Set up a self-hosted GitHub Actions runner on a Mac Mini for faster iOS builds and better control.
+
+---
+
+**Congratulations!** You've completed Day 27. You now master CI/CD and DevOps for Flutter — from GitHub Actions pipelines and Fastlane deployment to secure app signing and crash analytics. Your apps now ship automatically, safely, and reliably.
+
+**Next Up -> Day 28: App Store & Play Store Deployment**
+
+---
+
+*Generated for 30 Days Flutter: Zero to Hero (2026 Edition)*  
+*Day 27: CI/CD & DevOps — Complete Deep Dive*
+
+
 
